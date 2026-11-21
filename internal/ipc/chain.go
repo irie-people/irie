@@ -50,9 +50,13 @@ type ChainArgs struct {
 // version's canonical bytes as Raw, which its name is the SHA-512 of, and
 // restore with what it changed.
 type ChainResult struct {
-	Dir      string         `json:"dir"`
-	Head     string         `json:"head,omitempty"`
-	Count    int            `json:"count"` // the versions kept
+	Dir   string `json:"dir"`
+	Head  string `json:"head,omitempty"`
+	Count int    `json:"count"` // the versions kept
+	// Vault is where the key that opens the versions is kept: "keychain",
+	// "secret-service" or "file" (chain.KeptInKeychain and so on); "" while
+	// the vault is not open.
+	Vault    string         `json:"vault,omitempty"`
 	Problem  string         `json:"problem,omitempty"`
 	Versions []ChainEntry   `json:"versions,omitempty"`
 	Version  *ChainEntry    `json:"version,omitempty"`

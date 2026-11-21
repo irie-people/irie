@@ -34,6 +34,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -73,16 +74,24 @@ type orgChain struct {
 	head    string // the newest version's name; "" before the first
 	headOrg []byte // the canonical bytes of the newest version's organisation; nil when it could not be read
 	count   int    // the versions kept, as counted at the start and written since
-	// broken says what was found wrong with what is on disk, such as a
-	// version that does not match its name; failed, why the last write
-	// failed. Both are "" while all is well.
-	broken, failed string
-	queue          []orgNote
-	busy           bool          // the writer is writing one
-	idle           chan struct{} // closed while nothing waits to be written
-	idleClosed     bool
-	kick           chan struct{} // a snapshot waits
+	// kept is where the vault's key is kept (chain.KeptInKeychain, and so
+	// on); locked, why the vault did not open, while nothing is read or
+	// written. broken says what was found wrong with what is on disk, such
+	// as a version that does not match its name; failed, why the last
+	// write failed. All but kept are "" while all is well.
+	kept, locked, broken, failed string
+	queue                        []orgNote
+	held                         []orgNote     // what came while it was locked, to write once it opens
+	tried                        time.Time     // when a chain op last asked a locked chain to open again
+	idle                         chan struct{} // closed while nothing waits to be written
+	idleClosed                   bool
+	kick                         chan struct{} // a snapshot waits
+	writer                       sync.Once     // starts the writer, once
 }
+
+// holdMax is how many snapshots a locked chain holds to write once it
+// opens; past it, the oldest go, and the log says so.
+const holdMax = 1000
 
 // orgNote is a snapshot to write as a version: when it was taken, what
 // took it, and the organisation then.
@@ -146,6 +155,9 @@ func (oc *orgChain) problemLocked() string {
 	var ps []string
 	if !oc.ready {
 		ps = append(ps, "the chain is not open yet")
+	}
+	if oc.locked != "" {
+		ps = append(ps, "the chain is locked, so nothing is read or written: "+oc.locked)
 	}
 	for _, p := range []string{oc.broken, oc.failed} {
 		if p != "" {
@@ -231,56 +243,196 @@ func (c *Core) startChain() {
 	c.mu.Lock()
 	c.noteOrg(ipc.ChainWhat{Do: chainBegin})
 	c.mu.Unlock()
-	go c.openChain()
+	go c.openChain(false)
 }
 
-// openChain reads the chain's HEAD and checks the version it names, then
-// starts the writer. Whatever does not check is said, and kept as it is: a
-// HEAD that names no version goes aside to HEAD.bad and the next version
-// starts the chain again, its older versions still on disk; a newest
-// version that does not check stays where it is, and the next version
-// names it, so the log stops there and says why.
-func (c *Core) openChain() {
+// chainStop is how long a stopping core waits for the versions still to
+// write, as an install restarts it.
+const chainStop = time.Second
+
+// stopChain writes, for up to d, what the chain still has to write as the
+// core stops, and says what it could not.
+func (c *Core) stopChain(d time.Duration) {
+	if c.chain.flush(d) {
+		return
+	}
+	c.chain.mu.Lock()
+	queued := len(c.chain.queue)
+	c.chain.mu.Unlock()
+	c.log.Warn("chain: the core stopped with versions still to write", "queued", queued, "and one being written", queued == 0, "problem", c.chain.problem())
+}
+
+// vaultAccount names the sidebar's chain among what the system's key store
+// keeps for Irie's vaults.
+const vaultAccount = "sidebar"
+
+// openChain opens the chain's vault, moves into it the versions kept
+// before it, reads HEAD and checks the version it names, then lets the
+// writer go on. Whatever does not check is said, and kept as it is: a HEAD
+// that names no version goes aside to HEAD.bad and the next version starts
+// the chain again, its older versions still on disk; a newest version that
+// does not check stays where it is, and the next version names it, so the
+// log stops there and says why. A vault that does not open, as under a
+// wrong key, locks the chain: lockedWords says why and what to do, nothing
+// is read or written and nothing on disk changes, and what the actions
+// meanwhile make waits (holdMax of it) for the chain to open, as a chain op
+// asks it to again (retryChain). again is that asking: once the chain is
+// open, a new one, its folder set aside by hand, begins as a chain does.
+func (c *Core) openChain(again bool) {
 	store := chain.Store{Dir: c.paths.Chain()}
-	var broken string
+	var locked, broken, head string
 	var headOrg []byte
-	head, err := store.Head()
-	switch {
-	case err != nil:
-		bad := filepath.Join(store.Dir, "HEAD")
-		os.Rename(bad, bad+".bad")
-		broken = fmt.Sprintf("HEAD did not name a version (%v): it was moved to HEAD.bad, and the chain starts again from the next version", err)
-		head = ""
-	case head != "":
-		v, err := readVersion(store, head)
-		if err != nil {
-			broken = err.Error()
-		} else if headOrg, err = chain.Canonical(v.Org); err != nil {
-			broken = fmt.Sprintf("version %s: %v", chain.Short(head), err)
+	vault, err := openVault(store, chain.SystemKeyStore(vaultAccount))
+	if err != nil {
+		locked = lockedWords(store.Dir, err)
+	} else {
+		store.Vault = vault
+		broken = c.moveIn(store)
+		if head, err = store.Head(); err != nil {
+			bad := filepath.Join(store.Dir, "HEAD")
+			os.Rename(bad, bad+".bad")
+			broken = joinProblems(broken, fmt.Sprintf("HEAD did not name a version (%v): it was moved to HEAD.bad, and the chain starts again from the next version", err))
+			head = ""
+		} else if head != "" {
+			v, err := readVersion(store, head)
+			if err != nil {
+				broken = joinProblems(broken, err.Error())
+			} else if headOrg, err = chain.Canonical(v.Org); err != nil {
+				broken = joinProblems(broken, fmt.Sprintf("version %s: %v", chain.Short(head), err))
+			}
 		}
+	}
+	if again && vault != nil && head == "" {
+		c.mu.Lock()
+		c.noteOrg(ipc.ChainWhat{Do: chainBegin})
+		c.mu.Unlock()
 	}
 	oc := &c.chain
 	oc.mu.Lock()
-	oc.store, oc.head, oc.headOrg, oc.broken, oc.count, oc.ready = store, head, headOrg, broken, countVersions(store.Dir), true
+	oc.store, oc.head, oc.headOrg, oc.locked, oc.broken, oc.ready = store, head, headOrg, locked, broken, true
+	oc.count, oc.kept = countVersions(store), ""
+	if vault != nil {
+		oc.kept = vault.Kept
+		// What waited while it was locked goes first, in its order.
+		oc.queue = append(oc.held, oc.queue...)
+		oc.held = nil
+	}
 	oc.lazy()
+	if len(oc.queue) > 0 && oc.idleClosed {
+		oc.idle, oc.idleClosed = make(chan struct{}), false
+	}
 	kick := oc.kick
 	oc.mu.Unlock()
-	if broken != "" {
-		c.log.Warn("chain", "problem", broken)
+	for _, p := range []string{locked, broken} {
+		if p != "" {
+			c.log.Warn("chain", "problem", p)
+		}
 	}
-	go c.chainWriter()
+	oc.writer.Do(func() { go c.chainWriter() })
 	select {
 	case kick <- struct{}{}:
 	default:
 	}
 }
 
-// countVersions counts the versions in a chain's folder.
-func countVersions(dir string) int {
-	files, _ := os.ReadDir(filepath.Join(dir, "objects"))
+// chainRetry is how soon a chain op asks a locked chain to open again.
+const chainRetry = 5 * time.Second
+
+// retryChain opens a locked chain again, as a chain op asks it to, at most
+// every chainRetry: a key store out of reach may be back, a key put back,
+// or the chain set aside by hand.
+func (c *Core) retryChain() {
+	oc := &c.chain
+	oc.mu.Lock()
+	try := oc.ready && oc.locked != "" && time.Since(oc.tried) >= chainRetry
+	if try {
+		oc.tried = time.Now()
+	}
+	oc.mu.Unlock()
+	if try {
+		c.openChain(true)
+	}
+}
+
+// openVault opens the chain's vault (chain.OpenVault), and checks that its
+// key is the chain's: should the newest version not open under it, nor
+// any other, it is not, and the vault is not opened.
+func openVault(store chain.Store, keys chain.KeyStore) (*chain.Vault, error) {
+	v, err := chain.OpenVault(store.Dir, keys)
+	if err != nil {
+		return nil, err
+	}
+	store.Vault = v
+	if head, err := store.Head(); err == nil && head != "" {
+		if _, err := store.Get(head); errors.Is(err, chain.ErrSealed) {
+			if opens, any := store.AnyOpens(32); any && !opens {
+				return nil, fmt.Errorf("%w: none of the chain's versions opens under it", chain.ErrWrongKey)
+			}
+		}
+	}
+	return v, nil
+}
+
+// moveIn seals into the vault the versions the chain kept before it had
+// one (chain.Store.MoveIn), and says what did not move, or "".
+func (c *Core) moveIn(store chain.Store) string {
+	moved, stayed, err := store.MoveIn()
+	if moved > 0 {
+		c.log.Info("chain: moved into the vault", "versions", moved)
+	}
+	var p string
+	if len(stayed) > 0 {
+		short := make([]string, len(stayed))
+		for i, n := range stayed {
+			short[i] = chain.Short(n)
+		}
+		p = fmt.Sprintf("%d versions kept before the vault did not match their names, so they stay out of it, plain: %s", len(stayed), strings.Join(short, ", "))
+	}
+	if err != nil {
+		p = joinProblems(p, fmt.Sprintf("the versions kept before the vault could not all move into it: %v", err))
+	}
+	return p
+}
+
+// joinProblems is a and b, either of which may be "", as one.
+func joinProblems(a, b string) string {
+	return strings.Trim(a+"; "+b, "; ")
+}
+
+// lockedWords says why the chain in dir is locked and what to do, for
+// err, why its vault did not open. Whatever the cause, it stays locked,
+// one chain under one key, and never begins another by itself: a wrong
+// key fails loudly, and the key may come back. A store off or out of
+// reach is waited for; a wrong key or one gone is the person's to settle,
+// so the words say how to set the chain aside by hand.
+func lockedWords(dir string, err error) string {
+	aside := fmt.Sprintf("to begin a new chain instead, move %s aside (its versions stay there) and run `%s ctl chain`", dir, brand.Slug)
+	switch {
+	case errors.Is(err, chain.ErrNoStore):
+		why := "the key store is off or out of reach now"
+		if os.Getenv(brand.Env("KEYCHAIN")) == "off" {
+			why = brand.Env("KEYCHAIN") + "=off turns the Keychain off"
+		}
+		return fmt.Sprintf("%s (%v). It opens again once the store is back: `%s ctl chain` asks", why, err, brand.Slug)
+	case errors.Is(err, chain.ErrWrongKey):
+		return fmt.Sprintf("this key does not open these versions (%v). Nothing on disk was changed; %s", err, aside)
+	case errors.Is(err, chain.ErrKeyGone):
+		return fmt.Sprintf("the key store lost the key (%v), so the history reads again only if a backup of the Keychain brings the key back. Nothing on disk was changed; %s", err, aside)
+	}
+	return err.Error()
+}
+
+// countVersions counts the versions in a chain's store: its sealed
+// records, or with no vault its plain ones.
+func countVersions(store chain.Store) int {
+	ext := ".json"
+	if store.Vault != nil {
+		ext = chain.SealedExt
+	}
+	files, _ := os.ReadDir(filepath.Join(store.Dir, "objects"))
 	n := 0
 	for _, f := range files {
-		if h, ok := strings.CutSuffix(f.Name(), ".json"); ok && chain.Valid(chain.Prefix+h) {
+		if h, ok := strings.CutSuffix(f.Name(), ext); ok && chain.Valid(chain.Prefix+h) {
 			n++
 		}
 	}
@@ -295,7 +447,6 @@ func (c *Core) chainWriter() {
 		for {
 			oc.mu.Lock()
 			if len(oc.queue) == 0 {
-				oc.busy = false
 				if !oc.idleClosed {
 					close(oc.idle)
 					oc.idleClosed = true
@@ -305,9 +456,23 @@ func (c *Core) chainWriter() {
 			}
 			n := oc.queue[0]
 			oc.queue = slices.Delete(oc.queue, 0, 1)
-			oc.busy = true
-			store, parent, parentOrg := oc.store, oc.head, oc.headOrg
+			store, parent, parentOrg, locked := oc.store, oc.head, oc.headOrg, oc.locked
 			oc.mu.Unlock()
+			// A locked chain writes nothing: the problem says why. What comes
+			// meanwhile waits for it to open.
+			if locked != "" {
+				oc.mu.Lock()
+				oc.held = append(oc.held, n)
+				dropped := len(oc.held) > holdMax
+				if dropped {
+					oc.held = slices.Delete(oc.held, 0, len(oc.held)-holdMax)
+				}
+				oc.mu.Unlock()
+				if dropped {
+					c.log.Warn("chain: locked, so its oldest waiting version went", "held", holdMax)
+				}
+				continue
+			}
 			name, org, err := writeVersion(store, n, parent, parentOrg)
 			oc.mu.Lock()
 			if name != "" {
@@ -382,12 +547,16 @@ func decodeVersion(name string, b []byte) (ipc.ChainVersion, error) {
 // chainNow is the chain's store and newest version, once every snapshot
 // taken so far is written or d has passed.
 func (c *Core) chainNow(d time.Duration) (chain.Store, string, error) {
+	c.retryChain()
 	c.chain.flush(d)
 	oc := &c.chain
 	oc.mu.Lock()
 	defer oc.mu.Unlock()
 	if !oc.ready {
 		return oc.store, "", ipc.Errorf(ipc.CodeBusy, "the sidebar's chain is not open yet; try again in a moment")
+	}
+	if oc.locked != "" {
+		return oc.store, "", ipc.Errorf(ipc.CodeBusy, "the sidebar's chain is locked, so nothing is read or written: %s", oc.locked)
 	}
 	return oc.store, oc.head, nil
 }
@@ -397,13 +566,14 @@ func (c *Core) chainStatus() ipc.ChainResult {
 	oc := &c.chain
 	oc.mu.Lock()
 	defer oc.mu.Unlock()
-	return ipc.ChainResult{Dir: c.paths.Chain(), Head: oc.head, Count: oc.count, Problem: oc.problemLocked()}
+	return ipc.ChainResult{Dir: c.paths.Chain(), Head: oc.head, Count: oc.count, Vault: oc.kept, Problem: oc.problemLocked()}
 }
 
 // chainOp reads the chain, or brings a version of it back (ipc.ChainArgs).
 func (c *Core) chainOp(a ipc.ChainArgs) (ipc.ChainResult, error) {
 	switch a.Do {
 	case ipc.ChainStatus, ipc.ChainHead:
+		c.retryChain()
 		c.chain.flush(chainWait)
 		return c.chainStatus(), nil
 	case ipc.ChainLog:
@@ -682,10 +852,13 @@ func doRestore(k string) func(c *Core, a action) (action, error) {
 func (c *Core) readChain(name string) (ipc.ChainVersion, error) {
 	oc := &c.chain
 	oc.mu.Lock()
-	store, ready := oc.store, oc.ready
+	store, ready, locked := oc.store, oc.ready, oc.locked
 	oc.mu.Unlock()
-	if !ready {
+	switch {
+	case !ready:
 		return ipc.ChainVersion{}, errors.New("the chain is not open yet")
+	case locked != "":
+		return ipc.ChainVersion{}, errors.New("the chain is locked: " + locked)
 	}
 	return readVersion(store, name)
 }

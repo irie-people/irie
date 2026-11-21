@@ -15,6 +15,7 @@ import (
 
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 func (c *coreEnv) chainDo(a ipc.ChainArgs) ipc.ChainResult {
@@ -32,9 +33,9 @@ func (c *coreEnv) chainLog() ipc.ChainResult {
 	return c.chainDo(ipc.ChainArgs{Do: ipc.ChainLog, Limit: 1000})
 }
 
-// versionFile is where the chain keeps the version named.
+// versionFile is where the chain keeps the version named, sealed.
 func (c *coreEnv) versionFile(name string) string {
-	return filepath.Join(c.paths.Chain(), "objects", strings.TrimPrefix(name, chain.Prefix)+".json")
+	return filepath.Join(c.paths.Chain(), "objects", strings.TrimPrefix(name, chain.Prefix)+chain.SealedExt)
 }
 
 func whats(r ipc.ChainResult) []string {
@@ -167,10 +168,7 @@ func TestAVersionHoldsNoIdentity(t *testing.T) {
 	}
 	avoid = append(avoid, os.Getenv("HOME"), c.paths.State)
 	for _, e := range r.Versions {
-		b, err := os.ReadFile(c.versionFile(e.Name))
-		if err != nil {
-			t.Fatal(err)
-		}
+		b := []byte(c.chainDo(ipc.ChainArgs{Do: ipc.ChainShow, Version: e.Name}).Raw)
 		for _, s := range avoid {
 			if len(s) > 2 && bytes.Contains(bytes.ToLower(b), bytes.ToLower([]byte(s))) {
 				t.Errorf("version %s holds %q: %s", chain.Short(e.Name), s, b)
@@ -290,19 +288,21 @@ func TestATamperedOrCutShortVersionIsCaught(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	flipped := bytes.Clone(good)
+	flipped[len(flipped)/2] ^= 1
 	for name, bad := range map[string][]byte{
-		"tampered":  bytes.Replace(good, []byte(`"parked":true`), []byte(`"pinned":true`), 1),
+		"tampered":  flipped,
 		"cut short": good[:len(good)/2],
 	} {
 		if err := os.WriteFile(path, bad, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		r := c.chainLog()
-		if len(r.Versions) != 2 || !strings.Contains(r.Problem, chain.Short(mid)) || !strings.Contains(r.Problem, "changed after it was written") {
+		if len(r.Versions) != 2 || !strings.Contains(r.Problem, chain.Short(mid)) || !strings.Contains(r.Problem, "after it was written") {
 			t.Errorf("%s: log %q, problem %q", name, whats(r), r.Problem)
 		}
 		for _, do := range []string{ipc.ChainShow, ipc.ChainRestore} {
-			if err := c.call(ipc.OpChain, ipc.ChainArgs{Do: do, Version: mid}, nil); err == nil || !strings.Contains(err.Error(), "changed after it was written") {
+			if err := c.call(ipc.OpChain, ipc.ChainArgs{Do: do, Version: mid}, nil); err == nil || !strings.Contains(err.Error(), "after it was written") {
 				t.Errorf("%s: %s %v", name, do, err)
 			}
 		}
@@ -443,5 +443,105 @@ func BenchmarkWriteVersion(b *testing.B) {
 			b.Fatal(err)
 		}
 		parent = name
+	}
+}
+
+// The chain is sealed at rest: nothing on disk holds a word of what it
+// keeps, and without its key nothing reads. A test's Irie has no key
+// store (IRIE_KEYCHAIN=off), so the key is in the key file, and the chain
+// says so. A key that is not the chain's locks it, loudly, while the
+// actions go on; the right one opens it again.
+func TestTheChainIsKeptInTheVault(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("alpha", "beta")
+	c.group(ipc.GroupArgs{Do: ipc.GroupNew, Name: "Steak", Sessions: []string{id["alpha"], id["beta"]}})
+	c.pin(id["alpha"], true)
+	r := c.chainLog()
+	if r.Vault != chain.KeptInFile || len(r.Versions) != 3 {
+		t.Fatalf("vault %q, versions %q", r.Vault, whats(r))
+	}
+	dir := c.paths.Chain()
+	if info, err := os.Stat(dir); err != nil || info.Mode().Perm() != 0o700 {
+		t.Errorf("the chain's folder: %v %v", info, err)
+	}
+	if info, err := os.Stat(filepath.Join(dir, chain.KeyFile)); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the key file: %v %v", info, err)
+	}
+	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, _ := os.ReadFile(path)
+		for _, word := range []string{"alpha", "beta", "Steak", "Main", ipc.ChainFormat, "pinned"} {
+			if bytes.Contains(b, []byte(word)) {
+				t.Errorf("%s holds %q", path, word)
+			}
+		}
+		if filepath.Dir(path) == filepath.Join(dir, "objects") && !strings.HasSuffix(path, chain.SealedExt) {
+			t.Errorf("%s: not a sealed record", path)
+		}
+		return nil
+	})
+
+	// Another key: no version opens, so the chain is locked, says so and
+	// writes nothing, while the action goes ahead; what it makes waits.
+	keyPath := filepath.Join(dir, chain.KeyFile)
+	good, _ := os.ReadFile(keyPath)
+	other := t.TempDir()
+	if _, err := chain.OpenVault(other, nil); err != nil {
+		t.Fatal(err)
+	}
+	wrong, _ := os.ReadFile(filepath.Join(other, chain.KeyFile))
+	os.WriteFile(keyPath, wrong, 0o600)
+	c.restartCore()
+	st := c.chainDo(ipc.ChainArgs{})
+	if !strings.Contains(st.Problem, "locked") || !strings.Contains(st.Problem, "Nothing on disk was changed") || !strings.Contains(st.Problem, dir) {
+		t.Errorf("status under another key: %+v", st)
+	}
+	if err := c.call(ipc.OpChain, ipc.ChainArgs{Do: ipc.ChainLog}, nil); err == nil || !strings.Contains(err.Error(), "locked") {
+		t.Errorf("log under another key: %v", err)
+	}
+	before, _ := filepath.Glob(filepath.Join(dir, "objects", "*"))
+	c.pin(id["alpha"], false)
+	if s, ok := c.row(id["alpha"]); !ok || s.Pinned {
+		t.Errorf("the unpin did not happen: %+v", s)
+	}
+	c.chainDo(ipc.ChainArgs{})
+	if after, _ := filepath.Glob(filepath.Join(dir, "objects", "*")); len(after) != len(before) {
+		t.Errorf("a locked chain wrote: %d records, then %d", len(before), len(after))
+	}
+	if now, _ := os.ReadFile(keyPath); !bytes.Equal(now, wrong) {
+		t.Error("the key file changed while locked")
+	}
+
+	// The right key back: a chain op opens it again, with no restart, and
+	// what waited is written.
+	os.WriteFile(keyPath, good, 0o600)
+	testutil.Eventually(t, 3*chainRetry, "the chain did not open again", func() bool {
+		return c.chainDo(ipc.ChainArgs{}).Problem == ""
+	})
+	if r := c.chainLog(); r.Problem != "" || len(r.Versions) != 4 || r.Versions[0].What != `unpin "alpha"` {
+		t.Errorf("with the key back: %q, %q", whats(r), r.Problem)
+	}
+
+	// Set aside by hand, as the words say: a chain op then begins a new
+	// chain, the old one left as it was.
+	os.WriteFile(keyPath, wrong, 0o600)
+	c.restartCore()
+	if st := c.chainDo(ipc.ChainArgs{}); !strings.Contains(st.Problem, "locked") {
+		t.Fatalf("not locked: %+v", st)
+	}
+	aside := dir + ".aside"
+	if err := os.Rename(dir, aside); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, 3*chainRetry, "a new chain did not begin", func() bool {
+		return c.chainDo(ipc.ChainArgs{}).Problem == ""
+	})
+	if r := c.chainLog(); !slices.Equal(whats(r), []string{"the chain begins"}) {
+		t.Errorf("a new chain: %q", whats(r))
+	}
+	if old, _ := filepath.Glob(filepath.Join(aside, "objects", "*"+chain.SealedExt)); len(old) != 4 {
+		t.Errorf("the chain set aside holds %d versions", len(old))
 	}
 }

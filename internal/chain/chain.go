@@ -5,7 +5,8 @@
 // and 128 hex digits. Each version names the one before it in its "parent",
 // so the newest names the whole history. A Store keeps the versions in a
 // folder, one file each, checked against its name whenever it is read, and
-// HEAD, which names the newest.
+// HEAD, which names the newest; with a Vault, each sealed at rest
+// (vault.go).
 //
 // Only public standards shape the format, so any tool with a JCS library
 // and SHA-512 can check a version without Irie.
@@ -201,17 +202,34 @@ var ErrNone = errors.New("chain: no such version")
 // Store keeps versions in its folder: objects/<hex>.json, each a version's
 // canonical bytes, and HEAD, the newest's name. One process writes it, the
 // core; each file is put in place whole, so a reader never sees half of
-// one.
+// one. With a Vault, each version is sealed instead, as
+// objects/<hex>.sealed (vault.go), and only sealed ones count: MoveIn
+// seals the plain ones a store kept before.
 type Store struct {
-	Dir string
+	Dir   string
+	Vault *Vault
+}
+
+// ext ends the store's records' file names.
+func (s Store) ext() string {
+	if s.Vault != nil {
+		return SealedExt
+	}
+	return ".json"
 }
 
 func (s Store) object(name string) string {
+	return filepath.Join(s.Dir, "objects", strings.TrimPrefix(name, Prefix)+s.ext())
+}
+
+// plain is where the plain record of the version named is, or was.
+func (s Store) plain(name string) string {
 	return filepath.Join(s.Dir, "objects", strings.TrimPrefix(name, Prefix)+".json")
 }
 
 // Put keeps canonical bytes under their name and returns it. A version
-// that is there already is left as it is.
+// that is there already is left as it is. A sealed record is written once
+// under a name its contents decide, so it takes no lock.
 func (s Store) Put(b []byte) (string, error) {
 	name := Name(b)
 	path := s.object(name)
@@ -221,21 +239,33 @@ func (s Store) Put(b []byte) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", err
 	}
+	if s.Vault != nil {
+		return name, filetx.WriteOnce(path, s.Vault.Seal(name, b), 0o600)
+	}
 	return name, filetx.WriteFile(path, b, 0o600)
 }
 
 // Get reads the version named, and refuses bytes that its name does not
-// match, as when a file was changed by hand.
+// match, as when a file was changed by hand; with a vault, a record that
+// does not open under its key as that name.
 func (s Store) Get(name string) ([]byte, error) {
 	if !Valid(name) {
 		return nil, fmt.Errorf("chain: %q is not a version's name", name)
 	}
 	b, err := os.ReadFile(s.object(name))
 	if errors.Is(err, os.ErrNotExist) {
+		if _, perr := os.Stat(s.plain(name)); s.Vault != nil && perr == nil {
+			return nil, fmt.Errorf("chain: version %s is not sealed: its plain record stayed out of the vault, as it did not match its name", Short(name))
+		}
 		return nil, fmt.Errorf("%w: %s", ErrNone, Short(name))
 	}
 	if err != nil {
 		return nil, err
+	}
+	if s.Vault != nil {
+		if b, err = s.Vault.Open(name, b); err != nil {
+			return nil, fmt.Errorf("chain: version %s %w", Short(name), err)
+		}
 	}
 	if Name(b) != name {
 		return nil, fmt.Errorf("chain: version %s does not match its name: it was changed after it was written", Short(name))
@@ -319,7 +349,7 @@ func (s Store) Find(prefix string) (string, error) {
 	}
 	var found []string
 	for _, f := range files {
-		name, ok := strings.CutSuffix(f.Name(), ".json")
+		name, ok := strings.CutSuffix(f.Name(), s.ext())
 		if ok && strings.HasPrefix(name, h) && Valid(Prefix+name) {
 			found = append(found, Prefix+name)
 		}
