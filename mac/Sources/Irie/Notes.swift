@@ -121,13 +121,14 @@ final class NotesModel {
     }
 
     /// Fixture notes, for --snapshot: nothing is saved or sent.
-    func loadFixture(_ notes: [Note]) {
+    func loadFixture(_ notes: [Note], vault: NotepadVault? = nil) {
         fixture = true
         served = true
         shown = true
         pending = []
         base = Notepad()
         base.notes = notes
+        base.vault = vault
         base.deleted = [Note(id: "gone", text: "Try the Asahi build again", deleted: Date())]
         redraw()
     }

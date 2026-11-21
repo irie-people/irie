@@ -353,10 +353,17 @@ func runs(done <-chan struct{}) bool {
 }
 
 func TestEndOutsideStopsTheOutsideCopy(t *testing.T) {
+	// How long a copy has to stop: the wait ends as it does, so a busy
+	// machine, on which a stopped process can take seconds to go, waits
+	// longer rather than fail.
+	wait := 2 * time.Second
+	if slow(t) {
+		wait = 30 * time.Second
+	}
 	// An interactive session gets SIGTERM.
 	cmd, done := sleeper(t)
 	o := ipc.OutsideSession{VendorID: idleID, Kind: ipc.KindInteractive, Status: ipc.StatusIdle, PID: cmd.Process.Pid}
-	if err := endOutside(o, func() error { t.Error("claude stop for an interactive session"); return nil }, 2*time.Second); err != nil {
+	if err := endOutside(o, func() error { t.Error("claude stop for an interactive session"); return nil }, wait); err != nil {
 		t.Fatal(err)
 	}
 	if !exits(done) {
@@ -368,14 +375,14 @@ func TestEndOutsideStopsTheOutsideCopy(t *testing.T) {
 	o = ipc.OutsideSession{VendorID: busyID, ID: "7c5dcf5d", Kind: ipc.KindBackground, Status: ipc.StatusIdle, PID: cmd.Process.Pid}
 	stopped := 0
 	stop := func() error { stopped++; return cmd.Process.Signal(syscall.SIGINT) }
-	if err := endOutside(o, stop, 2*time.Second); err != nil || stopped != 1 || !exits(done) {
+	if err := endOutside(o, stop, wait); err != nil || stopped != 1 || !exits(done) {
 		t.Errorf("background: %v, stopped %d times", err, stopped)
 	}
 
 	// When claude stop fails, nothing else happens.
 	cmd, done = sleeper(t)
 	o.PID = cmd.Process.Pid
-	err := endOutside(o, func() error { return errors.New("no such session") }, 2*time.Second)
+	err := endOutside(o, func() error { return errors.New("no such session") }, wait)
 	if err == nil || !strings.Contains(err.Error(), "no such session") || !runs(done) {
 		t.Errorf("a failed claude stop: %v, still runs %v", err, runs(done))
 	}

@@ -108,7 +108,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          parked or frozen as it was
 ` + worktreesUsage + `  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
   ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets,
-                                         mail or code) beside SESSION, the one this runs
+                                         mail, code or vault) beside SESSION, the one this runs
                                          in by default, in the Mac app's panes;
                                          the app alone reads what it shows
   ` + brand.Slug + ` ctl open FILE[:LINE[:COL]] [SESSION]

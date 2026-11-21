@@ -36,6 +36,10 @@ struct CodeActions {
     /// Ask the session's agent about these lines, 1-based.
     var ask: ((ClosedRange<Int>) -> Void)?
     var copyReference: (ClosedRange<Int>) -> Void = { _ in }
+    /// Follow a link ⌘-clicked, or picked from the menu: a [[link]]'s
+    /// words, a Markdown link's address or a page's (VaultLinks.link).
+    /// nil = the editor follows none.
+    var openLink: ((String) -> Void)?
     /// Turn a Markdown file's pretty view on or off (⇧⌘V); nil for any
     /// other file, so the key goes on as it would.
     var pretty: (() -> Void)?
@@ -47,6 +51,27 @@ final class CodeTextView: NSTextView {
     var lineComment: String?
     var currentLine = NSColor.clear
     var actions = CodeActions()
+    /// A note's prose, as a Vault card shows it, its lines wrapped.
+    var prose = false
+
+    // MARK: Links
+
+    /// ⌘-click on a link follows it, as in a terminal; any other click
+    /// places the caret as ever.
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command), let open = actions.openLink, let link = link(at: event) {
+            open(link)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    /// The link under an event's point, if any.
+    func link(at event: NSEvent) -> String? {
+        let p = convert(event.locationInWindow, from: nil)
+        let i = characterIndexForInsertion(at: p)
+        return VaultLinks.link(in: string as NSString, at: i)
+    }
 
     // MARK: Keys
 
@@ -225,6 +250,11 @@ final class CodeTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
+        if let open = actions.openLink, let link = link(at: event) {
+            let shown = VaultLinks.target(link).name
+            menu.addItem(item("Open “\(shown.isEmpty ? link : shown)”") { open(link) })
+            menu.addItem(.separator())
+        }
         let lines = pickedLineNumbers()
         if actions.ask != nil {
             menu.addItem(item(lines.count > 1 ? "Ask the Agent About These Lines" : "Ask the Agent About This Line") { [weak self] in
@@ -380,6 +410,9 @@ struct CodeEditorView: NSViewRepresentable {
     let goTo: CodeGoTo?
     let caret: CodeCaret
     let actions: CodeActions
+    /// A note's prose, as a Vault card shows it: its lines wrapped to the
+    /// card's width, with no line numbers.
+    var prose = false
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -423,6 +456,15 @@ struct CodeEditorView: NSViewRepresentable {
         tv.isGrammarCheckingEnabled = false
         tv.smartInsertDeleteEnabled = false
         tv.delegate = context.coordinator
+        tv.prose = prose
+        if prose {
+            scroll.hasHorizontalScroller = false
+            tv.isHorizontallyResizable = false
+            tv.autoresizingMask = [.width]
+            tv.textContainerInset = NSSize(width: 12, height: 10)
+            tc.widthTracksTextView = true
+            tc.containerSize = NSSize(width: scroll.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        }
         scroll.documentView = tv
 
         let ruler = CodeRuler(scrollView: scroll, orientation: .verticalRuler)
@@ -430,8 +472,8 @@ struct CodeEditorView: NSViewRepresentable {
         ruler.text = tv
         ruler.doc = doc
         scroll.verticalRulerView = ruler
-        scroll.hasVerticalRuler = true
-        scroll.rulersVisible = true
+        scroll.hasVerticalRuler = !prose
+        scroll.rulersVisible = !prose
 
         let c = context.coordinator
         c.text = tv

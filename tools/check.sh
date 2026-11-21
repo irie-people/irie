@@ -39,7 +39,7 @@ if [ "$*" = ./... ]; then
 	# leave out every plugin (DESIGN §4.17, §4.18).
 	go vet -tags noprivacy,nowriting,nomarkets,nomail,noterms,noextension,noyoink ./... >"$vetdir/2" 2>&1 &
 	vets="$vets $!"
-	go vet -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat ./... >"$vetdir/3" 2>&1 &
+	go vet -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat,noobsidian ./... >"$vetdir/3" 2>&1 &
 	vets="$vets $!"
 fi
 # The tests, in the least wall time (tools/test.sh; go test without cargo).

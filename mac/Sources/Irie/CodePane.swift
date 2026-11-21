@@ -555,6 +555,10 @@ struct QuickOpen: View {
     let open: @MainActor (String) -> Void
     /// Closes it; none for the card's own when no file is open.
     var close: (@MainActor () -> Void)?
+    /// The files it offers, by their paths from the folder; nil = all.
+    var only: ((String) -> Bool)?
+    /// What its field asks; nil = to open a file of the folder.
+    var prompt: String?
     @State private var query = ""
     @State private var files: [String] = []
     /// What matches the query, worked out off the main thread as it changes.
@@ -568,7 +572,7 @@ struct QuickOpen: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Color(nsColor: theme.gutterInk))
-                TextField("Open a file in \(folder.map { ($0 as NSString).lastPathComponent } ?? "this folder")", text: $query)
+                TextField(prompt ?? "Open a file in \(folder.map { ($0 as NSString).lastPathComponent } ?? "this folder")", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundStyle(Color(nsColor: theme.foreground))
@@ -614,7 +618,8 @@ struct QuickOpen: View {
         .task(id: folder) {
             guard let folder else { return }
             loading = true
-            files = await CodeFiles.shared.list(folder)
+            let all = await CodeFiles.shared.list(folder)
+            files = only.map { all.filter($0) } ?? all
             loading = false
         }
         .task(id: "\(files.count) \(query)") {
@@ -675,6 +680,12 @@ final class CodeFiles {
 
     /// `--snapshot`'s files for a folder, kept for good.
     func fixture(_ folder: String, files: [String]) { cache[folder] = (.distantFuture, files) }
+
+    /// Reads a folder's files again next time, as after a file was made
+    /// there; a fixture's stay.
+    func forget(_ folder: String) {
+        if let c = cache[folder], c.at != .distantFuture { cache[folder] = nil }
+    }
 
     func list(_ folder: String) async -> [String] {
         if let c = cache[folder], Date().timeIntervalSince(c.at) < 15 { return c.files }
@@ -857,6 +868,12 @@ struct CodeTree: View {
     let theme: CodeTheme
     let shown: String?
     let open: @MainActor (String) -> Void
+    /// The files it shows, by their paths from the folder; nil = all.
+    var only: ((String) -> Bool)?
+    /// Names shown without .md, as notes of a vault.
+    var bare = false
+    /// Bumped to read the folder again.
+    var refresh = 0
     @State private var root = Folder(name: "")
     @State private var expanded: Set<String> = []
     @State private var loading = true
@@ -927,10 +944,10 @@ struct CodeTree: View {
             if loading { ProgressView().controlSize(.small) }
         }
         .background(Color(nsColor: theme.currentLine).opacity(0.5))
-        .task(id: folder) {
-            loading = true
-            let files = await CodeFiles.shared.list(folder)
-            root = Folder.of(files)
+        .task(id: "\(folder)/\(refresh)") {
+            if root.folders.isEmpty, root.files.isEmpty { loading = true }
+            let all = await CodeFiles.shared.list(folder)
+            root = Folder.of(only.map { all.filter($0) } ?? all)
             loading = false
             openDown()
         }
@@ -948,7 +965,7 @@ struct CodeTree: View {
                 .font(.system(size: row.folder ? 8 : 9.5, weight: .semibold))
                 .frame(width: 10)
                 .foregroundStyle(Color(nsColor: theme.gutterInk))
-            Text(row.name)
+            Text(bare && !row.folder && row.name.lowercased().hasSuffix(".md") ? String(row.name.dropLast(3)) : row.name)
                 .font(.system(size: 11.5, weight: on ? .semibold : .regular))
                 .foregroundStyle(Color(nsColor: on || row.folder ? theme.foreground : theme.gutterActiveInk))
                 .lineLimit(1)

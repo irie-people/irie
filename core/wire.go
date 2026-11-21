@@ -81,6 +81,9 @@ type (
 	NotepadArgs       = ipc.NotepadArgs
 	Notepad           = ipc.Notepad
 	NotepadResult     = ipc.NotepadResult
+	ObsidianArgs      = ipc.ObsidianArgs
+	ObsidianResult    = ipc.ObsidianResult
+	NotepadVault      = ipc.NotepadVault
 	OutsideSession    = ipc.OutsideSession
 	MoveArgs          = ipc.MoveArgs
 	MoveResult        = ipc.MoveResult
@@ -384,6 +387,7 @@ const (
 	NotepadRestore       = ipc.NotepadRestore
 	MaxNoteText          = ipc.MaxNoteText
 	MaxNotes             = ipc.MaxNotes
+	OpObsidian           = ipc.OpObsidian
 	KindInteractive      = ipc.KindInteractive
 	KindBackground       = ipc.KindBackground
 	StatusBusy           = ipc.StatusBusy
