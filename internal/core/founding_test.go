@@ -14,7 +14,7 @@ import (
 )
 
 // TestFoundingOpWaitsForItsPlugin: while the founding plugin is off, the op
-// says which switch turns it on; on, it gives the ten texts, the links
+// says which switch turns it on; on, it gives the texts, the links
 // between them, their local chain, checked, and a search's passages, to
 // anyone, an agent too.
 func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
@@ -37,17 +37,17 @@ func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 			t.Errorf("%s: %d blocks, SHA512 %q", d.ID, len(d.Blocks), d.SHA512)
 		}
 	}
-	if strings.Join(ids, ",") != "magna-carta,english-rights,virginia,declaration,articles,constitution,rights,udhr,foia,privacy" || r.Found != nil || len(r.Links) != len(founding.Links) {
+	if strings.Join(ids, ",") != "magna-carta,petition,habeas,english-rights,virginia,declaration,articles,northwest,constitution,rights,seneca,emancipation,gettysburg,udhr,foia,privacy,rti" || r.Found != nil || len(r.Links) != len(founding.Links) {
 		t.Errorf("docs %v, found %v, %d links", ids, r.Found, len(r.Links))
 	}
 	// The texts are on the local chain, checked: one version, made by the
 	// first look, and no other by the next.
-	if ch := r.Chain; ch == nil || !ch.Verified || ch.Versions != 1 || !chain.Valid(ch.Head) || ch.Folder != c.paths.Charters() || ch.Texts != 10 || ch.Links != len(founding.Links) {
+	if ch := r.Chain; ch == nil || !ch.Verified || ch.Versions != 1 || !chain.Valid(ch.Head) || ch.Folder != c.paths.Charters() || ch.Texts != len(founding.Documents) || ch.Links != len(founding.Links) {
 		t.Fatalf("chain: %+v", r.Chain)
 	}
 	head := r.Chain.Head
 	r, err = c.foundingOp(0, ipc.FoundingArgs{Log: 5, Export: true})
-	if err != nil || r.Chain == nil || r.Chain.Head != head || len(r.Versions) != 1 || len(r.Versions[0].Files) != 10 || len(r.Export) != 1 || chain.Name([]byte(r.Export[0])) != head {
+	if err != nil || r.Chain == nil || r.Chain.Head != head || len(r.Versions) != 1 || len(r.Versions[0].Files) != len(founding.Documents) || len(r.Export) != 1 || chain.Name([]byte(r.Export[0])) != head {
 		t.Fatalf("again, with the log and the export: %+v, %d exported, %v", r.Versions, len(r.Export), err)
 	}
 	r, err = c.foundingOp(0, ipc.FoundingArgs{Find: "  unreasonable searches and seizures  "})

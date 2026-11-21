@@ -1013,11 +1013,11 @@ enum Fixture {
     /// The founding plugin, on and ready, with its tab.
     static let foundingPlugin = #"""
     {"name": "founding", "title": "Charters", "on": true,
-     "summary": "Texts of rights, word for word from the bodies that keep them and checked against other copies, from Magna Carta to the Privacy Act.",
+     "summary": "Seventeen texts of rights, word for word from the bodies that keep them and checked against other copies, from Magna Carta to India's Right to Information Act.",
      "parts": [
       {"name": "founding", "title": "The charters", "on": true, "state": "ready",
-       "detail": "Ready: 10 texts in the Charters tab, and the founding-documents skill in every session.",
-       "summary": "Read the ten in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it.",
+       "detail": "Ready: 17 texts in the Charters tab, and the founding-documents skill in every session.",
+       "summary": "Read them in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it.",
        "pane": {"id": "founding.founding", "title": "Charters", "icon": "building.columns", "kind": "founding"}}
      ]}
     """#

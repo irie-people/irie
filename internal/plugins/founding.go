@@ -24,21 +24,22 @@ func init() { built["founding"] = foundingPlugin }
 // texts of rights kept word for word from the bodies that keep them, each
 // checked against other copies, from Magna Carta through the Declaration of
 // Independence, the Constitution and the Bill of Rights to the Freedom of
-// Information Act and the Privacy Act, to read in the Charters tab and for
+// Information Act and India's Right to Information Act, to read in the
+// Charters tab and for
 // agents to quote, and kept on a local chain with the links that say how
 // they bear on one another. Off until asked.
 func foundingPlugin() Plugin {
 	return Plugin{
 		Name:    "founding",
 		Title:   "Charters",
-		Summary: "Texts of rights, word for word from the bodies that keep them and checked against other copies: Magna Carta, the English Bill of Rights, the Virginia Declaration of Rights, the Declaration of Independence, the Articles of Confederation, the Constitution, the Bill of Rights, the Universal Declaration of Human Rights, the Freedom of Information Act and the Privacy Act. To read and search in the Charters tab, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
+		Summary: "Seventeen texts of rights, word for word from the bodies that keep them and checked against other copies: from Magna Carta, the Petition of Right and the English Bill of Rights through the Declaration of Independence, the Constitution, the Bill of Rights, the Declaration of Sentiments and the Gettysburg Address to the Universal Declaration of Human Rights, the Freedom of Information Act, the Privacy Act and India's Right to Information Act. To read and search in the Charters tab, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
 		key:     "plugins.founding",
 		on:      func(c config.Config) bool { return c.Plugins.Founding },
 		Parts: []Part{
 			{
 				Name:    Founding,
 				Title:   "The charters",
-				Summary: "Read the ten in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it. Agents quote them from the founding-documents skill's files, never from memory. Each file's SHA-512 shows a copy is this one, and a chain on this computer keeps every version of the texts and their links.",
+				Summary: "Read them in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it. Agents quote them from the founding-documents skill's files, never from memory. Each file's SHA-512 shows a copy is this one, and a chain on this computer keeps every version of the texts and their links.",
 				Brings:  []string{"the Charters tab in the right sidebar", "/" + brand.Slug + ":" + founding.Skill, brand.Slug + " ctl charters"},
 				Skills:  []string{founding.Skill},
 				Pane:    &ipc.PluginPane{Title: "Charters", Icon: "building.columns", Kind: PaneFounding},

@@ -1,7 +1,8 @@
 package ipc
 
 // OpFounding asks for the charters, the founding plugin's (DESIGN §4.17):
-// texts of rights kept word for word, from Magna Carta to the Privacy Act,
+// texts of rights kept word for word, from Magna Carta to India's Right to
+// Information Act,
 // in the parts the Mac app's Charters tab draws, the passages a search
 // finds, how the texts bear on one another, and their local chain.
 const OpFounding = "founding"
@@ -86,7 +87,7 @@ type FoundingDoc struct {
 	Title  string          `json:"title"`  // The Declaration of Independence
 	Short  string          `json:"short"`  // its name in the tab's choice: Declaration
 	When   string          `json:"when"`   // the date it is of, as RFC 3339 writes one, or a year
-	Kind   string          `json:"kind"`   // charter, declaration, articles, constitution, amendments or statute
+	Kind   string          `json:"kind"`   // charter, statute, declaration, articles, ordinance, constitution, amendments, proclamation or address
 	About  string          `json:"about"`  // where its text comes from, in a sentence
 	SHA512 string          `json:"sha512"` // of its file's bytes, in hex
 	Blocks []FoundingBlock `json:"blocks"`

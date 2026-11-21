@@ -183,6 +183,94 @@ func TestTheDocuments(t *testing.T) {
 		t.Errorf("the Articles: %v", arts)
 	}
 
+	// The Petition of Right: its long title first, its seven numbered
+	// sections under the Statutes of the Realm's marginal titles, and the
+	// edition's two footnotes as notes.
+	pr := d["petition"]
+	if pr.Title != "The Petition of Right" || !strings.Contains(pr.About, "legislation.gov.uk") || !strings.Contains(pr.About, "3 Cha. I c. 1") {
+		t.Errorf("the Petition of Right: %q, %q", pr.Title, pr.About)
+	}
+	if len(pr.Blocks) == 0 || pr.Blocks[0].Kind != "text" || !strings.HasPrefix(pr.Blocks[0].Text, "The Peticion Exhibited to His Majestie") {
+		t.Errorf("the Petition of Right's title: %+v", pr.Blocks[:1])
+	}
+	numbered := count(pr, "h2", func(s string) bool { return regexp.MustCompile(`^(II|III|IV|V|VI|VII|VIII)\. `).MatchString(s) })
+	if h2 := count(pr, "h2", func(string) bool { return true }); numbered != 7 || h2 != 9 || count(pr, "note", func(string) bool { return true }) != 2 || count(pr, "text", func(string) bool { return true }) != 14 {
+		t.Errorf("the Petition of Right: %d numbered sections of %d headings, %d notes", numbered, h2, count(pr, "note", func(string) bool { return true }))
+	}
+
+	// The Habeas Corpus Act: its long title first, its sections under the
+	// Statutes of the Realm's marginal titles, numbered II to XX after the
+	// first, and the edition's footnotes as notes, one a mark.
+	hc := d["habeas"]
+	if hc.Title != "The Habeas Corpus Act" || !strings.Contains(hc.About, "British History Online") || !strings.Contains(hc.About, "31 Cha. II c. 2") {
+		t.Errorf("the Habeas Corpus Act: %q, %q", hc.Title, hc.About)
+	}
+	if len(hc.Blocks) == 0 || hc.Blocks[0].Text != "An Act for the better secureing the Liberty of the Subject and for Prevention of Imprisonments beyond the Seas." {
+		t.Errorf("the Habeas Corpus Act's title: %+v", hc.Blocks[:1])
+	}
+	hcNumbered := count(hc, "h2", func(s string) bool {
+		return regexp.MustCompile(`^(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI|XVII|XVIII|XIX|XX)\. `).MatchString(s)
+	})
+	if hcNumbered != 19 || count(hc, "h2", func(string) bool { return true }) != 20 || count(hc, "text", func(string) bool { return true }) != 21 || count(hc, "note", func(string) bool { return true }) != 26 {
+		t.Errorf("the Habeas Corpus Act: %d numbered sections, %d blocks", hcNumbered, len(hc.Blocks))
+	}
+
+	// The Northwest Ordinance: its title, fourteen sections and six articles
+	// of compact, each a paragraph starting with the Archives' bold label,
+	// then the repeal and the closing; the source sets no headings.
+	nw := d["northwest"]
+	if nw.Title != "The Northwest Ordinance" || !strings.Contains(nw.About, "National Archives") || !strings.Contains(nw.About, "July 13, 1787") {
+		t.Errorf("the Northwest Ordinance: %q, %q", nw.Title, nw.About)
+	}
+	sections := count(nw, "text", func(s string) bool { return strings.HasPrefix(s, "**Sec") })
+	compact := count(nw, "text", func(s string) bool { return strings.HasPrefix(s, "**Art. ") })
+	if sections != 14 || compact != 6 || len(nw.Blocks) != 23 || count(nw, "h2", func(string) bool { return true }) != 0 || !strings.HasPrefix(nw.Blocks[0].Text, "**An Ordinance for the government of the Territory") {
+		t.Errorf("the Northwest Ordinance: %d sections, %d articles, %d blocks", sections, compact, len(nw.Blocks))
+	}
+
+	// The Declaration of Sentiments: the declaration with its grievances,
+	// the convention's resolutions, and the signers, women then men.
+	ds := d["seneca"]
+	if ds.Title != "The Declaration of Sentiments" || !strings.Contains(ds.About, "National Park Service") || !strings.Contains(ds.About, "1848") {
+		t.Errorf("the Declaration of Sentiments: %q, %q", ds.Title, ds.About)
+	}
+	var dsHeads []string
+	for _, b := range ds.Blocks {
+		if b.Kind == "h2" {
+			dsHeads = append(dsHeads, b.Text)
+		}
+	}
+	// Sixteen grievances: fourteen "He …", "Having deprived her …" and
+	// "After depriving her …".
+	he := count(ds, "text", func(s string) bool { return strings.HasPrefix(s, "He ") })
+	other := count(ds, "text", func(s string) bool {
+		return strings.HasPrefix(s, "Having deprived her") || strings.HasPrefix(s, "After depriving her")
+	})
+	resolved := count(ds, "text", func(s string) bool { return strings.HasPrefix(s, "Resolved, ") })
+	if strings.Join(dsHeads, "|") != "Resolutions|Signers" || he != 14 || other != 2 || resolved != 12 || items(ds) != 100 || count(ds, "note", func(string) bool { return true }) != 3 {
+		t.Errorf("the Declaration of Sentiments: headings %v, %d+%d grievances, %d resolutions, %d signers", dsHeads, he, other, resolved, items(ds))
+	}
+
+	// The Emancipation Proclamation: its opening lines, its paragraphs and
+	// the signatures, all as paragraphs, as the Archives prints them.
+	ep := d["emancipation"]
+	if ep.Title != "The Emancipation Proclamation" || !strings.Contains(ep.About, "National Archives") || !strings.Contains(ep.About, "January 1, 1863") {
+		t.Errorf("the Emancipation Proclamation: %q, %q", ep.Title, ep.About)
+	}
+	if len(ep.Blocks) != 14 || count(ep, "text", func(string) bool { return true }) != 14 || ep.Blocks[0].Text != "By the President of the United States of America:" || ep.Blocks[1].Text != "A Proclamation." || !strings.HasPrefix(ep.Blocks[13].Text, "By the President: ABRAHAM LINCOLN") {
+		t.Errorf("the Emancipation Proclamation: %d blocks, %+v", len(ep.Blocks), ep.Blocks)
+	}
+
+	// The Gettysburg Address, the Bliss copy: Lincoln's heading, the three
+	// paragraphs as the copy breaks them, and the signature and date.
+	ga := d["gettysburg"]
+	if ga.Title != "The Gettysburg Address" || !strings.Contains(ga.About, "Bliss copy") || !strings.Contains(ga.About, "November 19, 1863") {
+		t.Errorf("the Gettysburg Address: %q, %q", ga.Title, ga.About)
+	}
+	if len(ga.Blocks) != 5 || count(ga, "text", func(string) bool { return true }) != 5 || ga.Blocks[0].Text != "Address delivered at the dedication of the cemetery at Gettysburg." || !strings.HasPrefix(ga.Blocks[1].Text, "Four score and seven years ago") || !strings.HasPrefix(ga.Blocks[4].Text, "Abraham Lincoln") {
+		t.Errorf("the Gettysburg Address: %d blocks, %+v", len(ga.Blocks), ga.Blocks)
+	}
+
 	// The Universal Declaration: its preamble, then Articles 1 to 30 in order.
 	ud := d["udhr"]
 	if ud.Title != "The Universal Declaration of Human Rights" || !strings.Contains(ud.About, "10 December 1948") || !strings.Contains(ud.About, "A/RES/217(III)") {
@@ -228,6 +316,44 @@ func TestTheDocuments(t *testing.T) {
 	}
 	if last := pa.Blocks[len(pa.Blocks)-1]; last.Kind != "note" || !strings.HasPrefix(last.Text, "The Code's source credit") {
 		t.Errorf("the Privacy Act's foot: %+v", last)
+	}
+}
+
+// TestTheRightToInformationAct: India's Act, as India Code sets it out:
+// its number and date, its long title, its six chapters and two schedules
+// in order, its 31 sections in order, and India Code's footnotes as notes.
+func TestTheRightToInformationAct(t *testing.T) {
+	r := docs(t)["rti"]
+	if r.Title != "The Right to Information Act, 2005" || !strings.Contains(r.About, "India Code") || !strings.Contains(r.About, "18 November 2025") || !strings.Contains(r.About, "section 52(1)(q)(ii)") {
+		t.Errorf("the Right to Information Act: %q, %q", r.Title, r.About)
+	}
+	if len(r.Blocks) < 3 || r.Blocks[0].Text != "ACT NO. 22 OF 2005" || r.Blocks[1].Text != "[15th June, 2005.]" || !strings.HasPrefix(r.Blocks[2].Text, "An Act to provide for setting out the practical regime of right to information") {
+		t.Errorf("the Act's head: %+v", r.Blocks[:min(3, len(r.Blocks))])
+	}
+	var heads []string
+	for _, b := range r.Blocks {
+		if b.Kind == "h2" {
+			heads = append(heads, b.Text)
+		}
+	}
+	want := []string{"Chapter I. Preliminary", "Chapter II. Right to information and obligations of public authorities", "Chapter III. The Central Information Commission",
+		"Chapter IV. The State Information Commission", "Chapter V. Powers and functions of the Information Commissions, appeal and penalties", "Chapter VI. Miscellaneous",
+		"The First Schedule", "The Second Schedule"}
+	if !slices.Equal(heads, want) {
+		t.Errorf("the Act's parts: %v", heads)
+	}
+	at := 0
+	for n := 1; n <= 31; n++ {
+		start := strconv.Itoa(n) + ". "
+		i := slices.IndexFunc(r.Blocks[at:], func(b ipc.FoundingBlock) bool { return b.Kind == "text" && strings.HasPrefix(b.Text, start) })
+		if i < 0 {
+			t.Errorf("the Act: no section %d after block %d", n, at)
+			continue
+		}
+		at += i
+	}
+	if n := count(r, "note", func(string) bool { return true }); n != 21 {
+		t.Errorf("the Act: %d notes, want 21", n)
 	}
 }
 
@@ -352,11 +478,24 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		// The printed page's words where Wikisource's transcription slipped.
 		"magna-carta":    {"No freeman shall be taken or imprisoned", "one measure of corn", "both clergy and laymen"},
 		"english-rights": {"cruell and unusuall Punishments inflicted", "excessive Baile ought not to be required", "Setleing the Succession of the Crowne"},
-		"virginia":       {"nor can he be compelled to give evidence against himself", "the free exercise of religion"},
-		"articles":       {"The Stile of this confederacy shall be", "a firm league of friendship", "con-firmed by the legislatures of every state"},
+		"petition":       {"by due p[ro]cesse of Lawe", "The great Charter of the Liberties of England", "Soit droit fait come est desire"},
+		// The edition's readings as British History Online keys them.
+		"habeas":   {"Writts of Habeas Corpus", "better secureing the Liberty of the Subject", "by standingh out an Alias and Pluries"},
+		"virginia": {"nor can he be compelled to give evidence against himself", "the free exercise of religion"},
+		"articles": {"The Stile of this confederacy shall be", "a firm league of friendship", "con-firmed by the legislatures of every state"},
+		// The transcription's own readings, kept: "descent" where the journal has "descend".
+		"northwest": {"shall descent to, and be distributed among their children", "There shall be neither slavery nor involuntary servitude in the said territory"},
+		// The Park Service's readings, where the 1848 printing differs.
+		"seneca": {"self-evident; that all men and women are created equal", "not their ignorance", "Resolved, Therefore, That"},
+		// The Archives' transcription's own readings, where the 1863 print differs.
+		"emancipation": {"are, and henceforward shall be free", "St. James Ascension", "Commander-in-Chief, of the Army and Navy"},
+		// The Bliss copy's readings, where the other copies differ.
+		"gettysburg": {"for which they gave the last full measure of devotion", "a new nation, conceived in Liberty", "battle-field", "under God"},
 		// The official record's readings where the UN's web text differs.
 		"udhr":    {"life, liberty and the security of person", "the borders of each State", "in co-operation with the United Nations"},
 		"privacy": {"to the Director of the Congressional Budget Office", "required under section 552 of this title"},
+		// India Code's own readings, where the 2005 Gazette differs.
+		"rti": {"all citizens shall have the right to information", "it is expendient", "suomotu", "information which relates to personal information;"},
 	} {
 		var all strings.Builder
 		for _, b := range d[id].Blocks {
@@ -451,13 +590,18 @@ func TestFindAnySpelling(t *testing.T) {
 		"style of this confederacy":           "articles: Article I.",
 		"cooperation with the United Nations": "udhr: Preamble",
 		"records maintained on individuals":   "privacy: § 552a. Records maintained on individuals",
+		"lawful judgment of his peers":        "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
+		"securing the liberty of the subject": "habeas: ",
+		"all men and women are created equal": "seneca: ",
+		"right to information":                "rti: Chapter II. Right to information and obligations of public authorities",
 	} {
 		if got := find(q); !got[want] {
 			t.Errorf("Find(%q) = %v, want %q among them", q, got, want)
 		}
 	}
+	// The Declaration of Sentiments takes the phrase from the Declaration.
 	for d := range find("pursuit of happiness") {
-		if !strings.HasPrefix(d, "declaration") {
+		if !strings.HasPrefix(d, "declaration") && !strings.HasPrefix(d, "seneca") {
 			t.Errorf("pursuit of happiness found in %s", d)
 		}
 	}

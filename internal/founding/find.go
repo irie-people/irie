@@ -72,6 +72,14 @@ var oldSpellings = map[string]string{
 	"baile": "bail", "cruell": "cruel", "unusuall": "unusual", "illegall": "illegal", "regall": "regal",
 	"criminall": "criminal", "freedome": "freedom", "declareing": "declaring", "setleing": "settling",
 	"beene": "been", "hath": "has",
+	// The Petition of Right of 1628, likewise.
+	"lawfull": "lawful", "peeres": "peers", "lawe": "law", "customes": "customs", "realme": "realm",
+	"souldiers": "soldiers", "marriners": "mariners", "aunswere": "answer", "tyme": "time",
+	"majestie": "majesty", "raigne": "reign", "twentith": "twentieth", "yeere": "year", "yeare": "year",
+	"authoritie": "authority",
+	// The Habeas Corpus Act of 1679, likewise.
+	"secureing": "securing", "writt": "writ", "writts": "writs", "chauncellor": "chancellor", "bee": "be",
+	"soe": "so", "alwayes": "always", "vertue": "virtue", "committments": "commitments", "sixe": "six",
 	// The originals write "any Thing", "re-examined" and "co-operation",
 	// which fold splits at their hyphens.
 	"anything": "any thing", "reexamined": "re examined", "cooperation": "co operation",
