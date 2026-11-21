@@ -200,6 +200,21 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // The Chat tab (ChatViews.swift): the drafts waiting and each
+            // account's channels in both modes, a channel open with the note
+            // of text Discord hides, and the tab before any account.
+            let chatPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.chatPlugin.utf8))
+            for (base, reading, empty, dark) in [("side-chat", false, false, false), ("side-chat-dark", false, false, true),
+                                                 ("side-chat-reading", true, false, false), ("side-chat-empty", false, true, false)] {
+                store.plugins = withPanes.plugins + [chatPlugin]
+                store.chat.loadFixture(reading: reading, empty: empty)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "chat.tab")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -792,6 +807,20 @@ enum Fixture {
        "detail": "Ready: yt-dlp 2026.10.26 through uvx, with ffmpeg; downloads land in ~/Downloads.",
        "summary": "Paste a link in the Yoink tab, or give it to :yoink in any task bar, and pick a size or the sound alone.",
        "pane": {"id": "yoink.yoink", "title": "Yoink", "icon": "arrow.down.circle", "kind": "yoink"}}
+     ]}
+    """#
+
+    /// The chat plugin, on, with its tab on its Discord part.
+    static let chatPlugin = #"""
+    {"name": "chat", "title": "Chat", "on": true,
+     "summary": "Your Discord servers and Slack workspaces beside your sessions, through bots of your own.",
+     "parts": [
+      {"name": "discord", "title": "Discord", "on": true, "state": "ready",
+       "detail": "Ready: 1 account (acme). :chat, or Chat in the right sidebar, reads them.",
+       "summary": "Your Discord servers, through a bot of yours.",
+       "pane": {"id": "chat.tab", "title": "Chat", "icon": "bubble.left.and.bubble.right", "kind": "chat"}},
+      {"name": "slack", "title": "Slack", "on": true, "state": "ready", "detail": "Ready: 1 account (team).", "summary": "Your Slack workspace, through an app of yours."},
+      {"name": "agents", "title": "Chat for agents", "on": true, "state": "ready", "switch": "chat.agents", "detail": "Ready: agents write drafts that wait for you to send.", "summary": "Agents write drafts that wait for you to send."}
      ]}
     """#
 

@@ -339,12 +339,23 @@ struct RightSidebar: View {
     /// narrow.
     private func paneButton(_ p: PluginPaneInfo, tight: Bool) -> some View {
         let on = store.side.tab == .plugin && store.side.pane == p.id
+        // The Chat tab's drafts waiting and mentions not yet seen: news,
+        // never red, as Mail's unread mail is.
+        let n = p.kind == "chat" ? store.chat.waiting.count + store.chat.unseen : 0
         return Button { store.openPane(p.id) } label: {
             HStack(spacing: 4) {
                 if tight {
                     Self.steady(Text(Image(systemName: p.symbol)), on: on) { $0.font(.system(size: 12, weight: $1 ? .bold : .medium)) }
                 } else {
                     Self.steady(Text(p.title), on: on) { $0.font(Theme.font(12, $1 ? .bold : .medium)) }
+                }
+                if n > 0 {
+                    Text("\(n)")
+                        .font(Theme.font(10, .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(on ? Theme.ink : Theme.muted)
+                        .padding(.horizontal, 5)
+                        .background(Capsule().fill(Theme.edge))
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
@@ -355,7 +366,7 @@ struct RightSidebar: View {
         }
         .buttonStyle(.plain)
         .help("\(p.title), a plugin's pane")
-        .accessibilityLabel(p.title)
+        .accessibilityLabel(p.title + (n > 0 ? ", \(n)" : ""))
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 

@@ -170,6 +170,9 @@ extension Store {
             await loadHelpers()
             guard let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self) else { return }
             takePlugins(r)
+            // The Chat tab's count of drafts and mentions moves while the
+            // tab is shut too; the core answers from memory (Chat.swift).
+            if chatPane != nil { await chat.refresh() }
         }
     }
 
