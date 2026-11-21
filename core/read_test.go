@@ -103,6 +103,7 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":jammin spotify play", "", "", OpJammin, JamminArgs{Do: JamPlay, Source: JamSpotify}},
 		{":jammin apple music next", "", "", OpJammin, JamminArgs{Do: JamNext, Source: JamMusic}},
 		{":jammin music", "", "", OpJammin, JamminArgs{Source: JamMusic}},
+		{":jammin files next", "", "", OpJammin, JamminArgs{Do: JamNext, Source: JamFiles}},
 		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
 		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
 		{":markets", "s1", "", OpMarkets, MarketsArgs{}},

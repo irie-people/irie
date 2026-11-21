@@ -175,9 +175,13 @@ func makeApp(t *testing.T, folder, name, bundle string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Link(self, doorOf(app)); err != nil {
-		copyFile(t, self, doorOf(app))
-	}
+	// A copy, not a hard link. When several runs of these tests overlap, as
+	// in an install's tests, macOS now and then kills a door that is a hard
+	// link to the test binary as it starts: SIGKILL, with nothing on
+	// stderr. Measured on 21 Nov 2026 with 12 runs of the package at a
+	// time: a door was killed in 20 of 180 runs with links, and in none of
+	// 60 with copies.
+	copyFile(t, self, doorOf(app))
 	return app
 }
 

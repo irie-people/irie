@@ -20,6 +20,9 @@ type Jammin struct {
 	// Spotify's developer dashboard. Its tokens are the Keychain's, never
 	// config.toml's.
 	Spotify JamminSpotify `toml:"spotify"`
+	// Folder is the folder of music files the files source plays, an
+	// absolute or ~ path; "" = ~/Music.
+	Folder string `toml:"folder"`
 }
 
 // JamminSpotify is the Spotify source's settings.
@@ -30,7 +33,7 @@ type JamminSpotify struct {
 }
 
 // JamminSources are the sources' names, in the order they show.
-var JamminSources = []string{"spotify", "music"}
+var JamminSources = []string{"spotify", "music", "files"}
 
 // spotifyClientID is a Spotify app's Client ID, as its dashboard shows it.
 var spotifyClientID = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
@@ -46,7 +49,7 @@ func SpotifyClientID(id string) (string, bool) {
 }
 
 // defaultJammin is the plugin's settings until config.toml says otherwise.
-func defaultJammin() Jammin { return Jammin{} }
+func defaultJammin() Jammin { return Jammin{Folder: "~/Music"} }
 
 // JamminOn says whether the jammin plugin runs: plugins.jammin, with the
 // plugin built in.
@@ -55,6 +58,9 @@ func (c Config) JamminOn() bool { return JamminBuilt && c.Plugins.Jammin }
 func checkJammin(j Jammin, bad func(string, ...any)) {
 	if j.Source != "" && !slices.Contains(JamminSources, j.Source) {
 		bad("jammin.source = %q: must be %s, or empty for the first source ready", j.Source, strings.Join(JamminSources, " or "))
+	}
+	if j.Folder != "" && !pathLike(j.Folder) {
+		bad("jammin.folder = %q: must be an absolute or ~ path to the folder of your music files, or empty for ~/Music", j.Folder)
 	}
 	if j.Spotify.ClientID != "" {
 		if _, ok := SpotifyClientID(j.Spotify.ClientID); !ok {

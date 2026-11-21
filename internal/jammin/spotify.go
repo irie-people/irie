@@ -345,7 +345,7 @@ func (p *spotify) trade(ctx context.Context, form url.Values) (grant, error) {
 }
 
 // noApp is what the source says with no Client ID.
-var noApp = "No Spotify app yet: make one at " + spotifyDashboard + " with the redirect URI " + redirectBase + ", then Link Spotify in the Jammin tab, or `" + brand.Slug + " jammin link spotify`, takes its Client ID. Spotify lets apps in development mode work only for Premium accounts."
+var noApp = "No Spotify app yet: make one at " + spotifyDashboard + " with the redirect URI " + redirectBase + ", then Link Spotify in the Jammin tab, or `" + brand.Slug + " jammin link spotify`, takes its Client ID. Spotify lets apps in development mode work only for Premium accounts. Or open the Spotify app on this Mac, and Jammin plays it from there."
 
 // Look says how the account stands and what plays, asking Spotify at most
 // as often as the cadence allows, with the Client ID kept.
@@ -392,6 +392,9 @@ func (p *spotify) look(ctx context.Context) ipc.JamSource {
 	defer p.mu.Unlock()
 	p.last = st
 	switch {
+	case st.Via == ipc.JamViaApp:
+		// The app here answers in a moment, asking no service.
+		p.next = p.sv.now().Add(musicEvery)
 	case st.State == ipc.JamReady && st.Now != nil && st.Now.Playing:
 		p.next = p.sv.now().Add(spotifyPlaying)
 	case st.State == ipc.JamReady:
@@ -404,24 +407,31 @@ func (p *spotify) look(ctx context.Context) ipc.JamSource {
 	return st
 }
 
-// read asks Spotify what plays.
+// read asks Spotify what plays: the account, when one is linked, else the
+// Spotify app on this Mac, when it runs.
 func (p *spotify) read(ctx context.Context) ipc.JamSource {
 	st := ipc.JamSource{Name: p.Name(), Title: p.Title()}
-	if p.clientID() == "" {
-		st.State, st.Problem = ipc.JamNeeds, noApp
-		return st
-	}
+	id := p.clientID()
 	// An access token in memory says it is signed in; only without one
 	// is the Keychain asked, so a look every few seconds runs no security.
 	p.mu.Lock()
 	user, signedIn := p.user, p.access != ""
 	p.mu.Unlock()
-	if !signedIn {
-		if _, err := p.sv.Store.Get(tokenKey); errors.Is(err, ErrNoToken) {
-			st.State, st.Problem = ipc.JamNeeds, "Not signed in to Spotify yet: Link Spotify in the Jammin tab, or `"+brand.Slug+" jammin link spotify`, signs in with your Spotify app."
-			return st
-		}
+	if id != "" && !signedIn {
+		_, err := p.sv.Store.Get(tokenKey)
+		signedIn = !errors.Is(err, ErrNoToken)
 	}
+	if id == "" || !signedIn {
+		if p.appRunning() {
+			return p.appLook(ctx)
+		}
+		st.State, st.Problem = ipc.JamNeeds, noApp
+		if id != "" {
+			st.Problem = "Not signed in to Spotify yet: Link Spotify in the Jammin tab, or `" + brand.Slug + " jammin link spotify`, signs in with your Spotify app. Or open the Spotify app on this Mac, and Jammin plays it from there."
+		}
+		return st
+	}
+	st.Via = ipc.JamViaAccount
 	if user == "" {
 		var me struct {
 			ID          string `json:"id"`
@@ -656,8 +666,14 @@ func (pb playback) can() []string {
 }
 
 // Do sends one control to Spotify, and keeps what it changes until Spotify
-// says so too.
+// says so too; to the Spotify app here when that is how it plays.
 func (p *spotify) Do(ctx context.Context, a ipc.JamminArgs) error {
+	p.mu.Lock()
+	viaApp := p.last.Via == ipc.JamViaApp
+	p.mu.Unlock()
+	if viaApp {
+		return p.appDo(ctx, a)
+	}
 	q := url.Values{}
 	var body any
 	method, path := http.MethodPut, ""

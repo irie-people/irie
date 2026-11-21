@@ -274,7 +274,7 @@ enum KeyCatalog {
         case .code:
             groups.append(PeekGroup(head: "This code card", rows: code(mods).filter { !taken.contains($0.key) }))
         case .vault:
-            groups.append(PeekGroup(head: "This vault card", rows: code(mods).filter { !taken.contains($0.key) }))
+            groups.append(PeekGroup(head: "This vault card", rows: vault(mods).filter { !taken.contains($0.key) }))
         default:
             break
         }
@@ -362,7 +362,24 @@ enum KeyCatalog {
                     PeekRow(key: "/", name: "Comment out, or back in"), PeekRow(key: "]", name: "Indent"), PeekRow(key: "[", name: "Outdent"),
                     PeekRow(key: "W", name: "Close the file")]
         case [.command, .shift]:
-            return [PeekRow(key: "G", name: "Find previous")]
+            return [PeekRow(key: "G", name: "Find previous"), PeekRow(key: "V", name: "Make Markdown pretty")]
+        case [.command, .option]:
+            return [PeekRow(key: "F", name: "Find and replace")]
+        default:
+            return []
+        }
+    }
+
+    /// A Vault card's note in its editor: the code card's keys that it
+    /// has, and Obsidian's ⌘E for Reading view.
+    static func vault(_ mods: NSEvent.ModifierFlags) -> [PeekRow] {
+        switch mods {
+        case .command:
+            return [PeekRow(key: "E", name: "Reading view"), PeekRow(key: "P", name: "Open a note"), PeekRow(key: "S", name: "Save"),
+                    PeekRow(key: "F", name: "Find"), PeekRow(key: "G", name: "Find next"),
+                    PeekRow(key: "]", name: "Indent"), PeekRow(key: "[", name: "Outdent")]
+        case [.command, .shift]:
+            return [PeekRow(key: "G", name: "Find previous"), PeekRow(key: "V", name: "Reading view beside")]
         case [.command, .option]:
             return [PeekRow(key: "F", name: "Find and replace")]
         default:

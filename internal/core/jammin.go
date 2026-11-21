@@ -48,6 +48,15 @@ func (c *Core) jamminService() *jammin.Service {
 	return c.jammin.sv
 }
 
+// jamminResume, as the core starts, takes up a track of the music files
+// that played on while the core restarted, so the next plays when it
+// ends. It asks no app or service anything.
+func (c *Core) jamminResume() {
+	if c.cfg().JamminOn() {
+		c.jamminService().Resume()
+	}
+}
+
 // jamminLive is how each source stood at the core's last look, for the
 // plugin's parts: it asks no source anything.
 func (c *Core) jamminLive() []ipc.JamSource {

@@ -29,12 +29,20 @@ const (
 	JamSignIn   = "link"     // sign in to the source's account, with ClientID: Link says where
 	JamSignOut  = "unlink"   // sign out of the source's account; All forgets its Client ID too
 	JamCancel   = "cancel"   // stop a sign-in under way, changing nothing else
+	JamFolder   = "folder"   // the folder of music files to play, Folder: kept as jammin.folder
 )
 
 // The sources, by name.
 const (
-	JamSpotify = "spotify" // Spotify, through a Spotify app of the person's own
+	JamSpotify = "spotify" // Spotify, through a Spotify app of the person's own, else the Spotify app on this Mac
 	JamMusic   = "music"   // Apple Music: the Music app on this Mac
+	JamFiles   = "files"   // music files in a folder on this computer, played by the core
+)
+
+// How a source reaches its music, in JamSource.Via.
+const (
+	JamViaAccount = "account" // the service's API, signed in to the person's account
+	JamViaApp     = "app"     // the service's own app on this computer, through its scripting
 )
 
 // A source's states.
@@ -94,6 +102,9 @@ type JamminArgs struct {
 	// ClientID is the Client ID of the person's Spotify app, for link;
 	// "" = jammin.spotify.client_id.
 	ClientID string `json:"client_id,omitempty"`
+	// Folder is the folder of music files, for folder: an absolute or ~
+	// path.
+	Folder string `json:"folder,omitempty"`
 	// All, for unlink, forgets the Client ID too.
 	All bool `json:"all,omitempty"`
 }
@@ -137,6 +148,10 @@ type JamSource struct {
 	// config.toml, so a client can sign in again without asking for it;
 	// "" = none yet. It is no secret: PKCE has none.
 	ClientID string `json:"client_id,omitempty"`
+	// Via is how it reaches its music: account or app; "" for the files.
+	Via string `json:"via,omitempty"`
+	// Folder is the files' folder, as config.toml names it, ~ and all.
+	Folder string `json:"folder,omitempty"`
 }
 
 // JamNow is what plays on a source.

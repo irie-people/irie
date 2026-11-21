@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -45,17 +46,20 @@ const jamminHelp = `usage:
   ` + brand.Slug + ` jammin lists               your playlists, with what play takes for each
   ` + brand.Slug + ` jammin search WORDS        tracks, albums and playlists
   ` + brand.Slug + ` jammin devices             where Spotify can play
+  ` + brand.Slug + ` jammin folder PATH         the folder of your music files, ~/Music unless
+                              you pick another
   ` + brand.Slug + ` jammin move DEVICE         move what plays there, by its name or ID
   ` + brand.Slug + ` jammin link spotify [CLIENT_ID]
                               sign in to Spotify through your Spotify app
   ` + brand.Slug + ` jammin unlink spotify [--all]
                               sign out; --all forgets the Client ID too
---source spotify|music picks the source; without it, the one playing.
+--source spotify|music|files picks the source; without it, the one playing.
 --json prints the core's answer as JSON.
 Spotify comes through an app of yours: make one at
 https://developer.spotify.com/dashboard with the redirect URI
 http://127.0.0.1/jammin/spotify, and Web API. Spotify lets apps in
-development mode work only for Premium accounts.
+development mode work only for Premium accounts. Without one, Jammin plays
+the Spotify app on this Mac while it is open.
 `
 
 func init() {
@@ -202,6 +206,17 @@ func jamminCmd(args []string, j jamminIO) error {
 		a.Do, a.Query = ipc.JamSearch, strings.Join(rest, " ")
 	case "devices":
 		a.Do = ipc.JamDevices
+	case "folder":
+		w, err := one("folder PATH")
+		if err != nil {
+			return err
+		}
+		if !filepath.IsAbs(w) && w != "~" && !strings.HasPrefix(w, "~/") {
+			if w, err = filepath.Abs(w); err != nil {
+				return err
+			}
+		}
+		a.Do, a.Folder = ipc.JamFolder, w
 	case "move":
 		if len(rest) == 0 {
 			return fmt.Errorf("usage: %s jammin move DEVICE", brand.Slug)

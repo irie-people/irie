@@ -403,8 +403,12 @@ const (
 	JamSignIn            = ipc.JamSignIn
 	JamSignOut           = ipc.JamSignOut
 	JamCancel            = ipc.JamCancel
+	JamFolder            = ipc.JamFolder
 	JamSpotify           = ipc.JamSpotify
 	JamMusic             = ipc.JamMusic
+	JamFiles             = ipc.JamFiles
+	JamViaAccount        = ipc.JamViaAccount
+	JamViaApp            = ipc.JamViaApp
 	JamReady             = ipc.JamReady
 	JamNeeds             = ipc.JamNeeds
 	JamLinking           = ipc.JamLinking

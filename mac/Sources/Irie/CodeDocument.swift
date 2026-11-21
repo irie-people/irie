@@ -650,6 +650,18 @@ final class CodeDocument {
         outsideAt = Date()
     }
 
+    /// Puts words in place of a range as typing would, saved as typing is,
+    /// as one step ⌘Z takes back under its name: a task ticked in a Vault
+    /// card's Reading view.
+    func replace(_ range: NSRange, with text: String, named: String) {
+        guard phase == .ready || phase == .missing, NSMaxRange(range) <= storage.length else { return }
+        for v in views.allObjects { v.breakUndoCoalescing() }
+        undo.beginUndoGrouping()
+        revert(range, to: text)
+        undo.setActionName(named)
+        undo.endUndoGrouping()
+    }
+
     /// ⌘Z of a change from the disk: the old text goes back, and is typing
     /// to save, as the user chose it.
     private func revert(_ range: NSRange, to text: String) {

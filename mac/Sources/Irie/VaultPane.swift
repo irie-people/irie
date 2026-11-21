@@ -19,6 +19,10 @@ struct VaultPane: View {
     @AppStorage(CodeThemes.defaultsKey) private var themeID = CodeThemes.standard
     /// The vault's notes as a tree beside the note, for every Vault card.
     @AppStorage("vaultTree") private var tree = true
+    /// The notes shown in Reading view, "r " and the path a line, or with
+    /// the editor beside it, "b "; the newest 200. A note opens in the
+    /// editor first, as Obsidian opens one (VaultReading.swift).
+    @AppStorage("vaultLooks") private var looks = ""
     let owner: PaneOwner
     let pane: DeckPane
     let shows: Bool
@@ -47,6 +51,7 @@ struct VaultPane: View {
             content(t)
         }
         .background(Color(nsColor: t.background))
+        .background { readingKeys.opacity(0).allowsHitTesting(false).accessibilityHidden(true) }
         .overlay(alignment: .top) {
             if finding, let folder {
                 QuickOpen(folder: folder, theme: t, focusToken: token, takesKeys: true, shows: shows, open: { open($0) },
@@ -117,6 +122,18 @@ struct VaultPane: View {
                     .padding(.leading, 4)
             }
             Spacer(minLength: 4)
+            if let path, folder != nil {
+                // Obsidian's view switcher: Reading view, and with ⌘ held,
+                // Reading view beside the editor.
+                let l = look(path)
+                icon(l == .editing ? "book" : "book.fill", lookHelp(l), t, on: l != .editing) {
+                    if NSEvent.modifierFlags.contains(.command) {
+                        setLook(path, l == .both ? .editing : .both)
+                    } else {
+                        setLook(path, l == .reading ? .editing : .reading)
+                    }
+                }
+            }
             if let notes {
                 icon("checklist", "Your notepad, as kept in the vault", t, on: path == notes) { open(notes) }
             }
@@ -158,6 +175,9 @@ struct VaultPane: View {
             Button("Open a Note…") { finding = true }.disabled(folder == nil)
             Button("New Note") { newNote() }.disabled(folder == nil)
             if let p = pane.file {
+                Divider()
+                Toggle("Reading View", isOn: Binding(get: { look(p) == .reading }, set: { setLook(p, $0 ? .reading : .editing) }))
+                Toggle("Reading View Beside the Editor", isOn: Binding(get: { look(p) == .both }, set: { setLook(p, $0 ? .both : .editing) }))
                 Divider()
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]) }
                 Button("Copy Path") {
@@ -254,7 +274,7 @@ struct VaultPane: View {
         if let path = pane.file {
             let doc = CodeDocs.shared.existing(path) ?? CodeDocs.shared.doc(path, theme: t, font: font)
             ZStack(alignment: .top) {
-                editor(doc, t)
+                page(doc, t, folder: folder)
                 if doc.conflict {
                     bar("\(VaultPane.title(path)) changed on disk while you were typing.", t) {
                         Button("Use the Disk’s") { doc.takeTheirs() }
@@ -284,6 +304,46 @@ struct VaultPane: View {
         }
     }
 
+    /// The note in the editor, in Reading view, or in both: Reading view
+    /// beside the editor when the card is wide, under it when narrow, the
+    /// editor kept in its place so the typing goes on.
+    @ViewBuilder
+    private func page(_ doc: CodeDocument, _ t: CodeTheme, folder: String) -> some View {
+        let l = look(doc.path)
+        switch doc.phase {
+        case .ready, .missing:
+            if l == .reading {
+                reading(doc, t, folder: folder, alone: true)
+            } else {
+                GeometryReader { geo in
+                    let wide = geo.size.width >= 620
+                    let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                    layout {
+                        editor(doc, t).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if l == .both {
+                            Rectangle().fill(Color(nsColor: t.gutterInk).opacity(0.22))
+                                .frame(width: wide ? 1 : nil, height: wide ? nil : 1)
+                            reading(doc, t, folder: folder, alone: false).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                }
+            }
+        default:
+            editor(doc, t)
+        }
+    }
+
+    private func reading(_ doc: CodeDocument, _ t: CodeTheme, folder: String, alone: Bool) -> some View {
+        VaultReading(doc: doc,
+                     ctx: VaultReadingContext(theme: t, size: store.fontSize + 1, folder: folder, note: doc.path,
+                                              accent: Theme.agent(slot: pane.slot), fixture: store.isFixture,
+                                              open: { follow($0, from: doc.path) }, tick: { tick(doc, line: $0) }),
+                     goTo: store.rolodex.goTo[pane.id], went: alone ? { g in store.rolodex.went(g, on: pane.id) } : nil)
+            // A view of its own for each note, so one never shows another's
+            // blocks while it reads its own.
+            .id(ObjectIdentifier(doc))
+    }
+
     @ViewBuilder
     private func editor(_ doc: CodeDocument, _ t: CodeTheme) -> some View {
         switch doc.phase {
@@ -309,6 +369,9 @@ struct VaultPane: View {
         a.quickOpen = { finding = true }
         a.went = { g in store.rolodex.went(g, on: pane.id) }
         a.openLink = { link in follow(link, from: doc.path) }
+        // ⌘E as in Obsidian, and ⇧⌘V as the code card's pretty view.
+        a.reading = { setLook(doc.path, look(doc.path) == .reading ? .editing : .reading) }
+        a.pretty = { setLook(doc.path, look(doc.path) == .both ? .editing : .both) }
         if store.paneSession?.id == owner.id {
             a.ask = { lines in store.askAgent(about: doc.path, lines: lines, folder: owner.folder) }
         }
@@ -334,7 +397,7 @@ struct VaultPane: View {
                 .fixedSize()
             }
             Spacer(minLength: 6)
-            Text("⌘-click a link to open it")
+            Text(look(doc.path) == .reading ? "Click a link to open it, a box to tick it" : "⌘-click a link to open it")
             Text(state(doc))
                 .foregroundStyle(doc.problem != nil || doc.conflict ? Color(nsColor: .systemRed) : Color(nsColor: t.gutterInk))
                 .help(doc.problem ?? "")
@@ -386,6 +449,61 @@ struct VaultPane: View {
         .foregroundStyle(Color(nsColor: t.gutterInk))
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Reading view
+
+    private enum Look { case editing, reading, both }
+
+    private func look(_ path: String) -> Look {
+        for line in looks.split(separator: "\n") where line.dropFirst(2) == path {
+            return line.hasPrefix("b ") ? .both : .reading
+        }
+        return .editing
+    }
+
+    private func setLook(_ path: String, _ l: Look) {
+        var lines = looks.split(separator: "\n").map(String.init).filter { $0.dropFirst(2) != path }
+        switch l {
+        case .editing: break
+        case .reading: lines.append("r " + path)
+        case .both: lines.append("b " + path)
+        }
+        if lines.count > 200 { lines.removeFirst(lines.count - 200) }
+        looks = lines.joined(separator: "\n")
+    }
+
+    private func lookHelp(_ l: Look) -> String {
+        switch l {
+        case .editing: return "Reading view (⌘E); ⌘-click for it beside the editor (⇧⌘V)"
+        case .reading: return "Back to editing (⌘E)"
+        case .both: return "Reading view alone (⌘E); ⌘-click for the editor alone"
+        }
+    }
+
+    /// ⌘E and ⌘P while the note shows in Reading view and the card has the
+    /// keyboard, when the editor doesn't have it to take them itself.
+    @ViewBuilder
+    private var readingKeys: some View {
+        if shows, keys, let p = pane.file, look(p) != .editing {
+            Button("") { setLook(p, look(p) == .reading ? .editing : .reading) }
+                .keyboardShortcut("e", modifiers: .command)
+            Button("") { finding = true }
+                .keyboardShortcut("p", modifiers: .command)
+        }
+    }
+
+    /// A task's box clicked in Reading view: its mark in the note goes from
+    /// [ ] to [x], or back to [ ], as typing would put it, so it saves, ⌘Z
+    /// in the editor takes it back, and the notepad follows when the note
+    /// is its own.
+    private func tick(_ doc: CodeDocument, line: Int) {
+        guard line < doc.lineCount else { return }
+        let r = doc.lineRange(line)
+        let text = doc.storage.mutableString.substring(with: r)
+        guard let box = VaultMarkdown.checkbox(in: text) else { return }
+        doc.replace(NSRange(location: r.location + box.range.location, length: box.range.length),
+                    with: box.done ? " " : "x", named: box.done ? "Untick" : "Tick")
     }
 
     // MARK: Names

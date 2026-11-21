@@ -18,7 +18,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :jammin [play|pause|next|previous], :open FILE[:LINE]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :jammin [spotify|music|files] [play|pause|next|previous], :open FILE[:LINE]"
 
 // commandName finds each command's name in Commands.
 var commandName = regexp.MustCompile(`(?:^|, ):([a-z]+)`)
@@ -715,7 +715,7 @@ func Said(st Step, result any, err error) (InputResult, error) {
 // previous, perhaps after the source it is for, spotify or music.
 func jamminArgs(arg string) (JamminArgs, error) {
 	var a JamminArgs
-	usage := ":jammin takes play, pause, next or previous, perhaps after spotify or music: :jammin pause, :jammin music next."
+	usage := ":jammin takes play, pause, next or previous, perhaps after spotify, music or files: :jammin pause, :jammin music next."
 	for _, w := range strings.Fields(strings.ToLower(arg)) {
 		src, do := "", ""
 		switch w {
@@ -723,6 +723,8 @@ func jamminArgs(arg string) (JamminArgs, error) {
 			src = JamSpotify
 		case "music", "apple":
 			src = JamMusic
+		case "files":
+			src = JamFiles
 		case "play", "resume":
 			do = JamPlay
 		case "pause", "stop":
