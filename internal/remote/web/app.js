@@ -10,6 +10,7 @@ import { loadMachines, saveMachines, call, pair, info, forget, normalize, host, 
 import { SessionView, grow, looseWords } from './js/conv.js';
 import * as List from './js/list.js';
 import * as Push from './js/push.js';
+import * as Z from './js/zen.js';
 
 const params = new URLSearchParams(location.search);
 const root = document.documentElement;
@@ -335,6 +336,13 @@ function sessionActions(conn, s, { inSession = false } = {}) {
   const lk = L.look(s);
   const ended = lk === 'exited' || lk === 'exitedError' || lk === 'failed';
   const items = [];
+  // Zen, first: the conversation alone, calm (docs/proposals/zen.md).
+  const v = S.view;
+  if (inSession && v && v.sid === s.id && conn.can('zen') && Z.served(conn.header)) {
+    items.push(v.zen
+      ? { label: 'Leave Zen', run: () => v.leaveZen() }
+      : { label: 'Zen', note: 'This conversation alone, calm: you come first', run: () => v.enterZen() });
+  }
   if (!inSession) items.push({ label: 'Open', run: () => openSession(conn.m.id, s.id) });
   if (conn.can('park')) {
     items.push(s.parked
@@ -1629,6 +1637,7 @@ const ctx = {
   reopen,
   sessionActions,
   op: (c, name, args) => op(c, name, args),
+  open: (c, sid) => openSession(c.m.id, sid),
 };
 
 function openSession(mid, sid) {
@@ -1658,11 +1667,15 @@ function route() {
     return;
   }
   if (S.view && S.view.conn === c && S.view.sid === sid) return;
+  // Zen goes on to the next session of its machine, rather than ending.
+  const zen = !!(S.view && S.view.zen && S.view.conn === c);
+  if (zen) S.view.zenCarried = true;
   closeView(true);
   closeSheet();
   if (S.openRow) setOpen(S.openRow, false);
   const v = new SessionView(ctx, c, sid);
   S.view = v;
+  if (zen) v.enterZen();
   app.append(v.el);
   trackBottom();
   refs.home.setAttribute('aria-hidden', 'true');
