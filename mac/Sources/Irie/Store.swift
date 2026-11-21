@@ -372,6 +372,8 @@ final class Store {
     let mail: MailModel
     /// The Yoink plugin's downloads, which its tab draws (Yoink.swift).
     let yoink: YoinkModel
+    /// The Jammin plugin's music, which its tab draws (Jammin.swift).
+    let jammin: JamminModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
     /// The Obsidian vault, for its cards and the notepad (Vault.swift).
@@ -385,6 +387,7 @@ final class Store {
         settings = SettingsModel(client: client)
         mail = MailModel(client: client)
         yoink = YoinkModel(client: client)
+        jammin = JamminModel(client: client)
         notes.store = self
         vault.store = self
         settings.changed = { [weak self] in
@@ -1369,6 +1372,11 @@ final class Store {
                 // :yoink opens the Yoink tab, where the download shows as it
                 // goes; a start says so too.
                 showYoink()
+                if r.did != "answered" { say(r.text, error: false, seconds: 5) }
+            case _ where r.op == "jammin" && jamminPane != nil:
+                // :jammin opens the Jammin tab, which shows what plays on
+                // each source; a control says what it did too.
+                showJammin()
                 if r.did != "answered" { say(r.text, error: false, seconds: 5) }
             case "answered":
                 // :mail opens the Mail tab, which says more than words can.
