@@ -11,6 +11,11 @@ type Materialize struct {
 	// fits, at most 16B parameters and 10 GB. A card is small, so a small
 	// model makes it well and leaves the memory to your own work.
 	Model string `toml:"model"`
+	// Sessions has a session's conversation show a card of where it
+	// stands, over its message box, made by Model from the conversation
+	// when the session's state or its newest message changes, at most
+	// every two minutes. Off by default: each card is a local model's run.
+	Sessions bool `toml:"sessions"`
 }
 
 func checkMaterialize(m Materialize, bad func(string, ...any)) {

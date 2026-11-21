@@ -24,6 +24,9 @@ const materializeUsage = `  ` + brand.Slug + ` ctl materialize ID PROMPT [--cont
                                          when the context changed or it is as old
                                          as --every, never sooner than --gap
   ` + brand.Slug + ` ctl materialize --forget ID       drop the card kept under ID
+  ` + brand.Slug + ` ctl materialize --session SESSION [--wait D]
+                                         where a session stands, as its own card
+                                         (materialize.sessions)
 `
 
 // cardWidth is how wide ctl materialize draws a card.
@@ -39,14 +42,18 @@ func ctlMaterialize(args []string) error {
 	wait := fs.Duration("wait", 2*time.Minute, "how long to wait while the card is made; 0 answers at once")
 	asJSON := fs.Bool("json", false, "print the answer as JSON")
 	forget := fs.Bool("forget", false, "drop the card kept under ID")
-	usage := errors.New("usage: " + brand.Slug + " ctl materialize ID PROMPT [--context FILE|-] [--every D] [--gap D] [--wait D] [--json], or --forget ID")
+	session := fs.String("session", "", "a session's own card, where it stands, which the core makes from its conversation")
+	usage := errors.New("usage: " + brand.Slug + " ctl materialize ID PROMPT [--context FILE|-] [--every D] [--gap D] [--wait D] [--json], --forget ID, or --session SESSION")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	// Flags may follow ID and PROMPT too.
 	rest := fs.Args()
 	need := 2
-	if *forget {
+	switch {
+	case *session != "":
+		need = 0
+	case *forget:
 		need = 1
 	}
 	if len(rest) < need {
@@ -58,8 +65,11 @@ func ctlMaterialize(args []string) error {
 	if fs.NArg() > 0 {
 		return usage
 	}
-	a := ipc.MaterializeArgs{ID: rest[0], Every: *every, Gap: *gap, Wait: min(*wait, ipc.MaxMaterializeWait), Forget: *forget}
-	if !*forget {
+	a := ipc.MaterializeArgs{Session: *session, Every: *every, Gap: *gap, Wait: min(*wait, ipc.MaxMaterializeWait), Forget: *forget}
+	if need > 0 {
+		a.ID = rest[0]
+	}
+	if need > 1 {
 		a.Prompt = rest[1]
 	}
 	if *from != "" {
