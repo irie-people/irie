@@ -54,6 +54,12 @@ func (c *Core) cardStore() *materialize.Store {
 // materializeOp answers the materialize op: the card a recipe makes, as
 // kept, with a remake begun when one is due, and waited for when asked.
 func (c *Core) materializeOp(a ipc.MaterializeArgs) (ipc.MaterializeResult, error) {
+	if a.Session != "" {
+		var err error
+		if a, err = c.sessionCardArgs(a); err != nil {
+			return ipc.MaterializeResult{}, err
+		}
+	}
 	switch {
 	case a.ID == "" || len(a.ID) > ipc.MaxMaterializeID:
 		return ipc.MaterializeResult{}, ipc.Errorf(ipc.CodeBadArgs, "materialize: a card's id is 1 to %d bytes", ipc.MaxMaterializeID)

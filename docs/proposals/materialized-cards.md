@@ -1,6 +1,6 @@
 # Proposal: materialized cards
 
-Date: 2026-11-21. Status: a proposal, with its first two steps built (`internal/materialize`, `internal/genui`, the `materialize` op and `irie ctl materialize`). It joins two ideas: the cards of [generative-ui.md](generative-ui.md) §7.3, a small JSON tree from Irie's catalog that Irie draws in its own look, and Macro's AI projections, an AI-made view kept under a name and made again only when it is out of date. An agent (Claude Code) wrote it with the owner, in teach mode, from `live` at `53a2ce4`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md); Macro is AGPL-3.0, so Irie takes its ideas and none of its code.
+Date: 2026-11-21. Status: a proposal, with its first steps built (`internal/materialize`, `internal/genui`, the `materialize` op, `irie ctl materialize`, and the session's card in the Mac app). It joins two ideas: the cards of [generative-ui.md](generative-ui.md) §7.3, a small JSON tree from Irie's catalog that Irie draws in its own look, and Macro's AI projections, an AI-made view kept under a name and made again only when it is out of date. An agent (Claude Code) wrote it with the owner, in teach mode, from `live` at `53a2ce4`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md); Macro is AGPL-3.0, so Irie takes its ideas and none of its code.
 
 **In short.** A materialized card is a card a model made once and Irie kept. A view that asks for it draws it at once, from what is kept, and the model makes it again only when what it was made from has moved on. So a card costs a model call when something changes, not each time someone looks, and it does not shift under the person reading it. While a new one is made, the old one stays on show.
 
@@ -45,7 +45,7 @@ stateDiagram-v2
 
 ## 4. The first cards
 
-1. **Where a session stands**, in its details: what it is doing, what it changed, what waits on you. Its inputs are the session's turn count and state, so it is made again after a turn, at most every Gap.
+1. **Where a session stands**, over its message box in the conversation view (built, behind `materialize.sessions`): what it is doing, what it changed, what waits on you. Its inputs are the session's state and its newest message, so it is made again after a turn or a message, at most every two minutes. It first went in the details panel, but that panel shows three lines until it is dragged taller, so the card sits where the eyes are.
 2. **A plugin's card**, from its manifest: a recipe the plugin names, drawn in its pane.
 
 ## 5. Order of work
@@ -54,7 +54,7 @@ stateDiagram-v2
 2. **The core** (medium, built): the store in the state folder; the `materialize` op, with `wait` and `forget`; remakes on a local model, one at a time; the catalog's check (`internal/genui`: Text, List, Facts, Table, Progress and Divider, with §7.3's limits); `irie ctl materialize`, which draws a card as text.
    - **2b, the sweep** (small): each minute, the cards a view showed in the last ten minutes are asked for again, while Gabriel holds nothing back, and those no view has asked for in a week are forgotten.
 3. **The rest of the catalog** (small): §7.3's other parts (Row, Column, Chart, Code, Diff, Image, Link) and its nesting limit, shared with cards an agent composes.
-4. **The Mac app** (medium): the `materialized` frame; the catalog in SwiftUI; the session card in the details panel.
+4. **The Mac app** (medium, begun): the catalog in SwiftUI (`MaterializedCard.swift`) and the session's card over its message box, asked for by the view, which waits for a remake under way; still to come, the `materialized` frame, so a card made for one view redraws in every other.
 5. **The terminal slot** (small): the same in Lip Gloss.
 
 ## 6. Decisions for the owner

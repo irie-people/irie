@@ -616,6 +616,23 @@ enum Fixture {
     }
 
     static let selected = "s02docsguide"
+
+    /// The selected session's card of where it stands, being made again
+    /// while the session works (docs/proposals/materialized-cards.md).
+    static var standsCard: MaterializeResult {
+        let made = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-180))
+        let json = """
+        {"id": "session/\(selected)/status", "state": "refreshing", "by": "bonsai-2:9b", "made": "\(made)",
+         "spec": {"title": "Writing the docs guide", "body": [
+           {"type": "Text", "text": "It checks the guide against DESIGN.md before it runs the tests again."},
+           {"type": "List", "items": [
+             {"title": "Wrote the guide's outline", "detail": "docs/guide.md", "status": "ok"},
+             {"title": "Linked each part to DESIGN", "status": "ok"},
+             {"title": "One test fails", "detail": "TestGuideLinks", "status": "warn"}]},
+           {"type": "Progress", "label": "Sections written", "value": 4, "total": 6}]}}
+        """
+        return try! Wire.decoder.decode(MaterializeResult.self, from: Data(json.utf8))
+    }
     /// The code card's file, in the selected session's folder, and another
     /// it has open.
     static var codeFolder: String { "/home/alice/code/\(Brand.slug)-docs-guide" }
