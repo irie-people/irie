@@ -3,30 +3,176 @@ package core
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/keyring"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/tmux"
 	"github.com/irie-people/irie/internal/zen"
 )
 
 // zenCore is a core with no tmux behind it, its files under home, with
-// your zen loaded as a core that starts loads it.
-func zenCore(t *testing.T, home string) *Core {
+// your zen loaded and its vault opened as a core that starts does, with
+// its key in a file under home.
+func zenCore(t *testing.T, home string) *Core { return zenCoreKeys(t, home, nil) }
+
+// zenCoreKeys is zenCore with the vault's key from keys, unless nil.
+func zenCoreKeys(t *testing.T, home string, keys keyring.Source) *Core {
 	t.Helper()
 	p, err := paths.New(func(k string) string { return map[string]string{"HOME": home}[k] }, 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := newCore(Options{Config: config.Default(), Paths: p, Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}, &tmux.Runner{})
-	c.loadZen()
+	c.zen.keys = keys
+	c.startZen()
 	return c
+}
+
+// noKeys is a keychain that gives no key, as a locked one.
+type noKeys struct{}
+
+func (noKeys) Key(string) ([]byte, error) { return nil, errors.New("the keychain is locked") }
+
+// zenFiles is each file's name in your zen's objects, sorted.
+func zenFiles(t *testing.T, c *Core) []string {
+	t.Helper()
+	files, err := os.ReadDir(filepath.Join(c.paths.Zen(), "objects"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, f := range files {
+		out = append(out, f.Name())
+	}
+	return out
+}
+
+// Your zen's versions are sealed on disk, the state file keeps your zen as
+// it is, and the export gives each version's exact bytes, oldest first.
+func TestYourZenIsKeptSealed(t *testing.T) {
+	home := t.TempDir()
+	c := zenCore(t, home)
+	edge := "edge"
+	v := c.zenDo(t, ipc.ZenArgs{Set: &ipc.ZenChange{Layout: &edge}, Why: "after a long night"}).Version
+	for _, f := range zenFiles(t, c) {
+		if !strings.HasSuffix(f, ".sealed") {
+			t.Errorf("objects holds %s", f)
+		}
+	}
+	filepath.WalkDir(c.paths.Zen(), func(path string, d fs.DirEntry, err error) error {
+		if b, _ := os.ReadFile(path); err == nil && !d.IsDir() && strings.Contains(string(b), "long night") {
+			t.Errorf("%s holds the why in plain", path)
+		}
+		return nil
+	})
+	if b, _ := os.ReadFile(c.paths.ZenState()); !strings.Contains(string(b), `"layout": "edge"`) || !strings.Contains(string(b), v.Name) {
+		t.Errorf("the state file:\n%s", b)
+	}
+	r := c.zenDo(t, ipc.ZenArgs{Export: true})
+	if len(r.Docs) != 1 || chain.Name([]byte(r.Docs[0])) != v.Name || !strings.Contains(r.Docs[0], `"why":"after a long night"`) {
+		t.Fatalf("export: %q", r.Docs)
+	}
+	again := zenCore(t, home)
+	if got := again.zenDo(t, ipc.ZenArgs{Log: 5}); got.Zen.Head != v.Name || len(got.Versions) != 1 || got.Versions[0].Why != "after a long night" {
+		t.Errorf("after a restart: %+v", got)
+	}
+}
+
+// A zen kept plain, by a core from before the vault, moves into it whole.
+func TestAZenKeptPlainMovesIntoTheVault(t *testing.T) {
+	home := t.TempDir()
+	c := zenCore(t, home)
+	dir := c.paths.Zen()
+	os.RemoveAll(dir)
+	os.Remove(c.paths.ZenState())
+	t0 := time.Date(2026, 11, 21, 18, 4, 5, 0, time.UTC)
+	old := zen.Open(dir)
+	first, _, _ := old.Commit(zen.Default(), "Your zen as it was", t0)
+	watch := "watch"
+	head, _, err := old.Commit(zen.Apply(zen.Default(), ipc.ZenChange{Layout: &watch}), "Keep Watch", t0.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := zenCore(t, home)
+	if got := moved.zenDo(t, ipc.ZenArgs{}).Zen; got.Head != head.Name || got.Profile.Layout != "watch" {
+		t.Errorf("zen after the move: %+v", got)
+	}
+	files := zenFiles(t, moved)
+	if len(files) != 2 || !strings.HasSuffix(files[0], ".sealed") || !strings.HasSuffix(files[1], ".sealed") {
+		t.Errorf("objects after the move: %v", files)
+	}
+	if docs := moved.zenDo(t, ipc.ZenArgs{Export: true}).Docs; len(docs) != 2 || chain.Name([]byte(docs[0])) != first.Name {
+		t.Errorf("export after the move: %q", docs)
+	}
+	if b, _ := os.ReadFile(moved.paths.ZenState()); !strings.Contains(string(b), head.Name) {
+		t.Errorf("the state file after the move:\n%s", b)
+	}
+}
+
+// While the keychain gives no key, zen is as you left it, and a change
+// keeps nothing rather than a version in plain, until the vault opens.
+func TestALockedVaultKeepsYourZenAndNoChange(t *testing.T) {
+	home := t.TempDir()
+	watch := "watch"
+	v := zenCore(t, home).zenDo(t, ipc.ZenArgs{Set: &ipc.ZenChange{Layout: &watch}}).Version
+	c := zenCoreKeys(t, home, noKeys{})
+	if got := c.zenDo(t, ipc.ZenArgs{}).Zen; got.Profile.Layout != "watch" || got.Head != v.Name {
+		t.Errorf("zen with the vault locked: %+v", got)
+	}
+	edge := "edge"
+	if _, err := c.zenOp(ipc.ZenArgs{Set: &ipc.ZenChange{Layout: &edge}}); !hasCode(err, ipc.CodeBusy) || !strings.Contains(err.Error(), "locked") {
+		t.Errorf("a change with the vault locked: %v", err)
+	}
+	if _, err := c.zenOp(ipc.ZenArgs{Log: 5}); !hasCode(err, ipc.CodeBusy) {
+		t.Errorf("the history with the vault locked: %v", err)
+	}
+	if files := zenFiles(t, c); len(files) != 1 || !strings.HasSuffix(files[0], ".sealed") {
+		t.Errorf("objects: %v", files)
+	}
+	// Once the keychain gives the key, the vault opens and changes keep.
+	c.mu.Lock()
+	c.zen.keys = keyring.Default(c.paths.Keys())
+	c.mu.Unlock()
+	c.unlockZen()
+	if r := c.zenDo(t, ipc.ZenArgs{Set: &ipc.ZenChange{Layout: &edge}}); r.Version == nil || r.Version.Parent != v.Name {
+		t.Errorf("a change once the vault opened: %+v", r)
+	}
+}
+
+// A vault its key doesn't open, as when the keychain lost the key, is set
+// aside whole, and your zen as it was starts a new one.
+func TestAVaultItsKeyDoesntOpenIsSetAside(t *testing.T) {
+	home := t.TempDir()
+	c := zenCore(t, home)
+	watch := "watch"
+	c.zenDo(t, ipc.ZenArgs{Set: &ipc.ZenChange{Layout: &watch}})
+	other := strings.Repeat("ab", keyring.Size) + "\n"
+	if err := os.WriteFile(filepath.Join(c.paths.Keys(), zenKeyName+".key"), []byte(other), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	again := zenCore(t, home)
+	r := again.zenDo(t, ipc.ZenArgs{Log: 5})
+	if r.Zen.Profile.Layout != "watch" || len(r.Versions) != 1 || r.Versions[0].Why != "Your zen as it was" || r.Versions[0].Parent != "" {
+		t.Fatalf("zen in the new vault: %+v", r)
+	}
+	aside, _ := filepath.Glob(c.paths.Zen() + "-unreadable-*")
+	if len(aside) != 1 {
+		t.Fatalf("set aside: %v", aside)
+	}
+	if objects, _ := os.ReadDir(filepath.Join(aside[0], "objects")); len(objects) != 1 {
+		t.Errorf("the vault set aside holds %v", objects)
+	}
 }
 
 func (c *Core) zenDo(t *testing.T, a ipc.ZenArgs) ipc.ZenResult {

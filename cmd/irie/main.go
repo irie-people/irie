@@ -57,7 +57,7 @@ const usage = `usage: ` + brand.Slug + ` [command]
 ` + privacyUsage + writingUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
                           ` + brand.Name + `'s plugins in this build, and how far
                           each part is set up; turn a plugin or a part on or off
-` + mailUsage + chatUsage + termsUsage + extensionUsage + yoinkUsage + vpnSetupUsage + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
+` + mailUsage + chatUsage + termsUsage + extensionUsage + yoinkUsage + jamminUsage + vpnSetupUsage + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
                           started on with ^NAME (` + brand.Slug + ` peer for help)
 ` + lockUsage + `  ` + brand.Slug + ` version            print the version
   ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect

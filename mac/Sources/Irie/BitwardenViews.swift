@@ -54,7 +54,10 @@ extension Store {
 
     /// Unlocks with the master password, then fills each pane's sign-in.
     func unlockBitwarden(_ password: String) async {
-        let origins = panes.filter(\.isWeb).compactMap { $0.origin.flatMap(URL.init(string:)) }
+        var origins = panes.filter(\.isWeb).compactMap { $0.origin.flatMap(URL.init(string:)) }
+        // Spotify's sign-in on Jammin's sheet (JamminSignIn.swift), while
+        // Jammin's Spotify part is on.
+        if jamminSpotifyPart != nil, let spotify = URL(string: JamminSignInPage.origin) { origins.append(spotify) }
         if let problem = await BitwardenVault.shared.unlock(password: password, origins: origins) {
             say(problem, error: true, seconds: 8)
             return
@@ -71,13 +74,14 @@ extension Store {
 
 // MARK: Views
 
-/// The key in a web pane's header: unlocks Bitwarden, fills the page with
-/// one of its logins, or locks it again.
+/// The key in a web pane's header, or over Jammin's sign-in sheet:
+/// unlocks Bitwarden, fills the page with one of its logins, or locks it
+/// again.
 @MainActor
 struct BitwardenKey: View {
     @Environment(Store.self) private var store
     let pane: PluginPaneInfo
-    var holder: PluginPaneHolder?
+    var holder: (any BitwardenPage)?
 
     private var vault: BitwardenVault { .shared }
 
@@ -116,7 +120,7 @@ struct BitwardenKey: View {
         } else {
             switch vault.state {
             case .locked:
-                Button("Unlock Bitwarden…") { store.askBitwarden(on: holder?.web.window ?? NSApp.keyWindow) }
+                Button("Unlock Bitwarden…") { store.askBitwarden(on: holder?.webView.window ?? NSApp.keyWindow) }
             case .unlocking:
                 Text("Unlocking Bitwarden…")
             case .unlocked:
