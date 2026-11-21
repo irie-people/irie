@@ -365,6 +365,9 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		c.placeInSpace(x.id, a)
 		c.placeInGroup(x.id, a)
 		c.placeNew(x.id, a)
+		if a.Top {
+			c.toTop(x.id)
+		}
 	}
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)

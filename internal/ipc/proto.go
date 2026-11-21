@@ -130,6 +130,10 @@ const FeatureTutor = "spawn-tutor"
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
 
+// FeatureSpawnTop is in hello's features when spawn takes SpawnArgs.Top
+// and input InputArgs.Top: a task sent to the top.
+const FeatureSpawnTop = "spawn-top"
+
 // FeatureBoostAlways is in hello's features when the core boosts the
 // user's focus always with arch.gabriel.always, and its header says how
 // Gabriel boosts (Header.Boost).
@@ -1050,6 +1054,11 @@ type SpawnArgs struct {
 	// Continues), or, for a jot with ui.new_tabs = "next", the group of the
 	// session it goes beside; else in none.
 	Group string `json:"group,omitempty"`
+	// Top sends the new session to the top (DESIGN §4.1, "Pinned"): first
+	// in Pinned, over every card, and boosted (§4.3), as the user's own pin
+	// and boost would, wherever ui.new_tabs puts the rest. A jot sent to the
+	// top is a task of its own: it never adds to the jot before it.
+	Top bool `json:"top,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that

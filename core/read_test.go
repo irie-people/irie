@@ -224,6 +224,14 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	if want := (SpawnArgs{Task: "[Irie bench] Run 2 of 3.\n\nThe task:\n\nfix it", Profile: "dory", Unattended: true}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) {
 		t.Errorf("unattended: %+v, %v", st, err)
 	}
+	// A task sent to the top starts there; a : command takes no notice.
+	st, err = Read(InputArgs{Text: "fix the login", Top: true}, view())
+	if want := (SpawnArgs{Task: "fix the login", Jot: true, Top: true}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) {
+		t.Errorf("to the top: %+v, %v", st, err)
+	}
+	if st, err = Read(InputArgs{Text: ":route fix it", Top: true}, view()); err != nil || st.Op != OpRoute {
+		t.Errorf(":route sent to the top: %+v, %v", st, err)
+	}
 	// :markets TASK takes the menus' agent, model and tutor mode as a task
 	// does, and its own + words before them, but never their repo: its
 	// task runs in the map's folder, which the core knows. It isn't a jot,
@@ -276,6 +284,9 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 		{"spawn", Step{Op: OpSpawn, Args: SpawnArgs{Task: "x"}}, SpawnResult{Session: started}, nil,
 			InputResult{Did: InputSpawned, Op: OpSpawn, Session: &started,
 				Text: "Started flaky test on irie/flaky-test. Memory is low: 2.1 GB free of 16 GB. Copied .env."}},
+		{"spawn to the top", Step{Op: OpSpawn, Args: SpawnArgs{Task: "x", Top: true}}, SpawnResult{Session: Session{ID: "s9", Name: "flaky test", Pinned: true, Priority: 1}}, nil,
+			InputResult{Did: InputSpawned, Op: OpSpawn, Session: &Session{ID: "s9", Name: "flaky test", Pinned: true, Priority: 1},
+				Text: "Started flaky test. It's at the top, first in Pinned, and boosted."}},
 		{"added", Step{Op: OpSpawn, Args: SpawnArgs{Task: "also x", Jot: true}}, SpawnResult{Session: *login, Added: true, Until: until}, nil,
 			InputResult{Did: InputAdded, Op: OpSpawn, Session: login, Until: until, Text: "Added to fix login, the task sent just before."}},
 		{"apart, too late", Step{Op: OpSpawn, Args: SpawnArgs{Task: "also x", Jot: true, Apart: "s1"}, Session: login}, SpawnResult{Session: Session{ID: "s9", Name: "also x"}, Late: true}, nil,

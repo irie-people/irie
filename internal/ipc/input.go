@@ -56,6 +56,10 @@ type InputArgs struct {
 	// Unattended starts the task as a session that no one watches
 	// (SpawnArgs.Unattended), as a bench on a peer starts its runs.
 	Unattended bool `json:"unattended,omitempty"`
+	// Top sends a task to the top, first in Pinned and boosted
+	// (SpawnArgs.Top): the Mac app's Send to Top. Words that start no
+	// task, a : command or a question, leave it be.
+	Top bool `json:"top,omitempty"`
 }
 
 // Paste is a long paste that a client shows as Label in what was typed.
