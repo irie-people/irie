@@ -1082,6 +1082,10 @@ type SpawnArgs struct {
 	// Wait, which this spawn takes the subtask over from: Irie stops it,
 	// and auto passes over its profile.
 	Instead string `json:"instead,omitempty"`
+	// Folder names the session's scratch folder or worktree in its name's
+	// place, as a bench names its runs' (DESIGN §6.6). Only the core sets
+	// it, so it is not on the wire.
+	Folder string `json:"-"`
 }
 
 // AnonNew is SpawnArgs.Anon for a compartment of the task's own.
