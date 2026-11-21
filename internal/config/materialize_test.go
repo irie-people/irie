@@ -6,8 +6,8 @@ import (
 )
 
 func TestMaterializeNamesTheModelThatMakesCards(t *testing.T) {
-	if c := Default(); c.Materialize.Model != "" {
-		t.Errorf("materialize.model defaults to %q; want the best Ollama has", c.Materialize.Model)
+	if c := Default(); c.Materialize.Model != "" || c.Materialize.Sessions {
+		t.Errorf("materialize defaults to %+v; want the best model Ollama has, and session cards off", c.Materialize)
 	}
 	c, err := Parse([]byte("[materialize]\nmodel = \"bonsai-2:9b\"\n"), "config.toml")
 	if err != nil || c.Materialize.Model != "bonsai-2:9b" {

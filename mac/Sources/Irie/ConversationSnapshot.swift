@@ -63,6 +63,7 @@ enum ConversationSnapshot {
         return VStack(spacing: 0) {
             FeedContent(items: model.items, pending: model.pending, needs: model.needs, session: session,
                         expanded: .constant(["t:fx-test", "t:fx-fail"]))
+            StandsCard(session: session)
             Composer(model: model, session: session)
         }
         .frame(width: 760)

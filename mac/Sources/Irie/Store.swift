@@ -72,6 +72,10 @@ final class Store {
     /// (docs/proposals/learning.md).
     private(set) var canTutor = false
     private(set) var canLearn = false
+    /// The core makes materialized cards (docs/proposals/materialized-cards.md).
+    private(set) var canMaterialize = false
+    /// Each session's card of where it stands, as the core last gave it.
+    var sessionCards: [String: MaterializeResult] = [:]
     /// The core runs the right sidebar's Dock (op dock, Dock.swift).
     private(set) var canDock = false
     /// The Dock controls the user stopped, by session, which the Dock then
@@ -435,6 +439,7 @@ final class Store {
                 canPickModel = hello.features.contains("spawn-model")
                 canTutor = hello.features.contains("spawn-tutor")
                 canLearn = hello.features.contains("learn")
+                canMaterialize = hello.features.contains("materialize")
                 canDock = hello.features.contains("dock")
                 rolodex.canShell = hello.features.contains("pane")
                 canLink = hello.features.contains("link")
@@ -808,6 +813,7 @@ final class Store {
         canPickModel = true
         canTutor = true
         canLearn = true
+        sessionCards = [Fixture.selected: Fixture.standsCard]
         canConfigure = true
         canPark = true
         canGroup = true
@@ -1259,6 +1265,24 @@ final class Store {
     func learn() async -> LearnResult? {
         guard canLearn else { return nil }
         return try? await client.call("learn", LearnArgs(session: selection), timeout: 5, as: LearnResult.self)
+    }
+
+    /// Asks the core for session id's card of where it stands, and keeps
+    /// it; while one is being made, waits for it, up to two minutes. False
+    /// when the core gives none, as while materialize.sessions is off.
+    @discardableResult
+    func refreshCard(_ id: String) async -> Bool {
+        guard canMaterialize, !isFixture else { return false }
+        guard let r = try? await client.call("materialize", MaterializeArgs(session: id), timeout: 15, as: MaterializeResult.self) else {
+            return false
+        }
+        sessionCards[id] = r
+        guard r.state == "cold" || r.state == "refreshing" else { return true }
+        let wait = MaterializeArgs(session: id, wait: 120_000_000_000)
+        if let done = try? await client.call("materialize", wait, timeout: 150, as: MaterializeResult.self) {
+            sessionCards[id] = done
+        }
+        return true
     }
 
     /// Takes a task added to the one before back and starts it as a task
