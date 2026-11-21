@@ -192,7 +192,7 @@ final class FoundingModel {
                                 about: "5 U.S.C. § 552, word for word as the United States Code sets it out.", sha512: String(repeating: "f18fc8dc", count: 16),
                                 blocks: [FoundingBlock(kind: "h2", text: "§ 552. Public information; agency rules, opinions, orders, records, and proceedings"),
                                          FoundingBlock(kind: "text", text: "(a) Each agency shall make available to the public information as follows:")]))
-        chain = FoundingChainInfo(folder: "~/.local/state/irie/chain/founding", head: "sha512:" + String(repeating: "9c1e40b7", count: 16),
+        chain = FoundingChainInfo(folder: "~/.local/state/\(Brand.slug)/chain/founding", head: "sha512:" + String(repeating: "9c1e40b7", count: 16),
                                   created: "2026-11-21T12:00:00Z", versions: 1, verified: true, problem: nil)
         showing = "constitution"
         query = "choose"

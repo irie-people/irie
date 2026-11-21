@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/skills"
@@ -19,8 +20,8 @@ import (
 // computer. Only public standards shape it (internal/chain): any tool with
 // a JSON canonicalizer and SHA-512 can check it without Irie.
 
-// Format names a founding version's form.
-const Format = "irie.founding/1"
+// Format names a founding version's form, as the product names it.
+const Format = brand.Slug + ".founding/1"
 
 // Version is a founding version's document, which its canonical bytes and
 // so its name come from.
