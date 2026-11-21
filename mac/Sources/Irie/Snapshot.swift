@@ -962,7 +962,7 @@ enum Fixture {
         img.lockFocus()
         NSGradient(colors: [NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.62, alpha: 1), NSColor(calibratedRed: 0.62, green: 0.48, blue: 0.66, alpha: 1)])?
             .draw(in: NSRect(x: 0, y: 0, width: 480, height: 200), angle: 20)
-        let words = NSAttributedString(string: "Irie 1.2", attributes: [.font: NSFont.systemFont(ofSize: 40, weight: .bold), .foregroundColor: NSColor.white])
+        let words = NSAttributedString(string: "\(Brand.name) 1.2", attributes: [.font: NSFont.systemFont(ofSize: 40, weight: .bold), .foregroundColor: NSColor.white])
         words.draw(at: NSPoint(x: 40, y: 76))
         img.unlockFocus()
         return img
