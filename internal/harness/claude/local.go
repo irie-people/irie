@@ -15,6 +15,11 @@ const minAutoCompactWindow = 100000
 // the server gives, so it compacts before the server would cut the prompt;
 // for a model ID it does not recognise it would assume 200K. Its reply cap,
 // CLAUDE_CODE_MAX_OUTPUT_TOKENS, is maxOutput's. context 0 means unknown.
+//
+// The user's auto memory stays out (CLAUDE_CODE_DISABLE_AUTO_MEMORY): its
+// index took 4.5k of a 64k window, and a small model would write memories
+// of its own into the user's, which every session in the repo reads. A
+// profile's env setting it to 0 brings it back.
 func LocalEnv(model, url string, context int) map[string]string {
 	env := map[string]string{
 		"ANTHROPIC_BASE_URL":                       url,
@@ -27,6 +32,7 @@ func LocalEnv(model, url string, context int) map[string]string {
 		"CLAUDE_CODE_SUBAGENT_MODEL":               model,
 		"CLAUDE_CODE_AUTO_MODE_SERVER":             "0",
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+		"CLAUDE_CODE_DISABLE_AUTO_MEMORY":          "1",
 	}
 	if context > 0 {
 		env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = strconv.Itoa(context)
