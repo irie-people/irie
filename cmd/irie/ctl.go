@@ -119,11 +119,13 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          when another session has it
   ` + brand.Slug + ` ctl flip                          flip the slot between the shown session's
                                          conversation and its raw terminal
-  ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
-                                         a person would; TEXT - reads stdin
-  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
-                                         "continue" and Enter, only while its
-                                         prompt shows with nothing typed in it
+  ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, by
+                                         id or name, as a person would; TEXT -
+                                         reads stdin
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on, by id or
+                                         name: type "continue" and Enter, only
+                                         while its prompt shows with nothing
+                                         typed in it
   ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -763,6 +765,8 @@ func conversationLine(it ipc.Item) string {
 	return line
 }
 
+// ctlSend types TEXT to the agent of SESSION, named by id or name, as close
+// and park take it: an agent that started another names it as it named it.
 func ctlSend(args []string) error {
 	if len(args) < 2 {
 		return errors.New("usage: " + brand.Slug + " ctl send SESSION TEXT...")
@@ -779,9 +783,14 @@ func ctlSend(args []string) error {
 	if err != nil {
 		return err
 	}
-	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+	ids, err := groupTargets(sock, "send", args[:1])
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: ids[0], Text: text}, nil)
 }
 
+// ctlContinue sends the agent of SESSION, by id or name, on.
 func ctlContinue(args []string) error {
 	if len(args) != 1 {
 		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
@@ -790,7 +799,11 @@ func ctlContinue(args []string) error {
 	if err != nil {
 		return err
 	}
-	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
+	ids, err := groupTargets(sock, "continue", args)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: ids[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of
@@ -1000,10 +1013,10 @@ func ctlClose(args []string) error {
 	return ipc.Call(sock, 10*time.Second, ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
 }
 
-// sessionTarget is the id of the session ctl close, park or unpark, the
-// command verb, acts on: the one args names, by id or name, or else own,
-// the session the command runs in. A name that fits no session goes to the
-// core as it is, which says so.
+// sessionTarget is the id of the session ctl close, park, unpark, send or
+// continue, the command verb, acts on: the one args names, by id or name,
+// or else own, the session the command runs in. A name that fits no
+// session goes to the core as it is, which says so.
 func sessionTarget(verb string, args []string, own string, sessions []ipc.Session) (string, error) {
 	if len(args) == 0 {
 		if own == "" {
