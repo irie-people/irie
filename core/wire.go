@@ -44,6 +44,11 @@ type (
 	DockControl       = ipc.DockControl
 	DockFile          = ipc.DockFile
 	DockUntrusted     = ipc.DockUntrusted
+	FoundingArgs      = ipc.FoundingArgs
+	FoundingResult    = ipc.FoundingResult
+	FoundingDoc       = ipc.FoundingDoc
+	FoundingBlock     = ipc.FoundingBlock
+	FoundingHit       = ipc.FoundingHit
 	Group             = ipc.Group
 	GroupArgs         = ipc.GroupArgs
 	GroupResult       = ipc.GroupResult
@@ -316,6 +321,7 @@ const (
 	DockStateRunning     = ipc.DockStateRunning
 	DockStateExited      = ipc.DockStateExited
 	DockStateReady       = ipc.DockStateReady
+	OpFounding           = ipc.OpFounding
 	OpGroup              = ipc.OpGroup
 	GroupList            = ipc.GroupList
 	GroupNew             = ipc.GroupNew
