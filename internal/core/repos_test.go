@@ -1,6 +1,7 @@
 package core
 
 import (
+	"archive/tar"
 	"bytes"
 	"errors"
 	"fmt"
@@ -394,5 +395,68 @@ func TestATaskRunsOnTheModelItAsksFor(t *testing.T) {
 	err = c.call("spawn", ipc.SpawnArgs{Task: "say hello", Profile: "shell", Model: "sonnet"}, &r)
 	if err == nil || !strings.Contains(err.Error(), "takes no model") {
 		t.Errorf("a model for a generic profile: %v", err)
+	}
+}
+
+// The copy a task starts from (copyFrom) writes only inside its folder:
+// an entry that climbs out of it, or a link that points out of it, is
+// refused.
+func TestUntarStaysInItsFolder(t *testing.T) {
+	archive := func(entries ...tar.Header) *bytes.Buffer {
+		var b bytes.Buffer
+		w := tar.NewWriter(&b)
+		for _, h := range entries {
+			if h.Typeflag != tar.TypeXGlobalHeader {
+				h.Mode = 0o644
+			}
+			if err := w.WriteHeader(&h); err != nil {
+				t.Fatal(err)
+			}
+			if h.Typeflag == tar.TypeReg {
+				if _, err := w.Write(make([]byte, h.Size)); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return &b
+	}
+	for name, entries := range map[string][]tar.Header{
+		"a path out":    {{Name: "../out.txt", Typeflag: tar.TypeReg, Size: 1}},
+		"through links": {{Name: "up", Typeflag: tar.TypeSymlink, Linkname: ".."}, {Name: "up/out.txt", Typeflag: tar.TypeReg, Size: 1}},
+	} {
+		parent := t.TempDir()
+		dir := filepath.Join(parent, "copy")
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = untar(root, archive(entries...))
+		root.Close()
+		if err == nil {
+			t.Errorf("%s: untar took it", name)
+		}
+		if _, err := os.Stat(filepath.Join(parent, "out.txt")); err == nil {
+			t.Errorf("%s: a file was written outside the folder", name)
+		}
+	}
+	// Files in folders, with git archive's global header, are written.
+	dir := t.TempDir()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	ok := archive(tar.Header{Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": "abc123"}}, tar.Header{Name: "cmd/tally/main.go", Typeflag: tar.TypeReg, Size: 3})
+	if err := untar(root, ok); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, "cmd", "tally", "main.go")); err != nil || fi.Size() != 3 {
+		t.Errorf("cmd/tally/main.go = %v, %v", fi, err)
 	}
 }
