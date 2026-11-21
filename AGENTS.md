@@ -28,6 +28,8 @@ Go. The client runs every agent in tmux and draws its UI with Bubble Tea. Check 
 
 Read a doc by its sections: `tools/doc.sh DESIGN 4.8` prints §4.8 of DESIGN.md, and `tools/doc.sh DESIGN` its outline, so you read only the part you need.
 
+Find code with `tools/code.sh` rather than a grep and then a sed for each hit: every call reads your whole context again, so a call saved is the saving. `tools/code.sh grep PATTERN [PATH...]` lists each matching line under the Go or Swift declaration, or doc section, it sits in, and `--show` prints those declarations whole; `def NAME` (or `TYPE.NAME`) prints a declaration with its doc comment; `outline FILE` gives each declaration's lines, and a folder's files with what they declare; `refs NAME` lists the uses in code, never in comments or strings. `tools/habits.sh` ranks what agents did in Irie's journal by calls, the next things worth a script.
+
 ## Design
 
 Every client draws from Roots, Irie People's design library, a repository of its own: [irie-people/roots](https://github.com/irie-people/roots) (checked out beside Irie, at `../roots` from the main checkout). It holds the palettes and numbers (`palettes/`, `tokens.json`), the rules (`principles.md`) and the parts (`components.md`). Change a colour or a number there, never in a client's copy; then here `go get github.com/irie-people/roots@main` and `tools/design.sh sync` write it into Irie's copies (DESIGN §2.11). When a change teaches something lasting about how Irie should look or behave, add it to the library, with its source and, where one can be written, a check.
