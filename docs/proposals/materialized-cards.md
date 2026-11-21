@@ -1,6 +1,6 @@
 # Proposal: materialized cards
 
-Date: 2026-11-21. Status: a proposal, with its first step built (`internal/materialize`). It joins two ideas: the cards of [generative-ui.md](generative-ui.md) §7.3, a small JSON tree from Irie's catalog that Irie draws in its own look, and Macro's AI projections, an AI-made view kept under a name and made again only when it is out of date. An agent (Claude Code) wrote it with the owner, in teach mode, from `live` at `53a2ce4`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md); Macro is AGPL-3.0, so Irie takes its ideas and none of its code.
+Date: 2026-11-21. Status: a proposal, with its first two steps built (`internal/materialize`, `internal/genui`, the `materialize` op and `irie ctl materialize`). It joins two ideas: the cards of [generative-ui.md](generative-ui.md) §7.3, a small JSON tree from Irie's catalog that Irie draws in its own look, and Macro's AI projections, an AI-made view kept under a name and made again only when it is out of date. An agent (Claude Code) wrote it with the owner, in teach mode, from `live` at `53a2ce4`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md); Macro is AGPL-3.0, so Irie takes its ideas and none of its code.
 
 **In short.** A materialized card is a card a model made once and Irie kept. A view that asks for it draws it at once, from what is kept, and the model makes it again only when what it was made from has moved on. So a card costs a model call when something changes, not each time someone looks, and it does not shift under the person reading it. While a new one is made, the old one stays on show.
 
@@ -38,9 +38,9 @@ stateDiagram-v2
 
 ## 3. How it reaches a view
 
-- **Asked by name.** A view asks the core for a card by its recipe; the answer is what is kept and the state to draw it in: a placeholder for cold, the card for fresh, the card with a quiet "updating" mark for stale and refreshing.
-- **Pushed, never polled.** When a remake finishes, the core publishes `card.updated` with the card, as it publishes a session's row, so every view that shows it redraws. Macro does the same through its connection gateway.
-- **Made cheaply.** A remake runs as `irie ctl delegate` does (DESIGN §6.4): on the cheapest profile accurate enough, `+dory` and `+local` first, which cost no tokens, and never a paid model. Gabriel holds remakes back while the user's focus needs the machine (DESIGN §4.11).
+- **Asked by name.** A view asks the core for a card by its recipe with the `materialize` op (DESIGN §2.4); the answer is what is kept and the state to draw it in: a placeholder for cold, the card for fresh, the card with a quiet "updating" mark for stale and refreshing. `irie ctl materialize ID PROMPT --context FILE` asks from a terminal and draws the card as text, and `--wait` waits while it is made.
+- **Pushed, never polled** (step 4). When a remake finishes, the core will publish a `materialized` frame with the card to every view that shows it, as it publishes a session's row, so it redraws; Macro does the same through its connection gateway. Until a view draws cards, an ask that waits is enough.
+- **Made cheaply.** A remake runs on a local model, the best for chat on this computer's Ollama that fits (`terms.FindModel`: at most 16B parameters and 10 GB, never a cloud model), so a card costs no tokens; one runs at a time, so models load one by one. Ollama's JSON mode holds the model to one object, and `genui.Check` refuses a card the catalog cannot draw, which keeps the old card. A sweep that remakes cards in the background (step 2b) waits while Gabriel holds work back (DESIGN §4.11); an ask someone waits on is their focus, and runs.
 - **Drawn natively.** The catalog of generative-ui.md §7.3 in SwiftUI and in Lip Gloss, the same drawing for both kinds of card. A spec that fails the catalog's check is a failed remake: the old card stays.
 
 ## 4. The first cards
@@ -51,9 +51,10 @@ stateDiagram-v2
 ## 5. Order of work
 
 1. **The store** (small, built): recipes and their hash, the states, claims, the newest remake winning, the file, the rule for out of date. Tests with a clock passed in.
-2. **The core** (medium): the store in the state folder; a `card` op; `card.updated`; remakes through the router; a sweep each minute that asks again for the cards a view shows, and forgets those no view has asked for in a week.
-3. **The catalog's check** (small): §7.3's elements and limits in Go, shared with cards an agent composes.
-4. **The Mac app** (medium): the catalog in SwiftUI; the session card in the details panel.
+2. **The core** (medium, built): the store in the state folder; the `materialize` op, with `wait` and `forget`; remakes on a local model, one at a time; the catalog's check (`internal/genui`: Text, List, Facts, Table, Progress and Divider, with §7.3's limits); `irie ctl materialize`, which draws a card as text.
+   - **2b, the sweep** (small): each minute, the cards a view showed in the last ten minutes are asked for again, while Gabriel holds nothing back, and those no view has asked for in a week are forgotten.
+3. **The rest of the catalog** (small): §7.3's other parts (Row, Column, Chart, Code, Diff, Image, Link) and its nesting limit, shared with cards an agent composes.
+4. **The Mac app** (medium): the `materialized` frame; the catalog in SwiftUI; the session card in the details panel.
 5. **The terminal slot** (small): the same in Lip Gloss.
 
 ## 6. Decisions for the owner
@@ -62,5 +63,5 @@ stateDiagram-v2
 |---|---|---|---|
 | 1 | When a kept card is out of date | a. Inputs moved or as old as Every, never sooner than Gap. b. The same, with Every allowed to break the Gap | **a**, built: Gap stays a hard ceiling on cost |
 | 2 | The first card | a. Where a session stands. b. A plugin's card | **a**: every session has one to show |
-| 3 | Who makes it | a. Local profiles only. b. The router's pick, free profiles only | **b**, with `+local` first |
+| 3 | Who makes it | a. A local model on this computer's Ollama. b. The router's pick, free profiles only | **a**, built: no tokens, and nothing to set up beyond Ollama |
 | 4 | A card nobody has asked for | a. Forgotten after a week. b. Kept until its recipe goes | **a**, so the file stays small |

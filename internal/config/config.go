@@ -66,6 +66,8 @@ type Config struct {
 	Yoink     Yoink              `toml:"yoink"`
 	Obsidian  Obsidian           `toml:"obsidian"`
 	Plugins   Plugins            `toml:"plugins"`
+
+	Materialize Materialize `toml:"materialize"`
 }
 
 // Plugins are Irie's plugins (DESIGN §4.17, internal/plugins): sets of
@@ -1172,7 +1174,9 @@ func Parse(data []byte, path string) (Config, error) {
 		Yoink     *Yoink                    `toml:"yoink"`
 		Obsidian  *Obsidian                 `toml:"obsidian"`
 		Plugins   *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+
+		Materialize *Materialize `toml:"materialize"`
+	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1853,6 +1857,7 @@ func (c Config) Validate() error {
 	}
 	checkMail(c.Mail, bad)
 	checkExtension(c.Extension, bad)
+	checkMaterialize(c.Materialize, bad)
 	checkYoink(c.Yoink, bad)
 	checkObsidian(c.Obsidian, bad)
 	return errors.Join(errs...)

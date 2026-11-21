@@ -41,6 +41,11 @@ type Recipe struct {
 	Inputs string
 	Every  time.Duration // the most a card may age; 0 when age alone never puts it out of date
 	Gap    time.Duration // the least time between two cards, which bounds what one costs; 0 for none
+
+	// Context is what the model reads to make the card, for the remake's
+	// maker alone: the store neither keeps it nor hashes it, so a change
+	// to it puts a card out of date only through Inputs, its digest.
+	Context string
 }
 
 // Hash versions what makes the card: its prompt, its profile and its
@@ -69,6 +74,7 @@ type Card struct {
 	Recipe string          `json:"recipe,omitempty"` // the hash of the recipe Spec was made from
 	Inputs string          `json:"inputs,omitempty"` // the inputs Spec was made from
 	Made   time.Time       `json:"made,omitzero"`    // when Spec was made
+	By     string          `json:"by,omitempty"`     // what made it, such as a local model's name
 
 	Err    string    `json:"err,omitempty"`   // why the last remake failed; "" when it did not
 	Failed time.Time `json:"failed,omitzero"` // when it failed
@@ -108,7 +114,9 @@ type Store struct {
 
 // Open reads the cards kept at path, none when there is no file yet. The
 // remakes the file lists as running are dropped: they ran in a core that
-// has stopped, and nothing would finish them.
+// has stopped, and nothing would finish them. A file that does not read
+// gives an empty store all the same, with the error: the cards are only
+// made again, and the next change writes the file over.
 func Open(path string) (*Store, error) {
 	s := &Store{path: path, cards: map[string]*Card{}}
 	data, err := os.ReadFile(path)
@@ -116,17 +124,17 @@ func Open(path string) (*Store, error) {
 		return s, nil
 	}
 	if err != nil {
-		return nil, err
+		return s, err
 	}
 	var list []*Card
 	if err := json.Unmarshal(data, &list); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return s, fmt.Errorf("%s: %w", path, err)
 	}
 	for _, c := range list {
 		// The file is indented to be read, and so are the specs in it.
 		if c.Spec != nil {
 			if c.Spec, err = compact(c.Spec); err != nil {
-				return nil, fmt.Errorf("%s: %s: %w", path, c.ID, err)
+				return &Store{path: path, cards: map[string]*Card{}}, fmt.Errorf("%s: %s: %w", path, c.ID, err)
 			}
 		}
 		c.Running, c.For = time.Time{}, ""
@@ -171,12 +179,32 @@ func (s *Store) Want(r Recipe, now time.Time) (Card, State, *Remake, error) {
 	return copyOf(c, r.ID, st), st, &Remake{Recipe: r, Gen: c.Gen}, err
 }
 
-// Finish keeps what a remake made, or why it could not make it, and gives
-// the card as it now stands. A remake that is no longer the newest,
-// because the recipe changed meanwhile, or its claim ran out and another
-// began, or the card was forgotten, is outdated: what it made is dropped,
-// and newest is false. As with Want, an error is the file's alone.
-func (s *Store) Finish(rm Remake, spec json.RawMessage, failed error, now time.Time) (card Card, newest bool, err error) {
+// Peek is what Want would give, without beginning a remake: for a caller
+// that only looks, such as one that waited for a remake to finish.
+func (s *Store) Peek(r Recipe, now time.Time) (Card, State) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.cards[r.ID]
+	st := stateOf(c, r, now)
+	return copyOf(c, r.ID, st), st
+}
+
+// Newest reports whether rm is still the newest remake of its card, so a
+// remake that waited its turn can be dropped before it spends anything.
+func (s *Store) Newest(rm Remake) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.cards[rm.Recipe.ID]
+	return c != nil && c.Gen == rm.Gen
+}
+
+// Finish keeps what a remake made, and by, what made it, or why it could
+// not make it, and gives the card as it now stands. A remake that is no
+// longer the newest, because the recipe changed meanwhile, or its claim
+// ran out and another began, or the card was forgotten, is outdated: what
+// it made is dropped, and newest is false. As with Want, an error is the
+// file's alone.
+func (s *Store) Finish(rm Remake, spec json.RawMessage, by string, failed error, now time.Time) (card Card, newest bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c := s.cards[rm.Recipe.ID]
@@ -192,7 +220,7 @@ func (s *Store) Finish(rm Remake, spec json.RawMessage, failed error, now time.T
 	if failed != nil {
 		c.Err, c.Failed = failed.Error(), now
 	} else {
-		c.Spec, c.Recipe, c.Inputs, c.Made = spec, rm.Recipe.Hash(), rm.Recipe.Inputs, now
+		c.Spec, c.Recipe, c.Inputs, c.Made, c.By = spec, rm.Recipe.Hash(), rm.Recipe.Inputs, now, by
 		c.Err, c.Failed = "", time.Time{}
 	}
 	return copyOf(c, rm.Recipe.ID, ""), true, s.save()
