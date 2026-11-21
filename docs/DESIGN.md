@@ -1824,6 +1824,9 @@ on = true                     # with every Claude Code session: his word as it a
 door = true                   # he weighs each call that could do harm that can't be taken back before it runs, and stops one that would do evil
 good = []                     # the good you want to see in the world, in your own words; every session he is with hears it
 
+[materialize]                 # cards a local model makes once and Irie keeps (proposals/materialized-cards.md)
+model = ""                    # the local model that makes them, from Ollama here, such as "bonsai-2:9b"; "" = the best for chat that fits (16B, 10 GB at most)
+
 [learn]                       # what helps you learn while your agents work (proposals/learning.md)
 tutor = "off"                 # off | explain | teach: Claude Code's Explanatory or Learning output style; +explain and +teach set it for one task
 visual = true                 # in a tutor mode, the agent draws a small diagram where a picture helps

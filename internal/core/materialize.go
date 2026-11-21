@@ -140,11 +140,12 @@ func (c *Core) remakeCard(s *materialize.Store, rm materialize.Remake) {
 	}()
 }
 
-// makeCard has a local model make the card r asks for: the best one for
-// chat on this computer's Ollama, never one in the cloud, so a card costs
-// no tokens.
+// makeCard has a local model make the card r asks for: materialize.model,
+// else the best one for chat on this computer's Ollama, never one in the
+// cloud, so a card costs no tokens.
 func (c *Core) makeCard(ctx context.Context, r materialize.Recipe) (json.RawMessage, string, error) {
-	m, err := terms.FindModel(ctx, terms.Servers(*c.cfg()), "")
+	cfg := c.cfg()
+	m, err := terms.FindModel(ctx, terms.Servers(*cfg), cfg.Materialize.Model)
 	if err != nil {
 		return nil, "", err
 	}

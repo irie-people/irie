@@ -89,6 +89,19 @@ func TestACardWithNoLocalModelSaysWhy(t *testing.T) {
 	}
 }
 
+func TestMaterializeModelPicksTheModel(t *testing.T) {
+	f := &cardOllama{reply: `{"title":"t","body":[]}`}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	cfg := config.Default()
+	cfg.Local.URL, cfg.Materialize.Model = srv.URL, "bonsai-2:9b"
+	c := bareCore(t, cfg)
+	r, _ := c.materializeOp(ipc.MaterializeArgs{ID: "x", Prompt: "Anything?", Wait: 10 * time.Second})
+	if r.State != "cold" || !strings.Contains(r.Err, "bonsai-2:9b") || f.count() != 0 {
+		t.Errorf("%+v, %d chats; want no chat, and the model named as missing", r, f.count())
+	}
+}
+
 func TestMaterializeRefusesAnAskItCannotKeep(t *testing.T) {
 	c := cardCore(t, "http://127.0.0.1:1")
 	for name, a := range map[string]ipc.MaterializeArgs{
