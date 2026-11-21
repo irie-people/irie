@@ -13,6 +13,7 @@ package core
 // answers, so a stale one is refused.
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -497,6 +498,11 @@ func (c *Core) recordTaken(steps []takenStep) {
 		c.steps.hist.push(a)
 	}
 	c.saveState()
+	// What changed the organisation is a version of the sidebar's chain,
+	// taken once state.json is written (chain.go).
+	if what, ok := orgWhat(steps); ok {
+		c.noteOrg(what)
+	}
 	c.mu.Unlock()
 	c.publishHistory()
 }
@@ -686,10 +692,17 @@ func (c *Core) undo(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 	label := c.steps.hist.label(dir)
 	c.mu.Unlock()
 	res, err := c.undoStep(dir, a)
-	if first.Batch == "" {
-		return res, err
+	// What the steps taken changed of the organisation is one version of
+	// the sidebar's chain, once they are all taken (chain.go).
+	what := ipc.ChainWhat{Do: dir}
+	took := func(s action, did string) {
+		if (did == ipc.DidUndo || did == ipc.DidRedo) && orgKinds[s.Kind] {
+			what.Of = cmp.Or(what.Of, s.Kind)
+			what = withStep(what, s.Kind, s.Session, s.Data)
+		}
 	}
-	for err == nil && moved(res.Did) {
+	took(first, res.Did)
+	for first.Batch != "" && err == nil && moved(res.Did) {
 		c.mu.Lock()
 		next, ok := c.steps.hist.top(dir)
 		c.mu.Unlock()
@@ -697,9 +710,15 @@ func (c *Core) undo(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 			break
 		}
 		res, err = c.undoStep(dir, ipc.UndoArgs{})
+		took(next, res.Did)
 	}
-	if err == nil && moved(res.Did) {
+	if first.Batch != "" && err == nil && moved(res.Did) {
 		res.Label = label
+	}
+	if what.Of != "" {
+		c.mu.Lock()
+		c.noteOrg(what)
+		c.mu.Unlock()
 	}
 	return res, err
 }
@@ -860,6 +879,11 @@ func (c *Core) journalStep(dir string, a action, before, after, choice string) {
 	}
 	if x := c.sessions[a.Session]; x != nil {
 		c.record(x, e)
+		return
+	}
+	// A step of no one session, as a restore of the sidebar's chain, has
+	// no session's journal to go in: the chain keeps it (chain.go).
+	if a.Session == "" {
 		return
 	}
 	// A closed session's events name the harness it ran.
