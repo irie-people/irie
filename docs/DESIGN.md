@@ -2056,6 +2056,15 @@ As judges they gained little. On 72 pairs of the user's jots, the follow-up rule
 - **The words' hard stands.** Calling hard work easier is the costly mistake, since it puts the work on a weaker model. The nearest alone did that on 20 of the 153 tasks, the words alone on 44. Letting the words' "hard" stand, and the nearest decide the rest, was right on 72.5% and did it on 11. Taking the harder of the two did it on 8, but was right on only 66%.
 - **Follow-ups.** The cosine of two jots says nothing about whether the second is more for the first: the rule with it as a veto stayed at 90%.
 
+**Measured again (2026-11-21).** No other way of sorting the same 153 tasks, scored the same way, beat the nearest with the words' "hard" standing (72.5%):
+- **Other ways over the same embeddings.** The three to seven nearest voting were right on 64–67%, and the nearest class average on 67%. Logistic regression was right on 63–75% across eight variants; its best is inside the ±7 points.
+- **The model's classification prompt** (`task: classification | query: `) lowered it to 66%, so tasks go in plain.
+- **Fewer numbers.** The first 512 of the 768 numbers sorted exactly as all 768 did; 256 lost 2 points and 128 five. Storing each as int8 lost one, and as one bit six.
+- **No labels.** A decision model asked to pick small, medium or hard (laya, 421M, on Ollama's `/v1/systemone`) was right on 43%.
+- **A probe.** A ridge classifier on Qwen3-1.7B's own states, averaged over the task's tokens, was right on 72.5% at its best block, the 24th of 28 (75% before the words' "hard"), and called hard work easier 14 times. That ties the 0.35 GB model with a 1.8 GB one.
+
+So the router is at the ceiling of what its labels can teach, and more labels, not another model, would raise it. A 2026 study of 21 routers found the same plateau: they "converge to a narrow performance range", and more data, bigger encoders and fine-tuning together added 1.24 points on average.
+
 So `route.embed` sorts tasks this way:
 - **The labels.** `irie ctl route --label small|medium|hard TASK` gives one task its class, and `--import FILE` many: JSON lines, each with `text` and `class` (or a bench's eval set, with `fields.text` and `label`). They are kept in `route-labels.jsonl` in the state folder, never in a repository; a task given again takes its new class.
 - **The model.** It runs on the user's own Ollama at `route.embed.url`, since Irie's own server holds one model, which an embedding would push out. The core embeds the labelled tasks in the background and keeps the embeddings in `route-vectors.json`, so a restarted core embeds only the task.
