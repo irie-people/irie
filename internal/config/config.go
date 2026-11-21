@@ -365,6 +365,7 @@ type Arch struct {
 	Mikael  Mikael  `toml:"mikael"`
 	Gabriel Gabriel `toml:"gabriel"`
 	Raphael Raphael `toml:"raphael"`
+	Raguel  Raguel  `toml:"raguel"`
 }
 
 // Mikael is the first arch agent: a helper who stands with you against evil
@@ -411,6 +412,21 @@ type Raphael struct {
 	Every time.Duration `toml:"every"` // how often he looks over the computer by himself; 0 = only when asked
 	Known []string      `toml:"known"` // startup items you know, by label, plist or program, which he no longer flags
 }
+
+// Raguel is the arch agent who holds the council. He tallies what the
+// agents did and what it cost, by the journal, with no tokens; every Every,
+// at a quiet time, or when you ask, he holds a council: one session that
+// runs as him (+raguel) reads the tally and brings you up to Plans plans,
+// each for you to say yes or no to. A yes starts the plan as a jot.
+type Raguel struct {
+	On     bool          `toml:"on"`     // the tally, the council and his row; off, he does nothing
+	Every  time.Duration `toml:"every"`  // how often he holds a council by himself; 0 = only when asked
+	Plans  int           `toml:"plans"`  // the most plans a council brings, from 1 to MaxRaguelPlans
+	Folder string        `toml:"folder"` // where the council works and the minutes go; "" = ~/Documents/<Irie> Council
+}
+
+// MaxRaguelPlans is the most plans a council may bring.
+const MaxRaguelPlans = 10
 
 // MinRaphaelCore is the shortest arch.raphael.core: a core may be busy for
 // a moment, on a busy machine for many.
@@ -1023,6 +1039,18 @@ func Default() Config {
 				Env:            map[string]string{},
 				Arch:           "mikael",
 			},
+			// Raguel's council: a session that runs as him reads the tally
+			// and drafts the plans (DESIGN §4.11).
+			"raguel": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Arch:           "raguel",
+			},
 			// The chaos monkey: it tries to break what the task names, in a
 			// copy of its own, and reports what broke (DESIGN §4.19).
 			"chaos": {
@@ -1066,6 +1094,7 @@ func Default() Config {
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
+			Raguel:  Raguel{On: true, Plans: 5},
 		},
 		Remote:   Remote{Port: DefaultRemotePort},
 		Place:    Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
@@ -1774,6 +1803,16 @@ func (c Config) Validate() error {
 		bad("arch.raphael.every = %v: must be 0s, for only when asked, or at least 10m", ra.Every)
 	}
 	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items Raphael no longer flags")
+	rg := c.Arch.Raguel
+	if rg.Every < 0 {
+		bad("arch.raguel.every = %v: must not be negative; 0s for only when asked", rg.Every)
+	}
+	if rg.Plans < 1 || rg.Plans > MaxRaguelPlans {
+		bad("arch.raguel.plans = %d: must be from 1 to %d", rg.Plans, MaxRaguelPlans)
+	}
+	if f := rg.Folder; f != "" && !filepath.IsAbs(f) && f != "~" && !strings.HasPrefix(f, "~/") {
+		bad("arch.raguel.folder = %q: must be an absolute path or start with ~/; \"\" for ~/Documents/%s Council", f, brand.Name)
+	}
 	switch c.Place.Mode {
 	case PlaceLocal, PlaceAuto:
 	default:

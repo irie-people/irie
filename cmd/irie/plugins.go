@@ -124,13 +124,23 @@ func pluginsHere(cfg config.Config, p paths.Paths) ipc.PluginsResult {
 	return ipc.PluginsResult{Plugins: all, Bundles: bundles}
 }
 
+// configValue is an edit's value as the core's config op reads it
+// (config.ParseValue): JSON, with a duration as text such as "30s", where
+// json.Marshal would give its nanoseconds.
+func configValue(v any) ([]byte, error) {
+	if d, ok := v.(time.Duration); ok {
+		v = d.String()
+	}
+	return json.Marshal(v)
+}
+
 // setConfig makes edits to config.toml: through the core when it runs,
 // which keeps the file's comments, checks the result and runs on it at
 // once, else in the file.
 func setConfig(p paths.Paths, edits []config.Edit) error {
 	set := ipc.ConfigArgs{}
 	for _, e := range edits {
-		v, err := json.Marshal(e.Value)
+		v, err := configValue(e.Value)
 		if err != nil {
 			return err
 		}
