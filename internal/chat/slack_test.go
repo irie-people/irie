@@ -39,6 +39,8 @@ type fakeSlack struct {
 	// fail answers a method with this error.
 	fail  map[string]string
 	noBot bool
+	// socket is the stand-in Socket Mode's address, ws://.
+	socket string
 }
 
 func newFakeSlack(t *testing.T) *fakeSlack {
@@ -107,7 +109,11 @@ func (f *fakeSlack) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.answer(w, a)
 	case "apps.connections.open":
-		f.answer(w, map[string]any{"ok": true, "url": "wss://example.com/link/?ticket=1"})
+		u := f.socket
+		if u == "" {
+			u = "wss://example.com/link/?ticket=1"
+		}
+		f.answer(w, map[string]any{"ok": true, "url": u})
 	case "conversations.list":
 		if q.Get("cursor") == "" {
 			f.answer(w, map[string]any{"ok": true, "channels": []any{

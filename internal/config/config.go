@@ -118,6 +118,11 @@ type Plugins struct {
 	// notepad kept as a note in it, both ways. It does nothing until
 	// obsidian.vault names the vault.
 	Obsidian bool `toml:"obsidian"`
+	// Founding is the founding documents: the Declaration of
+	// Independence, the Constitution and the Bill of Rights as the
+	// National Archives transcribes them, in the Mac app's Founding tab and
+	// the founding-documents skill. Off until asked.
+	Founding bool `toml:"founding"`
 	// Jammin is music beside the sessions, in the Mac app's Jammin tab:
 	// Spotify through an app of the person's own, and the Music app on
 	// this Mac, one source at a time (docs/proposals/jammin.md). It does
@@ -182,6 +187,10 @@ func (c Config) ChatOn() bool { return ChatBuilt && c.Plugins.Chat }
 // ChatAgentsOn says whether agents may use the chat: chat.agents, with the
 // plugin on.
 func (c Config) ChatAgentsOn() bool { return c.ChatOn() && c.Chat.Agents }
+
+// FoundingOn says whether the founding plugin runs: plugins.founding, with
+// the plugin built in.
+func (c Config) FoundingOn() bool { return FoundingBuilt && c.Plugins.Founding }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -1891,7 +1900,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && JamminBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && FoundingBuilt && JamminBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1956,6 +1965,9 @@ func (c Config) Write(w io.Writer) error {
 	if !ObsidianBuilt {
 		delete(m, "obsidian")
 		delete(plugins, "obsidian")
+	}
+	if !FoundingBuilt {
+		delete(plugins, "founding")
 	}
 	if !JamminBuilt {
 		delete(m, "jammin")

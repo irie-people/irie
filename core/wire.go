@@ -44,6 +44,11 @@ type (
 	DockControl       = ipc.DockControl
 	DockFile          = ipc.DockFile
 	DockUntrusted     = ipc.DockUntrusted
+	FoundingArgs      = ipc.FoundingArgs
+	FoundingResult    = ipc.FoundingResult
+	FoundingDoc       = ipc.FoundingDoc
+	FoundingBlock     = ipc.FoundingBlock
+	FoundingHit       = ipc.FoundingHit
 	Group             = ipc.Group
 	GroupArgs         = ipc.GroupArgs
 	GroupResult       = ipc.GroupResult
@@ -177,6 +182,9 @@ type (
 	LabelArgs         = ipc.LabelArgs
 	Label             = ipc.Label
 	LabelResult       = ipc.LabelResult
+	FindArgs          = ipc.FindArgs
+	FindResult        = ipc.FindResult
+	Found             = ipc.Found
 	ResultArgs        = ipc.ResultArgs
 	ResultResult      = ipc.ResultResult
 	ToolArgs          = ipc.ToolArgs
@@ -243,6 +251,13 @@ type (
 	YoinkInfo         = ipc.YoinkInfo
 	YoinkChoice       = ipc.YoinkChoice
 	YoinkDownload     = ipc.YoinkDownload
+	ZenProfile        = ipc.ZenProfile
+	ZenChange         = ipc.ZenChange
+	Zen               = ipc.Zen
+	ZenOffer          = ipc.ZenOffer
+	ZenArgs           = ipc.ZenArgs
+	ZenResult         = ipc.ZenResult
+	ZenVersion        = ipc.ZenVersion
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -323,6 +338,7 @@ const (
 	DockStateRunning     = ipc.DockStateRunning
 	DockStateExited      = ipc.DockStateExited
 	DockStateReady       = ipc.DockStateReady
+	OpFounding           = ipc.OpFounding
 	OpGroup              = ipc.OpGroup
 	GroupList            = ipc.GroupList
 	GroupNew             = ipc.GroupNew
@@ -464,6 +480,7 @@ const (
 	OpResult             = ipc.OpResult
 	OpTool               = ipc.OpTool
 	OpLabel              = ipc.OpLabel
+	OpFind               = ipc.OpFind
 	OpClose              = ipc.OpClose
 	OpReopen             = ipc.OpReopen
 	OpUndo               = ipc.OpUndo
@@ -620,4 +637,17 @@ const (
 	YoinkDone            = ipc.YoinkDone
 	YoinkFailed          = ipc.YoinkFailed
 	YoinkCanceled        = ipc.YoinkCanceled
+	OpZen                = ipc.OpZen
+	ZenKindLearn         = ipc.ZenKindLearn
+	ZenKindTry           = ipc.ZenKindTry
+	ZenKindKeep          = ipc.ZenKindKeep
+	ZenKindRest          = ipc.ZenKindRest
+	ZenKindNight         = ipc.ZenKindNight
+	ZenRest              = ipc.ZenRest
+	ZenNight             = ipc.ZenNight
+	ZenShowHistory       = ipc.ZenShowHistory
+	ZenYes               = ipc.ZenYes
+	ZenNo                = ipc.ZenNo
+	MaxZenWhy            = ipc.MaxZenWhy
+	MaxZenLog            = ipc.MaxZenLog
 )

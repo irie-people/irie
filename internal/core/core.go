@@ -135,6 +135,7 @@ type Core struct {
 
 	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
 	labels     routeLabels           // the tasks given a class, which the router sorts by (classify.go); its own lock
+	finds      findIndex             // the sessions' embeddings, which find ranks them by (find.go); its own lock
 	limits     map[string]time.Time  // when each model family's own usage limit last stopped a turn, such as fable's (fallback.go)
 	order      []string              // the list's order from the top, which the user sets (order.go)
 	spaces     []ipc.Space           // the spaces, the first first (spaces.go)
@@ -142,6 +143,7 @@ type Core struct {
 	hues       map[string]int        // the colours the core gave the sessions, the closed ones' too (hue.go)
 	bg         map[int]bgProc        // the processes Irie put in the background, by pid (priority.go)
 	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
+	zen        zenState              // your zen, and zen as the app shows it (zen.go)
 	closes     closes                // closed sessions, and agents still ending (close.go)
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
@@ -212,6 +214,7 @@ type session struct {
 	out       *outcome               // its route and how it went, shared with Core.outcomes
 	conv      *conversation          // its conversation, read while clients follow it (conversation.go)
 	note      string                 // what its agent is told at its next tool call, once (freeze.go)
+	zenNote   string                 // what zen tells its agent at its next tool call, once (zen.go)
 	refreeze  bool                   // a lost session that was frozen, to freeze again once its agent starts (lost.go)
 	demoted   bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
 	userWord  time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
@@ -388,6 +391,7 @@ func Run(o Options) error {
 	c.loadTrodHand()
 	c.loadRaphael()
 	c.loadNotepad()
+	c.loadZen()
 
 	// The freeze dog, Irie's one watchdog, runs first: the first tick
 	// waits for tmux, and a stopped server would hold it until the dog
@@ -441,6 +445,8 @@ func Run(o Options) error {
 	go c.watchVaultNotes()
 	// Terms in short's page, for the Mac app's Terms tab (terms.go).
 	go c.serveTerms(context.Background())
+	// The chat plugin's mentions and DMs as they come (chat.go).
+	go c.chatListen(context.Background())
 	// Raphael's look at the core's own loop (watchCore) counts from here.
 	c.beat()
 
@@ -483,6 +489,9 @@ func Run(o Options) error {
 			}
 			if n%lockEvery == 0 {
 				go c.lockSweep()
+			}
+			if n%zenEvery == 0 {
+				go c.zenSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
@@ -836,6 +845,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.chatOp(peer, a)
+	case ipc.OpFounding:
+		var a ipc.FoundingArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.foundingOp(peer, a)
 	case ipc.OpJammin:
 		var a ipc.JamminArgs
 		if err := decode(raw, &a); err != nil {
@@ -881,13 +896,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: builtFeatures([]string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
-			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpResult, ipc.OpTool,
+			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpFind, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
-			ipc.OpLock, ipc.OpMaterialize,
+			ipc.OpLock, ipc.OpMaterialize, ipc.OpZen,
 			ipc.OpWorktrees,
 			ipc.OpObsidian,
 		})}, nil
@@ -924,6 +939,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.notepadOp(a)
+	case ipc.OpZen:
+		var a ipc.ZenArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.zenOp(a)
 	case ipc.OpMaterialize:
 		var a ipc.MaterializeArgs
 		if err := decode(raw, &a); err != nil {
@@ -1161,6 +1182,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.chatOp(0, a)
+	case ipc.OpFounding:
+		// A call with no process to it, such as one from within the core.
+		var a ipc.FoundingArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.foundingOp(0, a)
 	case ipc.OpJammin:
 		// A call with no process to it, such as one from within the core.
 		var a ipc.JamminArgs
@@ -1290,6 +1318,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.label(a)
+	case ipc.OpFind:
+		var a ipc.FindArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.find(a)
 	case ipc.OpResult:
 		var a ipc.ResultArgs
 		if err := decode(raw, &a); err != nil {

@@ -24,7 +24,12 @@ final class Store {
     }
     private(set) var attach: AttachInfo?
     var selection: String? {
-        didSet { if selection != oldValue { derive() } }
+        didSet {
+            guard selection != oldValue else { return }
+            derive()
+            // Zen asks the agent of each session it shows to be gentle.
+            if zen.on { sayZen() }
+        }
     }
     /// What most views want of the rows, kept apart so that a row's change
     /// redraws only the views it changes (derive()): the selected session's
@@ -372,6 +377,11 @@ final class Store {
     let mail: MailModel
     /// The Yoink plugin's downloads, which its tab draws (Yoink.swift).
     let yoink: YoinkModel
+    /// The chat plugin's accounts, drafts and channels, which its tab
+    /// draws (Chat.swift).
+    let chat: ChatModel
+    /// The founding documents, which the Founding tab draws (Founding.swift).
+    let founding: FoundingModel
     /// The Jammin plugin's music, which its tab draws (Jammin.swift).
     let jammin: JamminModel
     /// The notepad, the person's notes for later (Notes.swift).
@@ -387,6 +397,8 @@ final class Store {
         settings = SettingsModel(client: client)
         mail = MailModel(client: client)
         yoink = YoinkModel(client: client)
+        chat = ChatModel(client: client)
+        founding = FoundingModel(client: client)
         jammin = JamminModel(client: client)
         notes.store = self
         vault.store = self
@@ -485,6 +497,11 @@ final class Store {
                 loadPluginsSoon()
                 keepPlugins()
                 if hello.features.contains("theme") { sendTheme(Palette.chosen) }
+                // The core keeps your zen, and hears whether zen shows,
+                // again after a restart (Zen.swift).
+                zen.kept = hello.features.contains("zen")
+                zen.send = { [weak self] change in self?.changeZen(change) }
+                sayZen()
                 loadChoices()
                 // The store lives as long as the app. The frames go in a
                 // batch at a time (Pace.swift), and wait while a menu is
@@ -733,6 +750,7 @@ final class Store {
         if (h.groups ?? []) != groups {
             groups = h.groups ?? []
         }
+        if let z = h.zen { takeZen(z) }
     }
 
     /// The picked session while it shows beside its teammates: the terminal
@@ -849,6 +867,7 @@ final class Store {
         knowsFeatures = true
         canMail = true
         mail.loadFixture()
+        founding.loadFixture()
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
@@ -1368,6 +1387,10 @@ final class Store {
             case "answered" where r.op == "markets":
                 // :markets: the Markets window says how the map stands.
                 NotificationCenter.default.post(name: .irieMarkets, object: nil)
+            case _ where r.op == "chat" && chatPane != nil:
+                // :chat opens the Chat tab, where the drafts wait to be
+                // sent.
+                showChat()
             case _ where r.op == "yoink" && yoinkPane != nil:
                 // :yoink opens the Yoink tab, where the download shows as it
                 // goes; a start says so too.

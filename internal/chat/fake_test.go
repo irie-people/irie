@@ -51,6 +51,8 @@ type fakeDiscord struct {
 	limited map[string]int
 	retry   float64
 	next    int
+	// gateway is the stand-in Gateway's address, ws://.
+	gateway string
 }
 
 func newFakeDiscord(t *testing.T) *fakeDiscord {
@@ -156,6 +158,8 @@ func (f *fakeDiscord) serve(w http.ResponseWriter, r *http.Request) {
 			delete(u, "bot")
 		}
 		f.answer(w, 200, u)
+	case route == "GET /gateway/bot":
+		f.answer(w, 200, map[string]any{"url": f.gateway, "shards": 1})
 	case route == "GET /applications/@me":
 		f.answer(w, 200, map[string]any{"id": "800", "flags": f.flags})
 	case route == "GET /users/@me/guilds":
