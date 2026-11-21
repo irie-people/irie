@@ -45,6 +45,8 @@ var reaches = map[string]Reach{
 	OpRename: ReachInside, OpPark: ReachInside, OpUnpark: ReachInside, OpPin: ReachInside,
 	OpUnpin: ReachInside, OpReorder: ReachInside, OpPriority: ReachInside, OpSpace: ReachInside,
 	OpGroup: ReachInside, OpFreeze: ReachInside, OpClose: ReachInside,
+	// The sidebar's chain reads, and its restore is a step.
+	OpChain: ReachInside,
 	// Steps whose agents carry on and sign in again, and undo and redo,
 	// which take them.
 	OpThaw: ReachInsideOut, OpReopen: ReachInsideOut, OpUndo: ReachInsideOut, OpRedo: ReachInsideOut,

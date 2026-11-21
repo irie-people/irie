@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -49,6 +50,18 @@ const (
 	findSaid    = 160  // the runes shown of what an agent said
 	findTask    = 100  // the runes shown of a task
 	unread      = -2.0 // the cosine of a session the model has yet to read
+
+	// findWait is the longest a find waits for the meaning of the words
+	// looked up, which someone asked for, unlike a spawn's class: the
+	// model may have to load first, or the call queue behind a batch of
+	// the background read. On a busy Mac a cold load took over 3 s.
+	findWait = 15 * time.Second
+	// findBatch is how many texts the background read sends in one call:
+	// a few, so that a spawn's embedding (embedWait) and a find queue
+	// behind little. A busy Mac read 2.6 a second.
+	findBatch = 4
+	findKeep  = 15 * time.Second // the background read keeps what it made at most this often, and at its end
+	findRests = 3                // how many rests after another call's failure the read waits out, in a row
 )
 
 // Session states, as find shows them.
@@ -319,7 +332,7 @@ func (c *Core) findMeaning(q string, docs []findDoc) ([]float64, int, string) {
 	if len(missing) > 0 {
 		c.fillFind(e, missing)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), embedWait)
+	ctx, cancel := context.WithTimeout(context.Background(), findWait)
 	defer cancel()
 	vs, err := c.embed(ctx, e, []string{findQuery(e.Model, q)})
 	if err != nil {
@@ -366,11 +379,13 @@ func (c *Core) loadFindVectors(model string) {
 	}
 }
 
-// fillFind has the model read, in the background, a batch at a time, the
+// fillFind has the model read, in the background, a few at a time, the
 // sessions' texts it has not read, and keeps what it makes in
 // find-vectors.json, so the next find, and a restarted core, need not
 // make it again. One fill runs at a time: what a find meanwhile finds
-// missing waits for the next.
+// missing waits for the next. When another call to the server has just
+// failed, as a spawn's can while the model loads, the read waits out the
+// rest and goes on; when its own call fails, it stops.
 func (c *Core) fillFind(e config.RouteEmbed, texts []string) {
 	f := &c.finds
 	f.mu.Lock()
@@ -381,21 +396,44 @@ func (c *Core) fillFind(e config.RouteEmbed, texts []string) {
 	f.filling = true
 	f.mu.Unlock()
 	go func() {
+		start, read, kept := time.Now(), 0, time.Now()
+		keep := func() {
+			f.mu.Lock()
+			if f.model != e.Model {
+				f.mu.Unlock()
+				return
+			}
+			vs := maps.Clone(f.vecs)
+			f.mu.Unlock()
+			if err := writeVectors(c.paths.FindVectors(), e.Model, vs); err != nil {
+				c.log.Warn("find", "err", err)
+			}
+			kept = time.Now()
+		}
 		defer func() {
+			if read > 0 {
+				keep()
+				c.log.Info("find", "read", read, "left", len(texts), "took", time.Since(start).Round(time.Second))
+			}
 			f.mu.Lock()
 			f.filling = false
 			f.mu.Unlock()
 		}()
-		for len(texts) > 0 {
-			batch := texts[:min(embedBatch, len(texts))]
-			texts = texts[len(batch):]
+		for rests := 0; len(texts) > 0; {
+			batch := texts[:min(findBatch, len(texts))]
 			ctx, cancel := context.WithTimeout(context.Background(), fillWait)
-			start := time.Now()
 			vs, err := c.embed(ctx, e, batch)
 			cancel()
+			if errors.Is(err, errEmbedRests) && rests < findRests {
+				rests++
+				time.Sleep(time.Until(c.embedRestsUntil()) + 100*time.Millisecond)
+				continue
+			}
 			if err != nil {
 				return
 			}
+			rests = 0
+			texts = texts[len(batch):]
 			f.mu.Lock()
 			if f.model != e.Model {
 				f.mu.Unlock()
@@ -404,13 +442,20 @@ func (c *Core) fillFind(e config.RouteEmbed, texts []string) {
 			for i, t := range batch {
 				f.vecs[findKey(t)] = route.Unit(vs[i])
 			}
-			kept := maps.Clone(f.vecs)
 			f.mu.Unlock()
-			if err := writeVectors(c.paths.FindVectors(), e.Model, kept); err != nil {
-				c.log.Warn("find", "err", err)
-				return
+			read += len(batch)
+			if time.Since(kept) >= findKeep {
+				keep()
 			}
-			c.log.Debug("find", "read", len(batch), "left", len(texts), "took", time.Since(start).Round(time.Millisecond))
 		}
 	}()
+}
+
+// embedRestsUntil is when the embedding server may be called again, after
+// a call to it failed (classify.go's embed).
+func (c *Core) embedRestsUntil() time.Time {
+	l := &c.labels
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.rest
 }
