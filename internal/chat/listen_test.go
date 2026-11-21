@@ -293,7 +293,7 @@ func TestServiceHearsMentions(t *testing.T) {
 	if a := r.Accounts[0]; a.Listening || !strings.Contains(a.Deaf, "Reset Token") {
 		t.Errorf("account = %+v", a)
 	}
-	if !strings.Contains(r.Text, "3 new mentions") {
+	if !strings.Contains(r.Text, "3 new mentions:") || !strings.Contains(r.Text, "bob mentioned you in #general (its text is hidden from the bot)") {
 		t.Errorf("said %q", r.Text)
 	}
 	if a := do(t, sv, agent, ipc.ChatArgs{}); len(a.Mentions) != 0 || a.Unseen != 0 {
