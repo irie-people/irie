@@ -66,6 +66,7 @@ type Config struct {
 	Yoink     Yoink              `toml:"yoink"`
 	Chat      Chat               `toml:"chat"`
 	Obsidian  Obsidian           `toml:"obsidian"`
+	Jammin    Jammin             `toml:"jammin"`
 	Plugins   Plugins            `toml:"plugins"`
 
 	Materialize Materialize `toml:"materialize"`
@@ -124,6 +125,11 @@ type Plugins struct {
 	// tab and the founding-documents skill, kept on a local chain. Off
 	// until asked.
 	Founding bool `toml:"founding"`
+	// Jammin is music beside the sessions, in the Mac app's Jammin tab:
+	// Spotify through an app of the person's own, and the Music app on
+	// this Mac, one source at a time (docs/proposals/jammin.md). It does
+	// nothing until a client asks.
+	Jammin bool `toml:"jammin"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -1070,9 +1076,10 @@ func Default() Config {
 		Yoink:    defaultYoink(),
 		Chat:     defaultChat(),
 		Obsidian: defaultObsidian(),
+		Jammin:   defaultJammin(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Chat: true, Obsidian: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Chat: true, Obsidian: true, Jammin: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1199,10 +1206,11 @@ func Parse(data []byte, path string) (Config, error) {
 		Yoink     *Yoink                    `toml:"yoink"`
 		Chat      *Chat                     `toml:"chat"`
 		Obsidian  *Obsidian                 `toml:"obsidian"`
+		Jammin    *Jammin                   `toml:"jammin"`
 		Plugins   *Plugins                  `toml:"plugins"`
 
 		Materialize *Materialize `toml:"materialize"`
-	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Jammin: &c.Jammin, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1887,13 +1895,14 @@ func (c Config) Validate() error {
 	checkYoink(c.Yoink, bad)
 	checkChat(c.Chat, bad)
 	checkObsidian(c.Obsidian, bad)
+	checkJammin(c.Jammin, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && FoundingBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && FoundingBuilt && JamminBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1961,6 +1970,10 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !FoundingBuilt {
 		delete(plugins, "founding")
+	}
+	if !JamminBuilt {
+		delete(m, "jammin")
+		delete(plugins, "jammin")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

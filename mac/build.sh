@@ -218,6 +218,10 @@ if [ -f "$mermaid/mermaid.min.js" ]; then
 	cp "$mermaid/mermaid.min.js" "$app/Contents/Resources/"
 	cp "$mermaid/LICENSE" "$app/Contents/Resources/mermaid-LICENSE.txt"
 fi
+# Spotify's full logo, black and white, as Spotify's design guidelines
+# give it: the Jammin tab shows it beside Spotify's music
+# (docs/proposals/jammin.md §3).
+cp Resources/Spotify_Full_Logo_RGB_Black.png Resources/Spotify_Full_Logo_RGB_White.png "$app/Contents/Resources/"
 # Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs
 # it. A preview draws it once and keeps it with its objects.
 if [ -n "$hot" ] && [ -f "$obj/Irie.icns" ]; then
