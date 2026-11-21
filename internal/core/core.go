@@ -75,6 +75,7 @@ type Core struct {
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
 	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
+	ragu        raguelState  // Raguel's councils (raguel.go); it has a lock of its own, taken after mu
 	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
 	pad         notepad      // the person's notes for later (notepad.go); it has a lock of its own, never held with mu
 	vault       vaultNotes   // the notepad kept in the Obsidian vault too (obsidian.go); its lock is taken before pad's, never after
@@ -391,6 +392,7 @@ func Run(o Options) error {
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
+	c.loadRaguel()
 	c.loadNotepad()
 	c.startZen()
 
@@ -469,6 +471,9 @@ func Run(o Options) error {
 			c.beat()
 			if n%raphaelEvery == 0 {
 				go c.raphaelSweep()
+			}
+			if n%raguelEvery == 0 {
+				go c.raguelSweep()
 			}
 			if n%sampleEvery == 0 {
 				go c.sample()
@@ -830,6 +835,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpCouncil:
+		var a ipc.CouncilArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.councilOp(peer, a)
 	case ipc.OpVariorum:
 		var a ipc.VariorumArgs
 		if err := decode(raw, &a); err != nil {
@@ -915,6 +926,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpWorktrees,
 			ipc.OpObsidian,
 			ipc.OpChain,
+			ipc.OpCouncil,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -1254,6 +1266,17 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
 		}
 		return c.raphaelOp(0, a)
+	case ipc.OpCouncil:
+		// Not from a socket either: it reports and tallies, and takes no
+		// plan and no one's word.
+		var a ipc.CouncilArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.Do != ipc.CouncilReport && a.Do != ipc.CouncilTally {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "Ragu takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
+		}
+		return c.councilOp(0, a)
 	case ipc.OpGabriel:
 		var a ipc.GabrielArgs
 		if err := decode(raw, &a); err != nil {
