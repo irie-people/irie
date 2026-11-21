@@ -143,7 +143,11 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 			}
 		}
 	}
-	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow, Deny: s.Deny}
+	deny := s.Deny
+	if p.Local != nil {
+		deny = append(slices.Clone(s.Deny), LocalDenied...)
+	}
+	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow, Deny: deny}
 	// A session no one watches refuses what would wait on a prompt. An
 	// older Claude Code doesn't know the key, so its file leaves it out and
 	// the session asks as before (the core warns).
@@ -391,6 +395,19 @@ var LocalAllowed = []string{
 	"Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo test *)", "Bash(cargo fmt *)",
 	"Bash(make test *)", "Bash(make check *)",
 }
+
+// LocalDenied are the tools a local model's session is refused, in every
+// mode: Agent (Task before it was renamed) and Workflow start subagents,
+// and each subagent is a conversation of its own on the model's server.
+// That server has a slot for each of a few sessions (DESIGN §6.5). One more
+// conversation takes another's slot, and the state that slot held is lost,
+// since at a local model's context it is bigger than llama-server keeps
+// aside (--cache-ram), so that session reads its whole prompt again,
+// minutes each time. On 21 Nov 2026 one of a bench's three runs on Dory
+// started three Explore subagents, and in two hours none of the runs wrote
+// a line (DESIGN §6.1). A rule for a whole tool also takes it out of what
+// Claude Code sends the model: 2.7K tokens of a 13.8K-token first request.
+var LocalDenied = []string{"Agent", "Task", "Workflow"}
 
 // localPermissions gives a local model's session a mode it can work in. A
 // local model cannot answer auto mode's check, which Claude Code asks of

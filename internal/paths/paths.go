@@ -99,6 +99,7 @@ func (p Paths) LocalFile() string             { return filepath.Join(p.State, "l
 func (p Paths) Benches() string               { return filepath.Join(p.State, "benches") }
 func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
+func (p Paths) Chain() string                 { return filepath.Join(p.State, "chain") } // the sidebar's chain (DESIGN §4.23)
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 func (p Paths) Cards() string                 { return filepath.Join(p.State, "cards.json") } // materialized cards (internal/materialize)
 

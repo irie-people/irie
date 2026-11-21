@@ -146,6 +146,7 @@ type Core struct {
 	zen        zenState              // your zen, and zen as the app shows it (zen.go)
 	closes     closes                // closed sessions, and agents still ending (close.go)
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
+	chain      orgChain              // the sidebar's chain, the organisation's versions (chain.go); a lock of its own, taken after mu
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
 	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
 	benches    benchState            // the benches this core started, and the playbooks (bench.go); a lock of its own, but its playbooks are under mu
@@ -418,6 +419,9 @@ func Run(o Options) error {
 	// Once every pane is adopted, what the server lost with it is closed
 	// on its own, for history and reopen.
 	c.findLost(time.Now())
+	// The sidebar's chain begins with the organisation as Irie found it,
+	// should it have no version yet (chain.go).
+	c.startChain()
 	c.pruneSkills()
 	go c.sample()
 	go c.dogSweep()
@@ -900,6 +904,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpLock, ipc.OpMaterialize, ipc.OpZen,
 			ipc.OpWorktrees,
 			ipc.OpObsidian,
+			ipc.OpChain,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -988,6 +993,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return c.dogList()
 	case ipc.OpRebuilds:
 		return c.rebuildsOp(), nil
+	case ipc.OpChain:
+		var a ipc.ChainArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.chainOp(a)
 	case ipc.OpLock:
 		var a ipc.LockArgs
 		if err := decode(raw, &a); err != nil {

@@ -63,7 +63,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
-` + rebuildsUsage + materializeUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -202,6 +202,8 @@ func ctl(args []string) error {
 		return ctlHistory(args[1:])
 	case "find":
 		return ctlFind(args[1:])
+	case "chain":
+		return ctlChain(args[1:])
 	case "close":
 		return ctlClose(args[1:])
 	case "reopen":
