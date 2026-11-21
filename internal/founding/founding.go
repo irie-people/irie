@@ -1,6 +1,7 @@
 // Package founding holds the founding documents, the founding plugin's
 // (DESIGN §4.17): the Declaration of Independence, the Constitution and the
-// Bill of Rights, as the National Archives transcribes them. The texts are
+// Bill of Rights, as the National Archives transcribes them, and the Freedom
+// of Information Act, as the United States Code sets it out. The texts are
 // the founding-documents skill's own files, so agents and the Mac app's
 // Founding tab read the same words. This reads them into the parts the tab
 // draws, with each file's SHA-512, and finds passages in them.
@@ -26,6 +27,7 @@ var Files = []struct{ ID, File string }{
 	{"declaration", "declaration.md"},
 	{"constitution", "constitution.md"},
 	{"rights", "bill-of-rights.md"},
+	{"foia", "freedom-of-information-act.md"},
 }
 
 var (

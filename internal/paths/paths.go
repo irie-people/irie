@@ -122,6 +122,10 @@ func (p Paths) Notepad() string { return filepath.Join(p.Data, "notepad.json") }
 // themes and layouts are, so it sits with them.
 func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
 
+// FoundingChain is the founding documents' local chain (internal/founding):
+// each version holds every text, and names the one before it.
+func (p Paths) FoundingChain() string { return filepath.Join(p.State, "chain", "founding") }
+
 // ZenState is how far along zen's path you are, and what a restarted core
 // keeps of zen (internal/core/zen.go).
 func (p Paths) ZenState() string      { return filepath.Join(p.State, "zen.json") }
