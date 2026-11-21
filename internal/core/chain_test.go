@@ -545,3 +545,49 @@ func TestTheChainIsKeptInTheVault(t *testing.T) {
 		t.Errorf("the chain set aside holds %d versions", len(old))
 	}
 }
+
+// A chain the first build kept, plain at the top of the chains' folder,
+// moves into a folder of its own beside the other chains, and into the
+// vault, as the core first starts: its versions as they were, sealed, its
+// plain files and locks gone. The founding documents' chain beside it is
+// left be.
+func TestAChainKeptBeforeTheVaultMovesIntoIt(t *testing.T) {
+	c := prepare(t, agentConfig{})
+	top := filepath.Dir(c.paths.Chain())
+	old := chain.Store{Dir: top}
+	b, err := chain.Canonical(ipc.ChainVersion{Format: ipc.ChainFormat, At: time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC).UnixMilli(),
+		What: ipc.ChainWhat{Do: chainBegin}, Org: ipc.ChainOrg{Spaces: []ipc.Space{firstSpace}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, err := old.Put(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.SetHead(name); err != nil {
+		t.Fatal(err)
+	}
+	founding := filepath.Join(top, "founding", "HEAD")
+	os.MkdirAll(filepath.Dir(founding), 0o700)
+	os.WriteFile(founding, []byte("left be\n"), 0o600)
+	c.up()
+	r := c.chainLog()
+	if r.Problem != "" || len(r.Versions) != 1 || r.Head != name || r.Vault != chain.KeptInFile {
+		t.Fatalf("after the move: %+v", r)
+	}
+	if got := c.chainDo(ipc.ChainArgs{Do: ipc.ChainShow, Version: "head"}).Raw; got != string(b) {
+		t.Errorf("the version changed: %s", got)
+	}
+	left, _ := filepath.Glob(filepath.Join(top, "*"))
+	for _, f := range left {
+		if base := filepath.Base(f); base != "founding" && base != "sidebar" {
+			t.Errorf("%s stayed at the top", f)
+		}
+	}
+	if sealed, _ := filepath.Glob(filepath.Join(c.paths.Chain(), "objects", "*")); len(sealed) != 1 || !strings.HasSuffix(sealed[0], chain.SealedExt) {
+		t.Errorf("objects %v", sealed)
+	}
+	if got, _ := os.ReadFile(founding); string(got) != "left be\n" {
+		t.Errorf("the founding chain was touched: %q", got)
+	}
+}

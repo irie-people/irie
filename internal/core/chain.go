@@ -282,6 +282,9 @@ func (c *Core) openChain(again bool) {
 	store := chain.Store{Dir: c.paths.Chain()}
 	var locked, broken, head string
 	var headOrg []byte
+	if err := settleFolder(store.Dir); err != nil {
+		broken = fmt.Sprintf("the chain kept before it had a folder of its own could not all move into %s: %v", store.Dir, err)
+	}
 	vault, err := openVault(store, chain.SystemKeyStore(vaultAccount))
 	if err != nil {
 		locked = lockedWords(store.Dir, err)
@@ -333,6 +336,42 @@ func (c *Core) openChain(again bool) {
 	case kick <- struct{}{}:
 	default:
 	}
+}
+
+// settleFolder moves the chain kept at the top of the chains' folder, as
+// the first build of it kept it, into dir, its folder of its own beside
+// the other chains (chain/founding): objects, HEAD, HEAD.bad and the key
+// file, each once. What dir has already stays, and so does what would
+// clash with it, which an error says.
+func settleFolder(dir string) error {
+	top := filepath.Dir(dir)
+	if _, err := os.Lstat(filepath.Join(top, "HEAD")); err != nil {
+		if _, err := os.Lstat(filepath.Join(top, "objects")); err != nil {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	var stayed []string
+	for _, name := range []string{"objects", "HEAD", "HEAD.bad", chain.KeyFile} {
+		from, to := filepath.Join(top, name), filepath.Join(dir, name)
+		if _, err := os.Lstat(from); err != nil {
+			continue
+		}
+		if _, err := os.Lstat(to); err == nil {
+			stayed = append(stayed, from)
+			continue
+		}
+		if err := os.Rename(from, to); err != nil {
+			return err
+		}
+	}
+	os.Remove(filepath.Join(top, ".HEAD.lock"))
+	if len(stayed) > 0 {
+		return fmt.Errorf("%s stayed, as %s has its own", strings.Join(stayed, ", "), dir)
+	}
+	return nil
 }
 
 // chainRetry is how soon a chain op asks a locked chain to open again.
