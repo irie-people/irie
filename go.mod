@@ -2,6 +2,12 @@ module github.com/irie-people/irie
 
 go 1.26.0
 
+// The Mac app is Swift: no Go lives under mac/. Its build (mac/build.sh)
+// deletes and rewrites mac/build while tools/check.sh's go vet walks
+// ./..., which then failed on a folder gone mid-walk, so every ./...
+// leaves mac/ out. Drop this line if Go code ever moves in there.
+ignore ./mac
+
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.0

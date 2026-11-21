@@ -63,6 +63,9 @@ struct SidebarView: View {
             // It takes its height before the cards, which keep their least.
             .layoutPriority(1)
         }
+        // How wide the sidebar is, and where, for the counts' room in the
+        // title bar over it.
+        .background { TitleBarRoom.Probe(part: .sidebar) }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
             // Both over the sidebar, beside the traffic lights and above the
@@ -70,8 +73,9 @@ struct SidebarView: View {
             // part of the bar, leading to trailing. A .navigation item goes
             // to the detail column's bar, ahead of its title, and a
             // .primaryAction one to the bar's leading edge. Short of room,
-            // the bar moves its trailing item into the overflow menu first,
-            // so the counts go before the name does.
+            // the bar would move its trailing item into the overflow menu,
+            // so the counts draw tighter to fit the room it leaves them
+            // (TitleBarRoom).
             //
             // Reversed (Store.reversed), the bar keeps its order while the
             // columns swap sides, so its part before the sidebar's edge lies
@@ -1462,57 +1466,113 @@ struct TitleName: View {
         // The gap to the counts, which are an item of their own.
         .padding(.trailing, 6)
         .fixedSize()
+        // Where the name ends: the counts have the bar from there on.
+        .background { TitleBarRoom.Probe(part: .name) }
     }
 }
 
 /// A count per state, in the title bar after Irie's name. A count shows the
 /// first session, in list order, in that state. A parked session is out of
 /// the way, so To verify leaves it out; it still counts when it needs you.
+///
+/// The bar judges an item by its whole width and moves one that doesn't fit
+/// into its overflow menu, never offering it less room first, so the counts
+/// and the VPN's shield used to go there together once the trod bot's moon
+/// and a frozen count joined them. The row knows its room instead
+/// (TitleBarRoom) and draws the fullest look that fits it (CountsFit).
 @MainActor
 struct Counts: View {
     @Environment(Store.self) private var store
+    /// The look on show, from CountsFit.looks: the tightest until the room
+    /// is known, so the item never starts wider than the bar has room for.
+    @State private var look = CountsFit.looks.count - 1
 
     var body: some View {
-        HStack(spacing: 6) {
-            switch store.link {
-            case .online:
-                // The store works the counts out once a change (RowCounts),
-                // so a row's news redraws the title bar only when a count
-                // moves: each redraw lays its items out again.
-                let c = store.counts
-                count(c.needs, mark: .needs, color: Theme.needs, label: "need you")
-                count(c.working, mark: .working, color: Theme.ink, label: "working")
-                if !store.closeWhenDone {
-                    count(c.done, mark: .done, color: Look.doneColor, label: "to verify, not yet seen")
+        switch store.link {
+        case .online:
+            row(CountsFit.looks[min(look, CountsFit.looks.count - 1)])
+                // Which look fits, tried out of sight against the room.
+                // The row on show keeps its own width, so the item is as
+                // wide as its look, and a drag of the sidebar's edge
+                // changes it only where the look changes.
+                .overlay(alignment: .leading) {
+                    if let room = TitleBarRoom.shared.room {
+                        ViewThatFits(in: .horizontal) {
+                            ForEach(CountsFit.looks.indices, id: \.self) { i in
+                                row(CountsFit.looks[i]).preference(key: CountsLook.self, value: i)
+                            }
+                        }
+                        .frame(width: room, alignment: .leading)
+                        .hidden()
+                        .accessibilityHidden(true)
+                    }
                 }
-                if c.paused.count > 0 {
-                    count(c.paused, mark: .paused, color: Theme.paused, label: "paused")
+                .onPreferenceChange(CountsLook.self) { i in
+                    if let i, i != look { look = i }
                 }
-                if c.frozen.count > 0 {
-                    count(c.frozen, mark: .frozen, color: Theme.frozen, label: "frozen")
-                }
-                if let t = store.trod {
-                    trod(t)
-                }
-                if let v = store.vpn {
-                    vpnMark(v)
-                }
-            case .offline:
-                Text("offline").font(Theme.font(11, .bold)).foregroundStyle(Theme.needs)
-            case .connecting:
-                EmptyView()
+                // A new look has the bar measure the item again, which
+                // brings it back should the bar have moved it into its
+                // overflow menu meanwhile.
+                .onChange(of: look) { TitleBarRoom.shared.rowChanged() }
+        case .offline:
+            Text("offline").font(Theme.font(11, .bold)).foregroundStyle(Theme.needs)
+                .padding(.horizontal, 1)
+                .fixedSize()
+        case .connecting:
+            EmptyView()
+        }
+    }
+
+    /// The look that fits, from the counts tried out of sight.
+    private struct CountsLook: PreferenceKey {
+        static var defaultValue: Int? = nil
+        static func reduce(value: inout Int?, nextValue: () -> Int?) { value = value ?? nextValue() }
+    }
+
+    /// The counts in one look: who needs you, works and waits to be
+    /// verified, then the paused and the frozen, the trod bot's moon and
+    /// the VPN's shield, which every look keeps.
+    private func row(_ fit: CountsFit) -> some View {
+        // The store works the counts out once a change (RowCounts), so a
+        // row's news redraws the title bar only when a count moves: each
+        // redraw lays its items out again.
+        let c = store.counts
+        return HStack(spacing: fit.capsules ? 6 : 5) {
+            count(c.needs, mark: .needs, color: Theme.needs, label: "need you", fit)
+            count(c.working, mark: .working, color: Theme.ink, label: "working", fit)
+            if !store.closeWhenDone {
+                count(c.done, mark: .done, color: Look.doneColor, label: "to verify, not yet seen", fit)
+            }
+            if fit.held, c.paused.count > 0 {
+                count(c.paused, mark: .paused, color: Theme.paused, label: "paused", fit)
+            }
+            if fit.held, c.frozen.count > 0 {
+                count(c.frozen, mark: .frozen, color: Theme.frozen, label: "frozen", fit)
+            }
+            if fit.moon, let t = store.trod {
+                trod(t, fit)
+            }
+            if let v = store.vpn {
+                vpnMark(v, fit)
             }
         }
-        // The title bar sizes the item to its content; a point either side
-        // keeps the capsules' edges whole.
+        // A point either side keeps the capsules' edges whole.
         .padding(.horizontal, 1)
         .fixedSize()
+    }
+
+    /// A mark's ground: a capsule with room to spare, none when tight.
+    private func ground<V: View>(_ mark: V, _ color: Color, fill: Double = 0.12, edge: Double = 0.4, _ fit: CountsFit) -> some View {
+        mark
+            .padding(.vertical, 1.5)
+            .background(Capsule().fill(color.opacity(fit.capsules ? fill : 0)))
+            .overlay(Capsule().strokeBorder(color.opacity(fit.capsules ? edge : 0), lineWidth: 1))
     }
 
     /// The trod bot within its hours (DESIGN §4.10): a moon, in the accent
     /// while it steps in, muted while you are at the Mac or the plan's use
     /// stops it.
-    private func trod(_ t: TrodShift) -> some View {
+    private func trod(_ t: TrodShift, _ fit: CountsFit) -> some View {
         let works = (t.away ?? false) && !(t.capped ?? false)
         var words = "Trod bot"
         if let u = t.until { words += " until " + u.formatted(date: .omitted, time: .shortened) }
@@ -1524,13 +1584,11 @@ struct Counts: View {
         if t.awake ?? false { words += ", and keeps the Mac awake" }
         if t.hand ?? false { words += ", started by you, until no session has work left" }
         let color = works ? Theme.accent : Theme.muted
-        return Image(systemName: "moon.stars")
+        let moon = Image(systemName: "moon.stars")
             .font(Theme.font(10, .bold))
             .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1.5)
-            .background(Capsule().fill(color.opacity(0.12)))
-            .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
+            .padding(.horizontal, fit.capsules ? 5 : 1)
+        return ground(moon, color, fit)
             .help(words)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(words)
@@ -1540,7 +1598,7 @@ struct Counts: View {
     /// green while connected, yellow while it comes or goes, red in error
     /// or while lockdown blocks the network, and muted when off. A click
     /// says the state in a notice; Plugins › VPN changes it.
-    private func vpnMark(_ v: VPNMark) -> some View {
+    private func vpnMark(_ v: VPNMark, _ fit: CountsFit) -> some View {
         let color: Color
         switch v.state {
         case "connected": color = Theme.done
@@ -1549,13 +1607,12 @@ struct Counts: View {
         default: color = (v.blocked ?? false) ? Theme.needs : Theme.muted
         }
         return Button { Task { _ = await store.input(":vpn") } } label: {
-            Image(systemName: v.state == "connected" ? "lock.shield" : "shield.slash")
+            let shield = Image(systemName: v.state == "connected" ? "lock.shield" : "shield.slash")
                 .font(Theme.font(10, .bold))
                 .foregroundStyle(color)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1.5)
-                .background(Capsule().fill(color.opacity(0.12)))
-                .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
+                .padding(.horizontal, fit.capsules ? 5 : 1)
+            ground(shield, color, fit)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(v.text)
@@ -1565,27 +1622,223 @@ struct Counts: View {
     /// A count of the sessions in some states, with their mark, which shows
     /// the first such session. It is drawn as a chip rather than a button, so
     /// the title bar puts no bezel round it; VoiceOver still finds a button.
-    private func count(_ tally: RowCounts.Tally, mark: Look, color: Color, label: String) -> some View {
-        let go = { if let first = tally.first { store.show(first) } }
-        return HStack(spacing: 3) {
-            StateMark(look: mark, size: 10)
-            // Two digits' width, so a tenth session doesn't push the others.
-            Text("\(tally.count)").font(Theme.font(10.5, .bold)).monospacedDigit()
-                .frame(minWidth: 12)
+    /// A look without zeros leaves a count of none out.
+    @ViewBuilder
+    private func count(_ tally: RowCounts.Tally, mark: Look, color: Color, label: String, _ fit: CountsFit) -> some View {
+        if fit.zeros || tally.count > 0 {
+            let go = { if let first = tally.first { store.show(first) } }
+            let none = tally.count == 0
+            let chip = HStack(spacing: fit.capsules ? 3 : 2) {
+                StateMark(look: mark, size: 10)
+                // Two digits' width in a capsule, so a tenth session doesn't
+                // push the others.
+                Text("\(tally.count)").font(Theme.font(10.5, .bold)).monospacedDigit()
+                    .frame(minWidth: fit.capsules ? 12 : nil)
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, fit.capsules ? 4 : 1)
+            ground(chip, color, fill: none ? 0.05 : 0.12, edge: none ? 0.15 : 0.4, fit)
+                .opacity(none ? 0.5 : 1)
+                .contentShape(Capsule())
+                .onTapGesture { go() }
+                .help("\(tally.count) \(label)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(tally.count) \(label)")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { go() }
         }
-        .foregroundStyle(color)
-        .padding(.horizontal, 4)
-        .padding(.vertical, 1.5)
-        .background(Capsule().fill(color.opacity(tally.count == 0 ? 0.05 : 0.12)))
-        .overlay(Capsule().strokeBorder(color.opacity(tally.count == 0 ? 0.15 : 0.4), lineWidth: 1))
-        .opacity(tally.count == 0 ? 0.5 : 1)
-        .contentShape(Capsule())
-        .onTapGesture { go() }
-        .help("\(tally.count) \(label)")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tally.count) \(label)")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { go() }
+    }
+}
+
+/// One look of the title bar's counts (Counts), from the fullest, which a
+/// bar with room to spare draws, to tighter ones for a narrow sidebar.
+/// Every look keeps the VPN's shield.
+struct CountsFit {
+    /// Each count, the moon and the shield in a capsule; without, a mark
+    /// and its number close together on the bar's own ground.
+    var capsules = true
+    /// A count of none, faint, which keeps the others in their places;
+    /// without, it goes, and the rest close up.
+    var zeros = true
+    /// The trod bot's moon, while it is within its hours.
+    var moon = true
+    /// The paused and the frozen, when there are any.
+    var held = true
+
+    /// The looks the bar tries, fullest first, giving up what tells least
+    /// before what tells more: the capsules, which tell nothing; the moon,
+    /// since a card the bot sent on still carries its boot print; the faint
+    /// zeros, which only keep places; then the paused and the frozen,
+    /// leaving who needs you, works and waits, and the shield. Widths
+    /// measured offscreen: the fullest is 209 points with a count of each
+    /// main state, 8 frozen, the moon and the shield, and 257 at most; the
+    /// tightest is at most 112, under the 118 a sidebar at its narrowest
+    /// leaves the counts.
+    static let looks = [
+        CountsFit(),
+        CountsFit(capsules: false),
+        CountsFit(capsules: false, moon: false),
+        CountsFit(capsules: false, zeros: false, moon: false),
+        CountsFit(capsules: false, zeros: false, moon: false, held: false),
+    ]
+}
+
+/// How wide the title bar lets the counts be: from the end of Irie's name
+/// to the sidebar's far edge, less the bar's gap between two items and its
+/// inset at that edge, 8 points each in macOS 14's compact bar. Measured
+/// in a bar drawn offscreen: a 319-point sidebar gives the counts 178
+/// points, 260 gives 119 and 420 gives 279; with the layout reversed, where
+/// a spacer comes before the name, 319 gives 239. Both ends are read off
+/// the window, so a longer name, wider window buttons or the layout
+/// reversed move them, and a drag of the sidebar's edge changes the room
+/// as it goes.
+@MainActor @Observable
+final class TitleBarRoom {
+    static let shared = TitleBarRoom()
+    /// The bar's gap between two items and its inset at the far edge, and a
+    /// point to spare for a half-point edge.
+    static let gaps: CGFloat = 17
+
+    /// From the sidebar's near edge to the end of the name, and the
+    /// sidebar's width, once both are laid out in one window.
+    private(set) var nameEnd: CGFloat?
+    private(set) var sidebarWidth: CGFloat?
+    @ObservationIgnored private weak var name: NSView?
+    @ObservationIgnored private weak var sidebar: NSView?
+
+    /// The counts' width, or nil before the window has laid both ends out,
+    /// or once the name read last has left the window on screen: counts
+    /// made afresh, as the layout reverses, wait for their own name rather
+    /// than pick a look by the bar the old name stood in.
+    var room: CGFloat? {
+        guard let n = nameEnd, let w = sidebarWidth, name?.window?.isVisible == true else { return nil }
+        return max(0, (w - n - Self.gaps).rounded(.down))
+    }
+
+    fileprivate func found(_ view: NSView, as part: Probe.Part) {
+        // Only a window on screen: one `--snapshot` drew before, ordered
+        // out but still holding its bar, tells too, and each word from it
+        // would undo the window's own.
+        guard view.window?.isVisible == true else { return }
+        switch part {
+        case .name:
+            // A name drawn afresh, as the layout reverses, may end
+            // elsewhere: until it is read, there is no room to go by.
+            if name !== view {
+                if name?.window?.isVisible != true { nameEnd = nil }
+                name = view
+            }
+        case .sidebar:
+            if sidebar !== view {
+                if sidebar?.window?.isVisible != true { sidebarWidth = nil }
+                sidebar = view
+            }
+        }
+        measure()
+    }
+
+    /// The counts changed look: the bar measures its items again at the run
+    /// loop's next turn, once SwiftUI has laid the row out anew, and again a
+    /// moment later in case its drawing came later still.
+    fileprivate func rowChanged() {
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in
+            MainActor.assumeIsolated { self?.remeasure() }
+        }
+        CFRunLoopWakeUp(CFRunLoopGetMain())
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            MainActor.assumeIsolated { self?.remeasure() }
+        }
+    }
+
+    /// Has the bar measure its items again. In the bar an item's size is
+    /// followed by itself, but an item the bar moved into its overflow
+    /// menu stays there, however small it gets, until it is measured
+    /// afresh, as the end of a drag that narrows the sidebar can leave the
+    /// counts: the bar lays out before the row hears of the new room. Found
+    /// offscreen, where nothing else brought it back; each item keeps its
+    /// size, so nothing else moves.
+    private func remeasure() {
+        guard let bar = (name?.window ?? WindowPanes.window)?.toolbar else { return }
+        for item in bar.items { item.view?.invalidateIntrinsicContentSize() }
+    }
+
+    /// Reads both ends off the window, when the name and the sidebar are in
+    /// the same one: `--snapshot` makes a window after another.
+    private func measure() {
+        guard let name, let sidebar, let window = name.window, window === sidebar.window else { return }
+        let n = name.convert(name.bounds, to: nil), s = sidebar.convert(sidebar.bounds, to: nil)
+        guard n.width > 0, s.width > 0 else { return }
+        let end = n.maxX - s.minX
+        if end != nameEnd { nameEnd = end }
+        if s.width != sidebarWidth { sidebarWidth = s.width }
+    }
+
+    /// Tells the room where its view lies: as it comes into a window, and
+    /// whenever it or a view holding it moves or changes size, as the bar
+    /// lays its items out and the sidebar's edge is dragged.
+    struct Probe: NSViewRepresentable {
+        enum Part { case name, sidebar }
+        let part: Part
+
+        func makeNSView(context _: Context) -> NSView { Edge(part: part) }
+        func updateNSView(_: NSView, context _: Context) {}
+
+        private final class Edge: NSView {
+            let part: Part
+            private var watching: [NSObjectProtocol] = []
+            private var told: NSSize?
+
+            init(part: Part) {
+                self.part = part
+                super.init(frame: .zero)
+            }
+
+            required init?(coder _: NSCoder) { nil }
+
+            override func hitTest(_: NSPoint) -> NSView? { nil }
+
+            override func viewDidMoveToWindow() {
+                super.viewDidMoveToWindow()
+                let centre = NotificationCenter.default
+                for w in watching { centre.removeObserver(w) }
+                watching = []
+                guard window != nil else { return }
+                // Each view up to the window's own: the bar moves the item
+                // that holds the name, and the split view the sidebar.
+                var up = superview
+                while let v = up {
+                    watching.append(centre.addObserver(forName: NSView.frameDidChangeNotification, object: v, queue: .main) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.tell() }
+                    })
+                    up = v.superview
+                }
+                tell()
+            }
+
+            override func setFrameSize(_ size: NSSize) {
+                super.setFrameSize(size)
+                // The bar sets an item's size again as it lays out, the
+                // same size or not: only a new one is news.
+                guard size != told else { return }
+                told = size
+                tell()
+            }
+
+            /// Once the bar or the split view has placed what holds it: at
+            /// the run loop's next turn, woken for it, since a report made
+            /// as the window lays out would otherwise wait for an event. A
+            /// block on the run loop rather than the main queue, which
+            /// `--snapshot`'s run loop never drains while it draws.
+            private func tell() {
+                RunLoop.main.perform(inModes: [.common]) { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        TitleBarRoom.shared.found(self, as: self.part)
+                    }
+                }
+                CFRunLoopWakeUp(CFRunLoopGetMain())
+            }
+        }
     }
 }
 
