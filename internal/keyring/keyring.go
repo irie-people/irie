@@ -121,16 +121,18 @@ func (k Keychain) run(stdin string, args ...string) ([]byte, int, error) {
 }
 
 func (k Keychain) find(name string) ([]byte, error) {
-	args := []string{"find-generic-password", "-s", Service, "-a", name, "-w"}
-	if k.Path != "" {
-		args = append(args, k.Path)
+	kc, err := k.keychain()
+	if err != nil {
+		return nil, err
 	}
-	out, code, err := k.run("", args...)
+	out, code, err := k.run("", "find-generic-password", "-s", Service, "-a", name, "-w", kc)
 	switch {
 	case code == notFound:
 		return nil, errNotFound
 	case err != nil:
-		return nil, err
+		// Locked where no one may be asked (36), not there (50), refused
+		// (51): the store can't be asked now, which is never a key lost.
+		return nil, fmt.Errorf("%w: %v", ErrAway, err)
 	}
 	return parse(string(out), "the Keychain's "+Service+": "+name)
 }
@@ -148,13 +150,14 @@ func (k Keychain) Key(name string) ([]byte, error) {
 	if !errors.Is(err, errNotFound) {
 		return key, err
 	}
-	written := hex.EncodeToString([]byte(hex.EncodeToString(fresh())))
-	line := fmt.Sprintf("add-generic-password -s %q -a %q -l %q -X %s", Service, name, Service+": "+name, written)
-	if k.Path != "" {
-		line += fmt.Sprintf(" %q", k.Path)
-	}
-	if _, code, err := k.run(line+"\n", "-i"); err != nil && code != duplicate {
+	kc, err := k.keychain()
+	if err != nil {
 		return nil, err
+	}
+	written := hex.EncodeToString([]byte(hex.EncodeToString(fresh())))
+	line := fmt.Sprintf("add-generic-password -s %q -a %q -l %q -X %s %q", Service, name, Service+": "+name, written, kc)
+	if _, code, err := k.run(line+"\n", "-i"); err != nil && code != duplicate {
+		return nil, fmt.Errorf("%w: %v", ErrAway, err)
 	}
 	key, err = k.find(name)
 	if errors.Is(err, errNotFound) {
