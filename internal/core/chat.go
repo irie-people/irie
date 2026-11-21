@@ -45,6 +45,12 @@ func (c *Core) chatService() *chat.Service {
 	return c.chat.sv
 }
 
+// chatListen hears every account's mentions and DMs as they come, while
+// the plugin is on, until ctx ends (docs/proposals/chat.md §4).
+func (c *Core) chatListen(ctx context.Context) {
+	c.chatService().Listen(ctx, func() bool { return c.cfg().ChatOn() })
+}
+
 // chatLive is how each account stands by the core's last look, for the
 // plugin's parts: it asks no service.
 func (c *Core) chatLive() []ipc.ChatAccount {

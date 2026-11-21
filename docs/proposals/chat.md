@@ -1,6 +1,6 @@
 # Proposal: Chat, a plugin that hooks Irie into team and community chat
 
-Date: 2026-11-21. Status: steps 2 and 3 of §8 built: the plugin with Discord and Slack, the drafts and the agents' rules; the Mac app's tab and live mentions follow. The owner asked for "a discord irie pluggin", then for it to be "like a generic plugin that hooks into things like discord and slack etc". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-21. Status: built, steps 2 to 5 of §8: the plugin with Discord and Slack, the drafts and the agents' rules, the Mac app's Chat tab, and mentions and DMs as they come. Notices through Israfil wait for him to land. The owner asked for "a discord irie pluggin", then for it to be "like a generic plugin that hooks into things like discord and slack etc". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 ## Goal
 
@@ -41,7 +41,7 @@ agents = "post"           # agents post here on their own, logged and rate-limit
 name = "#announcements"   # for you to read; Irie writes the name the channel had then
 ```
 
-`irie chat add discord [NAME]`, or Add Account in the Chat tab, adds one, and only once its token signs in: the core asks who the token is, and only then writes the table and keeps the token. Without a NAME it takes the bot's. The token comes on standard input, or is asked for without showing it on a terminal, never in an argument where `ps` shows it.
+`irie chat add discord [NAME]`, or Add Account in the Chat tab, adds one, and only once its token signs in: the core asks who the token is, and only then writes the table and keeps the token. Without a NAME it takes the bot's. The token comes on standard input, or is asked for without showing it on a terminal, or from a Keychain item the person keeps already (`--keychain SERVICE`), never in an argument where `ps` shows it.
 
 - **Discord:** a bot token from the person's application (Developer Portal › the application › Bot › Reset Token), its bot invited to their server with View Channels, Send Messages, Send Messages in Threads, Create Public Threads and Read Message History. Discord leaves message text empty for a bot without the **Message Content** intent, except in DMs to it, messages that mention it and its own (Bot › Privileged Gateway Intents). The core reads the application's flags at sign-in, and while the intent is off the tab and `irie chat read` say so once, above the messages, rather than showing them empty.
 - **Slack:** the person makes a Slack app from the manifest Irie prints (`irie chat add slack` prints it first), installs it to their workspace, and pastes the bot token, then, for mentions and DMs as they come, an app-level token with `connections:write`. The scopes the manifest asks for are what the plugin uses and no more (§3).
