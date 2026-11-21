@@ -5,6 +5,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/keyring"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -35,7 +37,7 @@ func (c *coreEnv) chainLog() ipc.ChainResult {
 
 // versionFile is where the chain keeps the version named, sealed.
 func (c *coreEnv) versionFile(name string) string {
-	return filepath.Join(c.paths.Chain(), "objects", strings.TrimPrefix(name, chain.Prefix)+chain.SealedExt)
+	return filepath.Join(c.paths.Chain(), "objects", strings.TrimPrefix(name, chain.Prefix)+".sealed")
 }
 
 func whats(r ipc.ChainResult) []string {
@@ -298,11 +300,11 @@ func TestATamperedOrCutShortVersionIsCaught(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := c.chainLog()
-		if len(r.Versions) != 2 || !strings.Contains(r.Problem, chain.Short(mid)) || !strings.Contains(r.Problem, "after it was written") {
+		if len(r.Versions) != 2 || !strings.Contains(r.Problem, chain.Short(mid)) || !strings.Contains(r.Problem, "after it was") {
 			t.Errorf("%s: log %q, problem %q", name, whats(r), r.Problem)
 		}
 		for _, do := range []string{ipc.ChainShow, ipc.ChainRestore} {
-			if err := c.call(ipc.OpChain, ipc.ChainArgs{Do: do, Version: mid}, nil); err == nil || !strings.Contains(err.Error(), "after it was written") {
+			if err := c.call(ipc.OpChain, ipc.ChainArgs{Do: do, Version: mid}, nil); err == nil || !strings.Contains(err.Error(), "after it was") {
 				t.Errorf("%s: %s %v", name, do, err)
 			}
 		}
@@ -457,15 +459,17 @@ func TestTheChainIsKeptInTheVault(t *testing.T) {
 	c.group(ipc.GroupArgs{Do: ipc.GroupNew, Name: "Steak", Sessions: []string{id["alpha"], id["beta"]}})
 	c.pin(id["alpha"], true)
 	r := c.chainLog()
-	if r.Vault != chain.KeptInFile || len(r.Versions) != 3 {
+	if r.Vault != keyring.KindFile || len(r.Versions) != 3 {
 		t.Fatalf("vault %q, versions %q", r.Vault, whats(r))
 	}
 	dir := c.paths.Chain()
 	if info, err := os.Stat(dir); err != nil || info.Mode().Perm() != 0o700 {
 		t.Errorf("the chain's folder: %v %v", info, err)
 	}
-	if info, err := os.Stat(filepath.Join(dir, chain.KeyFile)); err != nil || info.Mode().Perm() != 0o600 {
-		t.Errorf("the key file: %v %v", info, err)
+	for _, f := range []string{filepath.Join(dir, "key"), filepath.Join(c.paths.Keys(), "sidebar.key")} {
+		if info, err := os.Stat(f); err != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf("%s: %v %v", f, info, err)
+		}
 	}
 	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -477,21 +481,18 @@ func TestTheChainIsKeptInTheVault(t *testing.T) {
 				t.Errorf("%s holds %q", path, word)
 			}
 		}
-		if filepath.Dir(path) == filepath.Join(dir, "objects") && !strings.HasSuffix(path, chain.SealedExt) {
+		if filepath.Dir(path) == filepath.Join(dir, "objects") && !strings.HasSuffix(path, ".sealed") {
 			t.Errorf("%s: not a sealed record", path)
 		}
 		return nil
 	})
 
 	// Another key: no version opens, so the chain is locked, says so and
-	// writes nothing, while the action goes ahead; what it makes waits.
-	keyPath := filepath.Join(dir, chain.KeyFile)
+	// writes nothing, while the action goes ahead; what it makes waits. A
+	// test's Irie keeps the system's key in a file (IRIE_KEYCHAIN=off).
+	keyPath := filepath.Join(c.paths.Keys(), "sidebar.key")
 	good, _ := os.ReadFile(keyPath)
-	other := t.TempDir()
-	if _, err := chain.OpenVault(other, nil); err != nil {
-		t.Fatal(err)
-	}
-	wrong, _ := os.ReadFile(filepath.Join(other, chain.KeyFile))
+	wrong := []byte(strings.Repeat("ab", keyring.Size) + "\n")
 	os.WriteFile(keyPath, wrong, 0o600)
 	c.restartCore()
 	st := c.chainDo(ipc.ChainArgs{})
@@ -512,6 +513,9 @@ func TestTheChainIsKeptInTheVault(t *testing.T) {
 	}
 	if now, _ := os.ReadFile(keyPath); !bytes.Equal(now, wrong) {
 		t.Error("the key file changed while locked")
+	}
+	if dk, _ := os.ReadFile(filepath.Join(dir, "key")); len(dk) == 0 {
+		t.Error("the sealed data key went")
 	}
 
 	// The right key back: a chain op opens it again, with no restart, and
@@ -541,7 +545,7 @@ func TestTheChainIsKeptInTheVault(t *testing.T) {
 	if r := c.chainLog(); !slices.Equal(whats(r), []string{"the chain begins"}) {
 		t.Errorf("a new chain: %q", whats(r))
 	}
-	if old, _ := filepath.Glob(filepath.Join(aside, "objects", "*"+chain.SealedExt)); len(old) != 4 {
+	if old, _ := filepath.Glob(filepath.Join(aside, "objects", "*.sealed")); len(old) != 4 {
 		t.Errorf("the chain set aside holds %d versions", len(old))
 	}
 }
@@ -572,7 +576,7 @@ func TestAChainKeptBeforeTheVaultMovesIntoIt(t *testing.T) {
 	os.WriteFile(founding, []byte("left be\n"), 0o600)
 	c.up()
 	r := c.chainLog()
-	if r.Problem != "" || len(r.Versions) != 1 || r.Head != name || r.Vault != chain.KeptInFile {
+	if r.Problem != "" || len(r.Versions) != 1 || r.Head != name || r.Vault != keyring.KindFile {
 		t.Fatalf("after the move: %+v", r)
 	}
 	if got := c.chainDo(ipc.ChainArgs{Do: ipc.ChainShow, Version: "head"}).Raw; got != string(b) {
@@ -584,10 +588,101 @@ func TestAChainKeptBeforeTheVaultMovesIntoIt(t *testing.T) {
 			t.Errorf("%s stayed at the top", f)
 		}
 	}
-	if sealed, _ := filepath.Glob(filepath.Join(c.paths.Chain(), "objects", "*")); len(sealed) != 1 || !strings.HasSuffix(sealed[0], chain.SealedExt) {
+	if sealed, _ := filepath.Glob(filepath.Join(c.paths.Chain(), "objects", "*")); len(sealed) != 1 || !strings.HasSuffix(sealed[0], ".sealed") {
 		t.Errorf("objects %v", sealed)
 	}
 	if got, _ := os.ReadFile(founding); string(got) != "left be\n" {
 		t.Errorf("the founding chain was touched: %q", got)
+	}
+}
+
+// memKeys is a key store in memory, as a test's Keychain: it says when it
+// has no key, or can't be asked.
+type memKeys struct {
+	keys map[string][]byte
+	away bool
+}
+
+func (m *memKeys) Kind() string { return keyring.KindKeychain }
+func (m *memKeys) Find(name string) ([]byte, error) {
+	if m.away {
+		return nil, keyring.ErrAway
+	}
+	if k, ok := m.keys[name]; ok {
+		return k, nil
+	}
+	return nil, keyring.ErrNoKey
+}
+func (m *memKeys) Key(name string) ([]byte, error) {
+	if k, err := m.Find(name); !errors.Is(err, keyring.ErrNoKey) {
+		return k, err
+	}
+	m.keys[name] = bytes.Repeat([]byte{7}, keyring.Size)
+	return m.keys[name], nil
+}
+func (m *memKeys) Put(name string, key []byte) error {
+	if m.away {
+		return keyring.ErrAway
+	}
+	m.keys[name] = bytes.Clone(key)
+	return nil
+}
+
+// The system's key is made only while a chain has sealed nothing; one kept
+// in a file, as before there was a store, opens the chain and goes into the
+// store; a store that can't be asked is away, one that lost the key reads
+// as lost, and another key as wrong, each with nothing changed.
+func TestTheVaultsKeyIsNeverMadeOverWhatItSealed(t *testing.T) {
+	base := t.TempDir()
+	keysDir, dir := filepath.Join(base, "keys"), filepath.Join(base, "chain", "sidebar")
+	files := keyring.Files{Dir: keysDir}
+	v, why, err := openVault(chain.Store{Dir: dir}, files, keysDir)
+	if err != nil {
+		t.Fatalf("first open: %d %v", why, err)
+	}
+	store := chain.Store{Dir: dir, Vault: v}
+	name, err := store.Put([]byte(`{"n":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.SetHead(name)
+	fileKey, _ := files.Find(vaultAccount)
+
+	// A store comes: the file's key opens the chain and moves into it.
+	keys := &memKeys{keys: map[string][]byte{}}
+	if _, why, err := openVault(chain.Store{Dir: dir}, keys, keysDir); err != nil {
+		t.Fatalf("with a store: %d %v", why, err)
+	}
+	if !bytes.Equal(keys.keys[vaultAccount], fileKey) {
+		t.Error("the key did not go into the store")
+	}
+	if _, err := os.Stat(filepath.Join(keysDir, vaultAccount+".key")); !os.IsNotExist(err) {
+		t.Error("the key stayed in its file beside a store")
+	}
+
+	for what, tc := range map[string]struct {
+		keys keyring.Source
+		why  int
+	}{
+		"away":      {&memKeys{keys: map[string][]byte{vaultAccount: fileKey}, away: true}, lockAway},
+		"lost":      {&memKeys{keys: map[string][]byte{}}, lockGone},
+		"wrong key": {&memKeys{keys: map[string][]byte{vaultAccount: bytes.Repeat([]byte{9}, keyring.Size)}}, lockWrong},
+	} {
+		before, _ := os.ReadFile(filepath.Join(dir, "key"))
+		if _, why, err := openVault(chain.Store{Dir: dir}, tc.keys, keysDir); err == nil || why != tc.why {
+			t.Errorf("%s: %d %v, want %d", what, why, err, tc.why)
+		}
+		if after, _ := os.ReadFile(filepath.Join(dir, "key")); !bytes.Equal(before, after) {
+			t.Errorf("%s changed the data key", what)
+		}
+		if m := tc.keys.(*memKeys); what == "lost" && len(m.keys) != 0 {
+			t.Errorf("%s: a key was made over what the old one sealed", what)
+		}
+	}
+	// With IRIE_KEYCHAIN=off, a chain whose key the Keychain keeps is
+	// away, not lost.
+	t.Setenv("IRIE_KEYCHAIN", "off")
+	if _, why, err := openVault(chain.Store{Dir: dir}, keyring.Files{Dir: keysDir}, keysDir); why != lockAway || !strings.Contains(lockedWords(dir, why, err), "IRIE_KEYCHAIN=off") {
+		t.Errorf("off: %d %v", why, err)
 	}
 }

@@ -1,29 +1,12 @@
 package chain
 
-// The vault (docs/proposals/local-chain.md, step 2): a chain's versions
-// sealed at rest. Each record is AES-256-GCM (FIPS 197, NIST SP 800-38D)
-// under the vault's data key, with a fresh random 96-bit nonce that the
-// record carries (crypto/cipher's NewGCMWithRandomNonce), and the
-// version's name as additional data, so a record opens only under its own
-// name: one moved to another name, changed or cut short does not open.
-//
-// The data key is 32 random bytes, kept in the chain's key file, wrapped
-// in turn by a key the system keeps: the login Keychain on macOS, the
-// Secret Service on Linux. Where the system keeps none, the key file holds
-// the data key itself, readable by the user alone, until a passphrase
-// (Argon2id) can wrap it; and as soon as there is a store, the key goes
-// into it, so no key sits plain beside the data while the system can keep
-// one.
-
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,65 +14,55 @@ import (
 	"github.com/irie-people/irie/internal/filetx"
 )
 
-// KeySize is a vault key's size, in bytes: AES-256's.
-const KeySize = 32
+// A vault keeps a store's versions sealed on disk (docs/proposals/
+// local-chain.md, "The vault, at rest"). Each version is sealed with
+// AES-256-GCM under the store's data key, with a fresh random 96-bit
+// nonce, and bound to its name, so a sealed file put in another's place
+// doesn't open. The data key is sealed the same way under a key the system
+// keeps (internal/keyring), in the store's file "key". So no key sits
+// beside the data in plain, and nothing in the store reads without the
+// system's key.
+//
+// A vault hides what each version says. It doesn't hide how many versions
+// there are, or when their files were written.
 
-// SealedExt ends a sealed record's file name, as .json ends a plain one's.
-const SealedExt = ".sealed"
+// sealFormat is the first byte of every sealed record and of what each is
+// bound to, so that a form to come can be told apart.
+const sealFormat = 1
 
-// recordForm starts every sealed record: the form of what follows, the
-// nonce and the ciphertext with its tag.
-const recordForm = 1
-
-// KeyFile is the name of a chain's key file, beside HEAD.
-const KeyFile = "key"
-
-// Where a vault's data key is kept, as a key file says it.
+// The extensions of a version's file: sealed, or plain, as a store with no
+// vault keeps it.
 const (
-	KeptInKeychain = "keychain"       // wrapped by a key in the login Keychain
-	KeptInSecrets  = "secret-service" // wrapped by a key in the Secret Service
-	KeptInFile     = "file"           // the key file holds it, readable by you alone
+	sealedExt = ".sealed"
+	plainExt  = ".json"
 )
 
-// Errors a vault that does not open gives, each wrapped with what to do.
+// keyBound is what a sealed data key is bound to.
+const keyBound = "key"
+
 var (
-	// ErrSealed: a record did not open under the vault's key.
-	ErrSealed = errors.New("does not open under the vault's key: it was changed or cut short after it was written, or moved from another name, or the key is not the one it was sealed with")
-	// ErrWrongKey: the key does not open the chain: it is not the one its
-	// data key, or its versions, were sealed under.
-	ErrWrongKey = errors.New("the key does not open the chain: it is not the key it was sealed with")
-	// ErrKeyGone: the store keeps no key, but the data key was wrapped by one.
-	ErrKeyGone = errors.New("the key that opens the chain's key is gone from where it was kept")
-	// ErrNoStore: the store that keeps the key is off or out of reach now:
-	// IRIE_KEYCHAIN=off, a locked Keychain where no one may be asked, no
-	// login session, or a tool that fails. It is never a key lost.
-	ErrNoStore = errors.New("the key store that keeps the chain's key is off or out of reach now")
-	// ErrNoKey: a store keeps no key yet.
-	ErrNoKey = errors.New("no key")
+	// ErrLocked says that a version is sealed and the store has no vault
+	// open to read it, or that a store with a vault was asked to write
+	// with none.
+	ErrLocked = errors.New("chain: the vault is locked")
+	// ErrWrongKey says that the key given doesn't open the vault's data
+	// key, or that the data key is gone while sealed versions remain:
+	// they can't be read with that key.
+	ErrWrongKey = errors.New("chain: the key doesn't open the vault")
 )
 
-// Vault seals and opens a chain's records under its data key.
+// Vault seals a store's versions and opens them again.
 type Vault struct {
 	aead cipher.AEAD
-	// Kept says where its data key is kept: KeptInKeychain, KeptInSecrets
-	// or KeptInFile.
-	Kept string
 }
 
-// NewVault is a vault under key, KeySize bytes, kept as kept says.
-func NewVault(key []byte, kept string) (*Vault, error) {
-	aead, err := gcm(key)
-	if err != nil {
-		return nil, err
-	}
-	return &Vault{aead: aead, Kept: kept}, nil
-}
-
-// gcm is AES-256-GCM under key, each seal with a fresh random 96-bit
-// nonce at the front of what it gives.
+// gcm is AES-256-GCM under key, with a random nonce for each record, which
+// goes before it. NIST SP 800-38D (§8.3) allows a key at most 2^32 records
+// with random nonces; a store keeps a version for each change a person
+// makes.
 func gcm(key []byte) (cipher.AEAD, error) {
-	if len(key) != KeySize {
-		return nil, fmt.Errorf("chain: a vault key is %d bytes, not %d", KeySize, len(key))
+	if len(key) != 32 {
+		return nil, fmt.Errorf("chain: a vault's key is 32 bytes, not %d", len(key))
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -98,273 +71,144 @@ func gcm(key []byte) (cipher.AEAD, error) {
 	return cipher.NewGCMWithRandomNonce(block)
 }
 
-// recordAD is what a record is sealed with besides its version: its form
-// and the name of the version it holds.
-func recordAD(name string) []byte { return []byte("chain record 1\x00" + name) }
+// bound is what a record of what is bound to.
+func bound(what string) []byte { return append([]byte{sealFormat}, what...) }
 
-// Seal is version b, named name, sealed: the form, then the nonce, the
-// ciphertext and the tag.
-func (v *Vault) Seal(name string, b []byte) []byte {
-	return v.aead.Seal([]byte{recordForm}, nil, b, recordAD(name))
+// seal is b sealed under a and bound to what: the format's byte, then the
+// nonce, the ciphertext and its tag.
+func seal(a cipher.AEAD, b []byte, what string) []byte {
+	return a.Seal([]byte{sealFormat}, nil, b, bound(what))
 }
 
-// Open is the version sealed in rec, which must be the one named name.
-func (v *Vault) Open(name string, rec []byte) ([]byte, error) {
-	if len(rec) < 1+v.aead.Overhead() || rec[0] != recordForm {
-		return nil, ErrSealed
+// unseal opens a record seal made, and refuses one changed since, bound
+// to anything but what, or sealed under another key.
+func unseal(a cipher.AEAD, b []byte, what string) ([]byte, error) {
+	if len(b) == 0 || b[0] != sealFormat {
+		return nil, errors.New("chain: not a sealed record of a form this build reads")
 	}
-	b, err := v.aead.Open(nil, nil, rec[1:], recordAD(name))
-	if err != nil {
-		return nil, ErrSealed
-	}
-	return b, nil
+	return a.Open(nil, nil, b[1:], bound(what))
 }
 
-// keyFile is a chain's key file: its form, where the data key is kept,
-// the data key, wrapped (sealed under the store's key) or, kept in the
-// file, as it is, and a check, nothing sealed under the data key, which
-// opens only under that key; base64 each.
-type keyFile struct {
-	Form  int    `json:"form"`
-	Kept  string `json:"kept"`
-	Key   string `json:"key"`
-	Check string `json:"check"`
-}
-
-// keyAD is what a data key is wrapped with besides itself, and checkAD
-// what its check is sealed with.
-var (
-	keyAD   = []byte("chain key 1")
-	checkAD = []byte("chain key check 1")
-)
-
-// OpenVault opens the vault of the chain kept in dir, under the key store
-// the system keeps (nil for none). On the first open it makes the data
-// key: wrapped by the store's key, made too should the store have none,
-// or with no store, in the key file. A key file that holds the data key
-// itself gives it to the store as soon as there is one. A store that does
-// not open the data key, or that has lost its key or is not there, a key
-// that is not the one its check was sealed under, and a key file gone
-// from beside sealed records are each an error that says which
-// (ErrWrongKey, ErrKeyGone, ErrNoStore), and leave everything as it is.
-func OpenVault(dir string, store KeyStore) (*Vault, error) {
-	path := filepath.Join(dir, KeyFile)
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		// A new key would open none of the records sealed already.
-		if sealed, _ := filepath.Glob(filepath.Join(dir, "objects", "*"+SealedExt)); len(sealed) > 0 {
-			return nil, fmt.Errorf("%w: the key file %s is gone, and %d versions were sealed under its key", ErrKeyGone, path, len(sealed))
-		}
-		key := make([]byte, KeySize)
-		rand.Read(key)
-		kf, err := wrap(key, store)
-		if err != nil {
-			return nil, err
-		}
-		if err := writeKeyFile(path, kf); err != nil {
-			return nil, err
-		}
-		return NewVault(key, kf.Kept)
-	}
+// OpenVault opens the vault of the store in dir with kek, the key the
+// system keeps for it. A store with no vault yet gets one: a data key made
+// at random and sealed under kek. A kek that doesn't open the data key, or
+// a data key gone while sealed versions remain, is ErrWrongKey, and
+// nothing is replaced. A data key that locks nothing yet, sealed under a
+// key the system lost before anything was sealed, is made again.
+func OpenVault(dir string, kek []byte) (*Vault, error) {
+	wrap, err := gcm(kek)
 	if err != nil {
 		return nil, err
 	}
-	v, err := openKeyFile(path, raw, store)
-	if err != nil {
+	s := Store{Dir: dir}
+	path := s.keyFile()
+	b, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	return v, nil
-}
-
-// openKeyFile is the vault of key file raw, at path.
-func openKeyFile(path string, raw []byte, store KeyStore) (*Vault, error) {
-	var kf keyFile
-	if err := json.Unmarshal(raw, &kf); err != nil || kf.Form != 1 {
-		return nil, fmt.Errorf("the chain's key file %s does not read (%v), so it was left as it is", path, err)
+	sealed, serr := s.sealed()
+	if serr != nil {
+		return nil, serr
 	}
-	sealed, err := base64.StdEncoding.DecodeString(kf.Key)
-	if err != nil {
-		return nil, fmt.Errorf("the chain's key file %s does not read (%v), so it was left as it is", path, err)
-	}
-	if kf.Kept == KeptInFile {
-		if err := checkKey(sealed, kf.Check); err != nil {
-			return nil, fmt.Errorf("%w (the key file %s)", err, path)
-		}
-		if store != nil {
-			// Never a key plain beside the data while the system keeps keys.
-			next, err := wrap(sealed, store)
-			if err != nil {
-				return nil, fmt.Errorf("the chain's key could not go into %s, so it stays in %s: %w", store.Where(), path, err)
-			}
-			if err := writeKeyFile(path, next); err != nil {
-				return nil, err
-			}
-			kf = next
-		}
-		return NewVault(sealed, kf.Kept)
-	}
-	if store == nil || store.Kind() != kf.Kept {
-		return nil, fmt.Errorf("%w (%s)", ErrNoStore, keptWords(kf.Kept))
-	}
-	kek, err := store.Get()
 	switch {
-	case errors.Is(err, ErrNoKey):
-		return nil, fmt.Errorf("%w: %s", ErrKeyGone, store.Where())
-	case err != nil && !errors.Is(err, ErrNoStore):
-		return nil, fmt.Errorf("%w: %s: %v", ErrNoStore, store.Where(), err)
-	case err != nil:
+	case err == nil:
+		if dk, err := unseal(wrap, b, keyBound); err == nil {
+			return vault(dk)
+		}
+		if sealed {
+			return nil, ErrWrongKey
+		}
+		if err := os.Remove(path); err != nil {
+			return nil, err
+		}
+	case sealed:
+		return nil, fmt.Errorf("%w: its data key is missing", ErrWrongKey)
+	}
+	dk := make([]byte, 32)
+	rand.Read(dk) // never fails: it stops the program instead (crypto/rand)
+	if err := filetx.Create(path, seal(wrap, dk, keyBound), 0o600); err != nil {
 		return nil, err
 	}
-	aead, err := gcm(kek)
+	return vault(dk)
+}
+
+func vault(dk []byte) (*Vault, error) {
+	a, err := gcm(dk)
 	if err != nil {
 		return nil, err
 	}
-	key, err := aead.Open(nil, nil, sealed, keyAD)
-	if err != nil {
-		return nil, fmt.Errorf("%w (%s)", ErrWrongKey, store.Where())
-	}
-	if err := checkKey(key, kf.Check); err != nil {
-		return nil, fmt.Errorf("%w (%s)", err, store.Where())
-	}
-	return NewVault(key, kf.Kept)
+	return &Vault{aead: a}, nil
 }
 
-// checkKey says whether key is the one check was sealed under.
-func checkKey(key []byte, check string) error {
-	aead, err := gcm(key)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrWrongKey, err)
-	}
-	c, err := base64.StdEncoding.DecodeString(check)
-	if err != nil {
-		return ErrWrongKey
-	}
-	if _, err := aead.Open(nil, nil, c, checkAD); err != nil {
-		return ErrWrongKey
-	}
-	return nil
+// keyFile is the store's data key, sealed under the system's key.
+func (s Store) keyFile() string { return filepath.Join(s.Dir, "key") }
+
+// HasVault says whether the store has a vault: its versions are, or are
+// to be, sealed.
+func (s Store) HasVault() bool {
+	_, err := os.Stat(s.keyFile())
+	return err == nil
 }
 
-// keyCheck is the check of data key key: nothing, sealed under it.
-func keyCheck(key []byte) string {
-	aead, _ := gcm(key)
-	return base64.StdEncoding.EncodeToString(aead.Seal(nil, nil, nil, checkAD))
-}
-
-// wrap is the key file of data key key: wrapped by the store's key, which
-// it makes and gives the store should the store have none; with no store,
-// kept in the file.
-func wrap(key []byte, store KeyStore) (keyFile, error) {
-	if store == nil {
-		return keyFile{Form: 1, Kept: KeptInFile, Key: base64.StdEncoding.EncodeToString(key), Check: keyCheck(key)}, nil
-	}
-	// Only a store that plainly has no key gets a new one; one out of reach
-	// gets nothing, and no key is kept anywhere else meanwhile.
-	kek, err := store.Get()
-	if errors.Is(err, ErrNoKey) {
-		kek = make([]byte, KeySize)
-		rand.Read(kek)
-		err = store.Set(kek)
-	}
-	if err != nil && !errors.Is(err, ErrNoStore) {
-		err = fmt.Errorf("%w: %s: %v", ErrNoStore, store.Where(), err)
+// sealed says whether the store holds any sealed version.
+func (s Store) sealed() (bool, error) {
+	files, err := os.ReadDir(filepath.Join(s.Dir, "objects"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
 	}
 	if err != nil {
-		return keyFile{}, err
+		return false, err
 	}
-	aead, err := gcm(kek)
-	if err != nil {
-		return keyFile{}, err
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), sealedExt) {
+			return true, nil
+		}
 	}
-	return keyFile{Form: 1, Kept: store.Kind(), Key: base64.StdEncoding.EncodeToString(aead.Seal(nil, nil, key, keyAD)), Check: keyCheck(key)}, nil
+	return false, nil
 }
 
-func writeKeyFile(path string, kf keyFile) error {
-	b, err := json.Marshal(kf)
-	if err != nil {
-		return err
-	}
-	return filetx.WriteFile(path, append(b, '\n'), 0o600)
-}
-
-// keptWords says where a key file's kept names, for a person.
-func keptWords(kept string) string {
-	switch kept {
-	case KeptInKeychain:
-		return "the login Keychain"
-	case KeptInSecrets:
-		return "the Secret Service"
-	case KeptInFile:
-		return "the key file"
-	}
-	return fmt.Sprintf("%q", kept)
-}
-
-// MoveIn seals each plain version the store kept before it had a vault,
-// each checked against its name first: one that does not match stays as
-// it is, plain, out of the vault's reach, and is listed in stayed, never
-// sealed as though it were good. A version sealed already loses its plain
-// copy once the seal opens as the same bytes, so a move cut short goes on
-// where it stopped. moved counts the versions sealed.
-func (s Store) MoveIn() (moved int, stayed []string, err error) {
+// Seal moves the plain versions into the vault: each is sealed, and its
+// plain file removed once its sealed one is in place. A plain version
+// whose bytes don't match its name stays as it is, and the error names
+// it. It says how many versions it moved.
+func (s Store) Seal() (int, error) {
 	if s.Vault == nil {
-		return 0, nil, errors.New("chain: no vault to move the versions into")
+		return 0, ErrLocked
 	}
 	files, err := os.ReadDir(filepath.Join(s.Dir, "objects"))
-	if errors.Is(err, os.ErrNotExist) {
-		return 0, nil, nil
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
 	}
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
+	n := 0
+	var errs []error
 	for _, f := range files {
-		h, ok := strings.CutSuffix(f.Name(), ".json")
-		if !ok || !Valid(Prefix+h) {
-			continue
-		}
+		h, ok := strings.CutSuffix(f.Name(), plainExt)
 		name := Prefix + h
-		b, err := os.ReadFile(s.plain(name))
+		if !ok || !Valid(name) {
+			continue
+		}
+		path := s.object(name, plainExt)
+		b, err := os.ReadFile(path)
+		if err == nil && Name(b) != name {
+			err = fmt.Errorf("chain: version %s does not match its name, so it stays as it is", Short(name))
+		}
+		if err == nil {
+			_, err = s.Put(b)
+		}
+		if err == nil {
+			err = os.Remove(path)
+			// No writer takes its lock again: a store with a vault
+			// writes no plain version.
+			os.Remove(filetx.LockPath(path))
+		}
 		if err != nil {
-			return moved, stayed, err
-		}
-		if Name(b) != name {
-			stayed = append(stayed, name)
+			errs = append(errs, err)
 			continue
 		}
-		if _, err := os.Stat(s.object(name)); err == nil {
-			if got, err := s.Get(name); err != nil || !bytes.Equal(got, b) {
-				stayed = append(stayed, name)
-				continue
-			}
-		} else if err := filetx.WriteOnce(s.object(name), s.Vault.Seal(name, b), 0o600); err != nil {
-			return moved, stayed, err
-		}
-		if err := os.Remove(s.plain(name)); err != nil {
-			return moved, stayed, err
-		}
-		os.Remove(filetx.LockPath(s.plain(name)))
-		moved++
+		n++
 	}
-	return moved, stayed, nil
-}
-
-// AnyOpens reports whether any of the store's sealed records, up to max of
-// them, opens under its vault's key: none that does, with records there,
-// says the key is not the chain's, rather than that one was changed.
-func (s Store) AnyOpens(max int) (opens, any bool) {
-	files, _ := os.ReadDir(filepath.Join(s.Dir, "objects"))
-	for _, f := range files {
-		h, ok := strings.CutSuffix(f.Name(), SealedExt)
-		if !ok || !Valid(Prefix+h) || s.Vault == nil {
-			continue
-		}
-		if max--; max < 0 {
-			break
-		}
-		any = true
-		if _, err := s.Get(Prefix + h); err == nil {
-			return true, true
-		}
-	}
-	return false, any
+	return n, errors.Join(errs...)
 }

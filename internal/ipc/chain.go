@@ -54,7 +54,7 @@ type ChainResult struct {
 	Head  string `json:"head,omitempty"`
 	Count int    `json:"count"` // the versions kept
 	// Vault is where the key that opens the versions is kept: "keychain",
-	// "secret-service" or "file" (chain.KeptInKeychain and so on); "" while
+	// "secret-service" or "file" (keyring.KindKeychain and so on); "" while
 	// the vault is not open.
 	Vault    string         `json:"vault,omitempty"`
 	Problem  string         `json:"problem,omitempty"`

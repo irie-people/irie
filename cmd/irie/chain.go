@@ -15,6 +15,7 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/keyring"
 )
 
 // chainUsage is the part of ctlUsage for the sidebar's chain (DESIGN
@@ -306,13 +307,13 @@ func printChainRestore(w io.Writer, r ipc.ChainResult) error {
 func vaultWords(kept string) string {
 	const sealed = "Its versions are encrypted on disk (AES-256-GCM), under a key "
 	switch kept {
-	case chain.KeptInKeychain:
-		return sealed + "wrapped by a key in your login Keychain (" + brand.Name + " vault, sidebar)."
-	case chain.KeptInSecrets:
-		return sealed + "wrapped by a key in the Secret Service, your desktop's keyring."
-	case chain.KeptInFile:
-		return sealed + "kept in a file only you can read (key, mode 0600), as this computer has no key store: " +
-			"anyone who can read your files can read the chain. A passphrase (Argon2id) is to come."
+	case keyring.KindKeychain:
+		return sealed + "sealed in turn by a key in your login Keychain (" + brand.Name + " vault: sidebar)."
+	case keyring.KindSecrets:
+		return sealed + "sealed in turn by a key in the Secret Service, your desktop's keyring."
+	case keyring.KindFile:
+		return sealed + "sealed in turn by a key in a file only you can read (keys/sidebar.key in " + brand.Name + "'s state folder, mode 0600), " +
+			"as this computer has no key store: anyone who can read your files can read the chain. A passphrase (Argon2id) is to come."
 	}
 	return ""
 }

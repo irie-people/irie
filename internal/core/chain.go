@@ -38,6 +38,7 @@ import (
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/keyring"
 )
 
 // chainWait is how long a chain op waits for the versions still being
@@ -74,7 +75,7 @@ type orgChain struct {
 	head    string // the newest version's name; "" before the first
 	headOrg []byte // the canonical bytes of the newest version's organisation; nil when it could not be read
 	count   int    // the versions kept, as counted at the start and written since
-	// kept is where the vault's key is kept (chain.KeptInKeychain, and so
+	// kept is where the vault's key is kept (keyring.KindKeychain, and so
 	// on); locked, why the vault did not open, while nothing is read or
 	// written. broken says what was found wrong with what is on disk, such
 	// as a version that does not match its name; failed, why the last
@@ -285,9 +286,10 @@ func (c *Core) openChain(again bool) {
 	if err := settleFolder(store.Dir); err != nil {
 		broken = fmt.Sprintf("the chain kept before it had a folder of its own could not all move into %s: %v", store.Dir, err)
 	}
-	vault, err := openVault(store, chain.SystemKeyStore(vaultAccount))
+	keys := keyring.System(c.paths.Keys())
+	vault, why, err := openVault(store, keys, c.paths.Keys())
 	if err != nil {
-		locked = lockedWords(store.Dir, err)
+		locked = lockedWords(store.Dir, why, err)
 	} else {
 		store.Vault = vault
 		broken = c.moveIn(store)
@@ -315,7 +317,7 @@ func (c *Core) openChain(again bool) {
 	oc.store, oc.head, oc.headOrg, oc.locked, oc.broken, oc.ready = store, head, headOrg, locked, broken, true
 	oc.count, oc.kept = countVersions(store), ""
 	if vault != nil {
-		oc.kept = vault.Kept
+		oc.kept = keyring.Kind(keys)
 		// What waited while it was locked goes first, in its order.
 		oc.queue = append(oc.held, oc.queue...)
 		oc.held = nil
@@ -354,7 +356,7 @@ func settleFolder(dir string) error {
 		return err
 	}
 	var stayed []string
-	for _, name := range []string{"objects", "HEAD", "HEAD.bad", chain.KeyFile} {
+	for _, name := range []string{"objects", "HEAD", "HEAD.bad", "key"} {
 		from, to := filepath.Join(top, name), filepath.Join(dir, name)
 		if _, err := os.Lstat(from); err != nil {
 			continue
@@ -393,44 +395,126 @@ func (c *Core) retryChain() {
 	}
 }
 
-// openVault opens the chain's vault (chain.OpenVault), and checks that its
-// key is the chain's: should the newest version not open under it, nor
-// any other, it is not, and the vault is not opened.
-func openVault(store chain.Store, keys chain.KeyStore) (*chain.Vault, error) {
-	v, err := chain.OpenVault(store.Dir, keys)
-	if err != nil {
-		return nil, err
+// Why a chain's vault does not open (lockedWords).
+const (
+	lockOther = iota
+	lockAway  // the key store is off or out of reach now
+	lockWrong // the key does not open the chain
+	lockGone  // the key store plainly lost the key
+)
+
+// openVault opens the chain's vault in store's folder: the data key there,
+// sealed under the key the system keeps (internal/keyring), made on the
+// first open. The system's key is read, and made only while the chain has
+// sealed nothing: a key lost must read as lost, never be made again over
+// what the old one sealed. A store that keeps no key may have a chain
+// whose key went to a file in keysDir, as before there was a store: that
+// key opens it, and then goes into the store, so no key sits in a file
+// while the system can keep it. Should no version open under the key, the
+// newest or any other, the key is not the chain's. why says which, when it
+// fails.
+func openVault(store chain.Store, keys keyring.Source, keysDir string) (v *chain.Vault, why int, err error) {
+	var kek []byte
+	if f, ok := keys.(keyring.Finder); ok {
+		kek, err = f.Find(vaultAccount)
+	} else {
+		kek, err = keys.Key(vaultAccount)
+	}
+	var fromFile bool
+	if errors.Is(err, keyring.ErrNoKey) && keyring.Kind(keys) != keyring.KindFile {
+		if k, ferr := (keyring.Files{Dir: keysDir}).Find(vaultAccount); ferr == nil {
+			kek, err, fromFile = k, nil, true
+		}
+	}
+	switch {
+	case errors.Is(err, keyring.ErrNoKey):
+		if n := sealedVersions(store.Dir); n > 0 {
+			if keyring.Kind(keys) == keyring.KindFile && os.Getenv(brand.Env("KEYCHAIN")) == "off" {
+				return nil, lockAway, fmt.Errorf("%w: %d versions were sealed under a key the store keeps", keyring.ErrAway, n)
+			}
+			return nil, lockGone, fmt.Errorf("%s keeps no key for it, and %d versions were sealed under one", whereKeys(keys), n)
+		}
+		if kek, err = keys.Key(vaultAccount); err != nil {
+			return nil, lockAway, err
+		}
+	case errors.Is(err, keyring.ErrAway):
+		return nil, lockAway, err
+	case err != nil:
+		return nil, lockOther, err
+	}
+	if v, err = chain.OpenVault(store.Dir, kek); err != nil {
+		if errors.Is(err, chain.ErrWrongKey) {
+			if _, serr := os.Stat(filepath.Join(store.Dir, "key")); errors.Is(serr, os.ErrNotExist) {
+				return nil, lockGone, err
+			}
+			return nil, lockWrong, err
+		}
+		return nil, lockOther, err
 	}
 	store.Vault = v
 	if head, err := store.Head(); err == nil && head != "" {
-		if _, err := store.Get(head); errors.Is(err, chain.ErrSealed) {
-			if opens, any := store.AnyOpens(32); any && !opens {
-				return nil, fmt.Errorf("%w: none of the chain's versions opens under it", chain.ErrWrongKey)
-			}
+		if _, err := store.Get(head); err != nil && !opensAny(store) {
+			return nil, lockWrong, fmt.Errorf("%w: none of the chain's versions opens under it", chain.ErrWrongKey)
 		}
 	}
-	return v, nil
+	// The key kept in a file goes into the store, now that there is one;
+	// should the store not take it, it stays in its file, and opens the
+	// chain the next time too.
+	if p, ok := keys.(keyring.Putter); ok && fromFile {
+		if err := p.Put(vaultAccount, kek); err == nil {
+			os.Remove(filepath.Join(keysDir, vaultAccount+".key"))
+		}
+	}
+	return v, 0, nil
+}
+
+// sealedVersions counts the sealed versions in a chain's folder.
+func sealedVersions(dir string) int {
+	files, _ := filepath.Glob(filepath.Join(dir, "objects", "*.sealed"))
+	return len(files)
+}
+
+// opensAny reports whether any of the store's sealed versions, the first
+// 32, opens under its vault's key, or there are none to try.
+func opensAny(store chain.Store) bool {
+	files, _ := filepath.Glob(filepath.Join(store.Dir, "objects", "*.sealed"))
+	if len(files) == 0 {
+		return true
+	}
+	for i, f := range files {
+		if i == 32 {
+			break
+		}
+		h := strings.TrimSuffix(filepath.Base(f), ".sealed")
+		if _, err := store.Get(chain.Prefix + h); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// whereKeys says where keys keeps its keys, for a person.
+func whereKeys(keys keyring.Source) string {
+	switch keyring.Kind(keys) {
+	case keyring.KindKeychain:
+		return "the login Keychain"
+	case keyring.KindSecrets:
+		return "the Secret Service"
+	}
+	return "the key files"
 }
 
 // moveIn seals into the vault the versions the chain kept before it had
-// one (chain.Store.MoveIn), and says what did not move, or "".
+// one (chain.Store.Seal), and says what did not move, or "".
 func (c *Core) moveIn(store chain.Store) string {
-	moved, stayed, err := store.MoveIn()
+	moved, err := store.Seal()
 	if moved > 0 {
 		c.log.Info("chain: moved into the vault", "versions", moved)
 	}
-	var p string
-	if len(stayed) > 0 {
-		short := make([]string, len(stayed))
-		for i, n := range stayed {
-			short[i] = chain.Short(n)
-		}
-		p = fmt.Sprintf("%d versions kept before the vault did not match their names, so they stay out of it, plain: %s", len(stayed), strings.Join(short, ", "))
-	}
 	if err != nil {
-		p = joinProblems(p, fmt.Sprintf("the versions kept before the vault could not all move into it: %v", err))
+		return fmt.Sprintf("not every version kept before the vault moved into it, and those stay as they were: %v", err)
 	}
-	return p
+	return ""
 }
 
 // joinProblems is a and b, either of which may be "", as one.
@@ -439,23 +523,23 @@ func joinProblems(a, b string) string {
 }
 
 // lockedWords says why the chain in dir is locked and what to do, for
-// err, why its vault did not open. Whatever the cause, it stays locked,
-// one chain under one key, and never begins another by itself: a wrong
-// key fails loudly, and the key may come back. A store off or out of
-// reach is waited for; a wrong key or one gone is the person's to settle,
-// so the words say how to set the chain aside by hand.
-func lockedWords(dir string, err error) string {
+// err, why its vault did not open, and why, its cause. Whatever the cause,
+// it stays locked, one chain under one key, and never begins another by
+// itself: a wrong key fails loudly, and the key may come back. A store off
+// or out of reach is waited for; a wrong key or one gone is the person's
+// to settle, so the words say how to set the chain aside by hand.
+func lockedWords(dir string, why int, err error) string {
 	aside := fmt.Sprintf("to begin a new chain instead, move %s aside (its versions stay there) and run `%s ctl chain`", dir, brand.Slug)
-	switch {
-	case errors.Is(err, chain.ErrNoStore):
-		why := "the key store is off or out of reach now"
+	switch why {
+	case lockAway:
+		what := "the key store is off or out of reach now"
 		if os.Getenv(brand.Env("KEYCHAIN")) == "off" {
-			why = brand.Env("KEYCHAIN") + "=off turns the Keychain off"
+			what = brand.Env("KEYCHAIN") + "=off turns the Keychain off"
 		}
-		return fmt.Sprintf("%s (%v). It opens again once the store is back: `%s ctl chain` asks", why, err, brand.Slug)
-	case errors.Is(err, chain.ErrWrongKey):
+		return fmt.Sprintf("%s (%v). It opens again once the store is back: `%s ctl chain` asks", what, err, brand.Slug)
+	case lockWrong:
 		return fmt.Sprintf("this key does not open these versions (%v). Nothing on disk was changed; %s", err, aside)
-	case errors.Is(err, chain.ErrKeyGone):
+	case lockGone:
 		return fmt.Sprintf("the key store lost the key (%v), so the history reads again only if a backup of the Keychain brings the key back. Nothing on disk was changed; %s", err, aside)
 	}
 	return err.Error()
@@ -466,7 +550,7 @@ func lockedWords(dir string, err error) string {
 func countVersions(store chain.Store) int {
 	ext := ".json"
 	if store.Vault != nil {
-		ext = chain.SealedExt
+		ext = ".sealed"
 	}
 	files, _ := os.ReadDir(filepath.Join(store.Dir, "objects"))
 	n := 0

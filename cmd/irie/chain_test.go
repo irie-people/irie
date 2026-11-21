@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/keyring"
 )
 
 func TestChainLogAndShowRead(t *testing.T) {
@@ -58,9 +58,9 @@ func TestChainLogAndShowRead(t *testing.T) {
 // when the computer keeps no keys, so the key is in a file.
 func TestChainStatusSaysWhereTheKeyIs(t *testing.T) {
 	for kept, want := range map[string]string{
-		chain.KeptInKeychain: "login Keychain",
-		chain.KeptInSecrets:  "Secret Service",
-		chain.KeptInFile:     "this computer has no key store: anyone who can read your files can read the chain",
+		keyring.KindKeychain: "login Keychain",
+		keyring.KindSecrets:  "Secret Service",
+		keyring.KindFile:     "this computer has no key store: anyone who can read your files can read the chain",
 	} {
 		var b strings.Builder
 		printChainStatus(&b, ipc.ChainResult{Dir: "/home/alice/.local/state/irie/chain", Head: "sha512:00", Count: 1, Vault: kept})
