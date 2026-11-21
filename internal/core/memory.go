@@ -196,6 +196,7 @@ func (c *Core) headerNow() ipc.Header {
 	h.VPN = c.vpnHeader(time.Now())
 	h.Boost = c.boostHeader(time.Now())
 	h.Theme = c.appColors
+	h.Zen = c.zenHeader()
 	return h
 }
 
