@@ -165,6 +165,10 @@ type ChatAccount struct {
 	Hidden bool    `json:"hidden,omitempty"`
 	Fix    string  `json:"fix,omitempty"`
 	Can    ChatCan `json:"can"`
+	// Listening says the core hears its mentions and DMs as they come;
+	// Deaf says why it doesn't, when it tried.
+	Listening bool   `json:"listening,omitempty"`
+	Deaf      string `json:"deaf,omitempty"`
 }
 
 // ChatCan is what a service has, so a client offers only that.

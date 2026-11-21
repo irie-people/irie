@@ -1,6 +1,6 @@
 # Proposal: Chat, a plugin that hooks Irie into team and community chat
 
-Date: 2026-11-21. Status: steps 2 and 3 of §8 built: the plugin with Discord and Slack, the drafts and the agents' rules; the Mac app's tab and live mentions follow. The owner asked for "a discord irie pluggin", then for it to be "like a generic plugin that hooks into things like discord and slack etc". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-21. Status: built, steps 2 to 5 of §8: the plugin with Discord and Slack, the drafts and the agents' rules, the Mac app's Chat tab, and mentions and DMs as they come. Notices through Israfil wait for him to land. The owner asked for "a discord irie pluggin", then for it to be "like a generic plugin that hooks into things like discord and slack etc". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 ## Goal
 
