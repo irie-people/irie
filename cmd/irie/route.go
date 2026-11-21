@@ -323,6 +323,7 @@ func ctlBench(args []string) error {
 	runs := fs.Int("runs", 0, "how many sessions run the task; default bench.runs")
 	judge := fs.String("judge", "", "the profile that judges them; default bench.judge")
 	from := fs.String("from", "", "a git repo, on the machine the runs run on, whose last commit each run and the judge start from, in a copy of their own")
+	timeout := fs.Duration("timeout", 0, "how long the runs may work, such as 6h, before the ones still at work are stopped and judged as they stand; default bench.timeout")
 	wait := fs.Bool("wait", false, "wait until the bench is judged, and print the verdict")
 	asJSON := fs.Bool("json", false, "print as JSON")
 	if err := fs.Parse(args); err != nil {
@@ -363,7 +364,7 @@ func ctlBench(args []string) error {
 	if err != nil {
 		return fmt.Errorf("%v\n%s", err, irie.BenchUsage)
 	}
-	a.Runs, a.Judge, a.From = *runs, strings.TrimPrefix(*judge, "+"), *from
+	a.Runs, a.Judge, a.From, a.Timeout = *runs, strings.TrimPrefix(*judge, "+"), *from, *timeout
 	var r ipc.BenchResult
 	// Its runs start one after another, and the first may load a local
 	// model, which can take minutes.
@@ -419,6 +420,19 @@ func printBench(w io.Writer, b ipc.Bench) {
 	fmt.Fprintf(w, "bench %s: %s, +%s, %s work\n", b.ID, b.State, b.Profile, b.Class)
 	if b.From != "" {
 		fmt.Fprintf(w, "  from   %s, a copy each\n", b.From)
+	}
+	stopped := 0
+	for _, r := range b.Runs {
+		if r.Stopped {
+			stopped++
+		}
+	}
+	if b.Timeout > 0 {
+		fmt.Fprintf(w, "  limit  %s", b.Timeout)
+		if stopped > 0 {
+			fmt.Fprintf(w, "; %d of %d runs were stopped at it", stopped, len(b.Runs))
+		}
+		fmt.Fprintln(w)
 	}
 	for i, r := range b.Runs {
 		score := "-"

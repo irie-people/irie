@@ -534,7 +534,7 @@ type Bench struct {
 	Runs    int           `toml:"runs"`    // how many sessions do the task
 	Judge   string        `toml:"judge"`   // the profile that judges them and makes the result
 	Pass    int           `toml:"pass"`    // a run scored this or more, of 100, is rated good
-	Timeout time.Duration `toml:"timeout"` // a run still at work after this is stopped and judged as it stands
+	Timeout time.Duration `toml:"timeout"` // a run still at work after this is stopped and judged as it stands, unless its bench has its own (ctl bench --timeout)
 	Rules   int           `toml:"rules"`   // the most rules a playbook keeps
 	// Close closes a bench's runs and judge once its verdict is in: they
 	// go to the history, and the bench keeps their scores.

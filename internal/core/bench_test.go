@@ -12,6 +12,7 @@ import (
 
 	irie "github.com/irie-people/irie/core"
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
@@ -450,5 +451,51 @@ func TestBenchNumbers(t *testing.T) {
 	c.benches.all = nil
 	if got := c.nextSeq(); got != 1 {
 		t.Errorf("the first bench is %d, want 1", got)
+	}
+}
+
+// A bench keeps the timeout it got, its own or else bench.timeout, so its
+// results say how long its runs had, as a local model's can need hours
+// where Opus's need minutes. One under a minute is refused.
+func TestABenchKeepsItsTimeout(t *testing.T) {
+	say := filepath.Join(t.TempDir(), "verdict.md")
+	verdict := "```json\n" + `{"runs": [{"run": 1, "score": 80, "missed": "no doc comment"}], "final": "run 1, in my folder", "playbook": ["Test every case the task names."]}` + "\n```\n"
+	if err := os.WriteFile(say, []byte(verdict), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := setupWith(t, benching(t, say, `timeout = "90m"`))
+	task := "prompt,write:out.txt,stop\nfix the typo in README"
+	if err := c.call("bench", ipc.BenchArgs{Task: task, Profile: "cheap", Runs: 1, Timeout: 10 * time.Second}, nil); code(err) != ipc.CodeBadArgs {
+		t.Errorf("a 10s bench = %v, want it refused", err)
+	}
+	for _, x := range []struct{ asked, want time.Duration }{{0, 90 * time.Minute}, {6 * time.Hour, 6 * time.Hour}} {
+		var r ipc.BenchResult
+		if err := c.call("bench", ipc.BenchArgs{Task: task, Profile: "cheap", Runs: 1, Timeout: x.asked}, &r); err != nil {
+			t.Fatal(err)
+		}
+		if r.Bench.Timeout != x.want {
+			t.Errorf("a bench asked for %v started with %v, want %v", x.asked, r.Bench.Timeout, x.want)
+		}
+		if done := c.waitBench(r.Bench.ID); done.State != ipc.BenchDone || done.Timeout != x.want {
+			t.Errorf("a bench asked for %v ended %s with %v, want done with %v", x.asked, done.State, done.Timeout, x.want)
+		}
+	}
+}
+
+// A run at work past bench.timeout goes on until its bench's own timeout;
+// a bench kept before benches had their own goes by bench.timeout.
+func TestARunWorksUntilItsBenchsTimeout(t *testing.T) {
+	c := &Core{sessions: map[string]*session{"s1": {id: "s1"}}}
+	c.useConfig(config.Default())
+	now := time.Now()
+	b := &benchFile{Bench: ipc.Bench{
+		ID: "b1", State: ipc.BenchRunning, Started: now.Add(-90 * time.Minute), Timeout: 6 * time.Hour,
+		Runs: []ipc.BenchRun{{Session: "s1"}},
+	}}
+	if c.stepRuns(b, now) || b.Runs[0].Stopped {
+		t.Errorf("90 minutes into a 6h bench, its run was stopped: %+v", b.Runs[0])
+	}
+	if got, want := c.benchLimit(&benchFile{}), config.Default().Bench.Timeout; got != want {
+		t.Errorf("a bench with no timeout of its own has %v, want bench.timeout's %v", got, want)
 	}
 }
