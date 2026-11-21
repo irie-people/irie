@@ -16,12 +16,14 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-// Format names the version document's form, version 1.
-const Format = "irie-zen/1"
+// Format names the version document's form, version 1: "irie-zen/1",
+// under the product's own name (internal/brand).
+const Format = brand.Slug + "-zen/1"
 
 // Layouts are zen's layouts, in the order the apps list them.
 var Layouts = []string{"centred", "edge", "watch"}

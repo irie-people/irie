@@ -101,12 +101,14 @@ func TestAVersionsBytesAndNameStayPut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"created":"2026-11-21T18:04:05Z","format":"irie-zen/1","why":"Your zen as it was",` +
+	want := `{"created":"2026-11-21T18:04:05Z","format":"` + Format + `","why":"Your zen as it was",` +
 		`"zen":{"breaks":0,"columns":100,"full_screen":true,"gentle":true,"layout":"centred","night":true,"text_size":0}}`
 	if string(b) != want {
 		t.Errorf("bytes:\n%s\nwant\n%s", b, want)
 	}
-	if got := chain.Name(b); got != pinnedName {
+	// The name is pinned under the product's own name; a copy under
+	// another (internal/brand) writes another format, so another name.
+	if got := chain.Name(b); Format == "irie-zen/1" && got != pinnedName {
 		t.Errorf("name: %s", got)
 	}
 }
