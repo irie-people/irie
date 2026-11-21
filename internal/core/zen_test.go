@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -438,6 +439,65 @@ func TestZenEndsOnceTheAppIsGoneAWhile(t *testing.T) {
 	c.moment(now.Add(zenGone), 0)
 	if c.zen.on || x.zenNote != zen.LeftNote() {
 		t.Errorf("zen on %v, note %q", c.zen.on, x.zenNote)
+	}
+}
+
+// Each client holds a zen of its own: the app's "off", which it says at
+// each new selection outside zen, never ends the sidebar's, and zen ends
+// once the last client leaves it.
+func TestEachClientHoldsItsOwnZen(t *testing.T) {
+	c := zenCore(t, t.TempDir())
+	a, b := agentSession(c, "s1"), agentSession(c, "s2")
+	r := c.zenDo(t, ipc.ZenArgs{On: on(true), Client: ipc.ZenSidebar, Session: "s1"})
+	if !r.Zen.On || !slices.Equal(r.Zen.Clients, []string{ipc.ZenSidebar}) || a.zenNote != zen.GentleNote() {
+		t.Fatalf("the sidebar's zen: %+v, note %q", r.Zen, a.zenNote)
+	}
+	if r := c.zenDo(t, ipc.ZenArgs{On: on(false), Session: "s2"}); !r.Zen.On || c.zen.session != "s1" {
+		t.Fatalf("the app's off ended the sidebar's zen: %+v", r.Zen)
+	}
+	r = c.zenDo(t, ipc.ZenArgs{On: on(true), Client: ipc.ZenApp, Session: "s2"})
+	if !slices.Equal(r.Zen.Clients, []string{ipc.ZenApp, ipc.ZenSidebar}) || c.zen.session != "s2" || b.zenNote != zen.GentleNote() {
+		t.Fatalf("both in zen: %+v, session %s", r.Zen, c.zen.session)
+	}
+	c.zenDo(t, ipc.ZenArgs{On: on(false), Client: ipc.ZenSidebar})
+	if !c.zen.on || c.zen.session != "s2" {
+		t.Fatalf("the app's zen after the sidebar left: on %v, session %s", c.zen.on, c.zen.session)
+	}
+	a.zenNote, b.zenNote = "", ""
+	if r := c.zenDo(t, ipc.ZenArgs{On: on(false)}); r.Zen.On || r.Zen.Clients != nil || a.zenNote != zen.LeftNote() || b.zenNote != zen.LeftNote() {
+		t.Errorf("zen after the last left: %+v, notes %q %q", r.Zen, a.zenNote, b.zenNote)
+	}
+	if _, err := c.zenOp(ipc.ZenArgs{On: on(true), Client: "watch"}); !hasCode(err, ipc.CodeBadArgs) {
+		t.Errorf("an unknown client: %v", err)
+	}
+}
+
+// A client other than the app renews its zen; one that stops saying so
+// lapses, and a core that restarts keeps it until then.
+func TestAClientsZenLapsesUnlessRenewed(t *testing.T) {
+	home := t.TempDir()
+	c := zenCore(t, home)
+	agentSession(c, "s1")
+	c.zenDo(t, ipc.ZenArgs{On: on(true), Client: ipc.ZenSidebar, Session: "s1"})
+	again := zenCore(t, home)
+	if r := again.zenDo(t, ipc.ZenArgs{}); !r.Zen.On || !slices.Equal(r.Zen.Clients, []string{ipc.ZenSidebar}) || again.zen.session != "s1" {
+		t.Fatalf("after a restart: %+v", r.Zen)
+	}
+	said := c.zen.holds[ipc.ZenSidebar].Said
+	c.moment(said.Add(ipc.ZenRenew), 0)
+	if !c.zen.on {
+		t.Fatal("zen lapsed within a renewal")
+	}
+	c.mu.Lock()
+	c.zenShow(true, ipc.ZenSidebar, "s1", 0, said.Add(90*time.Second))
+	c.mu.Unlock()
+	c.moment(said.Add(3*time.Minute), 0)
+	if !c.zen.on {
+		t.Fatal("a renewed zen lapsed")
+	}
+	c.moment(said.Add(90*time.Second+ipc.ZenLapse), 0)
+	if c.zen.on {
+		t.Error("zen stayed on once the sidebar stopped saying so")
 	}
 }
 
