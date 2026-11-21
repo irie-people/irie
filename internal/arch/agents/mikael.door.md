@@ -55,6 +55,12 @@ rules:
   - Bash(* ctl send*)
   - Bash(* ctl continue*)
   - Bash(* ctl move*)
+  # Raguel's council: a session started, and a plan's jot (DESIGN §4.11),
+  # by the op's name or his
+  - Bash(* ctl council convene*)
+  - Bash(* ctl council yes*)
+  - Bash(* ctl ragu* convene*)
+  - Bash(* ctl ragu* yes*)
   - Bash(* remote pair*)
   - Bash(* peer add*)
 ---
