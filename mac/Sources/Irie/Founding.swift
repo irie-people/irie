@@ -1,13 +1,14 @@
 import AppKit
 import SwiftUI
 
-// The right sidebar's Founding tab (DESIGN §4.17): the Declaration of
-// Independence, the Constitution and the Bill of Rights, word for word as
-// the founding plugin's core op gives them, with a search that finds a
-// passage whatever its spelling. A pane of the app's own view, which shows
-// while the founding plugin is on (PluginPanes.swift), drawn from Roots'
-// parts: a segmented choice, a field, the text in the app's type, notes
-// muted (components.md).
+// The right sidebar's Charters tab (DESIGN §4.17): texts of rights, from
+// Magna Carta to the Privacy Act, word for word as the founding plugin's
+// core op gives them, with a search that finds a passage whatever its
+// spelling, and under each text's title the links that say how it bears on
+// the texts before it and which later texts drew on it: the edges of the
+// graph the chain carries. A pane of the app's own view, which shows while
+// the founding plugin is on (PluginPanes.swift), drawn from Roots' parts: a
+// choice, a field, the text in the app's type, notes muted (components.md).
 
 // MARK: Wire
 
@@ -29,17 +30,25 @@ struct FoundingDoc: Decodable, Equatable, Identifiable {
     var about: String
     var sha512: String
     var blocks: [FoundingBlock]
+    /// Its short name, the date it is of (RFC 3339's date, or a year) and
+    /// its kind, as the core gives them; an older core gives none.
+    var short: String?
+    var when: String?
+    var kind: String?
 
     /// Its name in the tab's choice.
-    var short: String {
-        switch id {
-        case "declaration": return "Declaration"
-        case "constitution": return "Constitution"
-        case "rights": return "Bill of Rights"
-        case "foia": return "FOIA"
-        default: return title
-        }
-    }
+    var label: String { short ?? title }
+    /// The year it is of.
+    var year: String { String((when ?? "").prefix(4)) }
+}
+
+/// How one text bears on an earlier one: an edge of the graph, from the
+/// later text back to the one it grew from, with a sentence saying why.
+struct FoundingLink: Decodable, Equatable {
+    var from: String
+    var to: String
+    var how: String
+    var why: String
 }
 
 struct FoundingHit: Decodable, Equatable {
@@ -51,6 +60,7 @@ struct FoundingHit: Decodable, Equatable {
 struct FoundingResult: Decodable {
     var docs: [FoundingDoc]?
     var found: [FoundingHit]?
+    var links: [FoundingLink]?
     var chain: FoundingChainInfo?
 }
 
@@ -61,13 +71,15 @@ struct FoundingChainInfo: Decodable, Equatable {
     var head: String?
     var created: String?
     var versions: Int
+    var texts: Int?
+    var links: Int?
     var verified: Bool
     var problem: String?
 }
 
 // MARK: The model
 
-/// The Founding tab's state: the documents, read once, the one on show,
+/// The Charters tab's state: the documents, read once, the one on show,
 /// and what the search box found, which the core works out.
 @MainActor
 @Observable
@@ -79,6 +91,8 @@ final class FoundingModel {
     }
 
     private(set) var docs: [FoundingDoc] = []
+    /// The links between the documents, the graph's edges.
+    private(set) var links: [FoundingLink] = []
     /// The document on show, by its id.
     var showing = "declaration"
     /// The words in the search box.
@@ -104,6 +118,12 @@ final class FoundingModel {
     var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     func count(_ id: String) -> Int { hits.filter { $0.doc == id }.count }
+    /// The links from a document back to earlier texts, and from later
+    /// texts to it.
+    func linksFrom(_ id: String) -> [FoundingLink] { links.filter { $0.from == id } }
+    func linksTo(_ id: String) -> [FoundingLink] { links.filter { $0.to == id } }
+    /// A document's short name, by its id.
+    func label(_ id: String) -> String { docs.first { $0.id == id }?.label ?? id }
 
     private func call(_ find: String?) async throws -> FoundingResult {
         do {
@@ -122,6 +142,7 @@ final class FoundingModel {
         do {
             let r = try await call(nil)
             docs = r.docs ?? []
+            links = r.links ?? []
             chain = r.chain
             loaded = true
             problem = nil
@@ -170,10 +191,15 @@ final class FoundingModel {
         isFixture = true
         loaded = true
         docs = [
+            FoundingDoc(id: "magna-carta", title: "Magna Carta",
+                        about: "William Sharp McKechnie’s translation of the charter King John granted at Runnymede in 1215.", sha512: String(repeating: "b77ca594", count: 16),
+                        blocks: [FoundingBlock(kind: "text", text: "39. No freeman shall be taken or imprisoned or disseised or exiled or in any way destroyed, nor will we go upon him nor send upon him, except by the lawful judgment of his peers or by the law of the land.")],
+                        short: "Magna Carta", when: "1215-06-15", kind: "charter"),
             FoundingDoc(id: "declaration", title: "The Declaration of Independence",
                         about: "The National Archives’ transcription of the engrossed parchment.", sha512: String(repeating: "7447f938", count: 16),
                         blocks: [FoundingBlock(kind: "text", text: "In Congress, July 4, 1776"),
-                                 FoundingBlock(kind: "text", text: "**The unanimous Declaration of the thirteen united States of America,** When in the Course of human events, it becomes necessary for one people to dissolve the political bands which have connected them with another…")]),
+                                 FoundingBlock(kind: "text", text: "**The unanimous Declaration of the thirteen united States of America,** When in the Course of human events, it becomes necessary for one people to dissolve the political bands which have connected them with another…")],
+                        short: "Declaration", when: "1776-07-04", kind: "declaration"),
             FoundingDoc(id: "constitution", title: "The Constitution of the United States",
                         about: "The National Archives’ transcription of the Constitution as Jacob Shallus inscribed it on parchment in 1787, and of every amendment since.", sha512: String(repeating: "1e2a63f6", count: 16),
                         blocks: [FoundingBlock(kind: "h2", text: "Preamble"),
@@ -182,18 +208,31 @@ final class FoundingModel {
                                  FoundingBlock(kind: "h3", text: "Section. 1."),
                                  FoundingBlock(kind: "text", text: "All legislative Powers herein granted shall be vested in a Congress of the United States, which shall consist of a Senate and House of Representatives."),
                                  FoundingBlock(kind: "h3", text: "Section. 2."),
-                                 FoundingBlock(kind: "text", text: "The House of Representatives shall chuse their Speaker and other Officers; and shall have the sole Power of Impeachment.")]),
+                                 FoundingBlock(kind: "text", text: "The House of Representatives shall chuse their Speaker and other Officers; and shall have the sole Power of Impeachment.")],
+                        short: "Constitution", when: "1787-09-17", kind: "constitution"),
             FoundingDoc(id: "rights", title: "The Bill of Rights",
                         about: "The first ten amendments to the Constitution, ratified on December 15, 1791.", sha512: String(repeating: "03a89a22", count: 16),
                         blocks: [FoundingBlock(kind: "h3", text: "Amendment I"),
-                                 FoundingBlock(kind: "text", text: "Congress shall make no law respecting an establishment of religion, or prohibiting the free exercise thereof; or abridging the freedom of speech, or of the press; or the right of the people peaceably to assemble, and to petition the Government for a redress of grievances.")]),
+                                 FoundingBlock(kind: "text", text: "Congress shall make no law respecting an establishment of religion, or prohibiting the free exercise thereof; or abridging the freedom of speech, or of the press; or the right of the people peaceably to assemble, and to petition the Government for a redress of grievances.")],
+                        short: "Bill of Rights", when: "1791-12-15", kind: "amendments"),
         ]
         docs.append(FoundingDoc(id: "foia", title: "The Freedom of Information Act",
                                 about: "5 U.S.C. § 552, word for word as the United States Code sets it out.", sha512: String(repeating: "f18fc8dc", count: 16),
                                 blocks: [FoundingBlock(kind: "h2", text: "§ 552. Public information; agency rules, opinions, orders, records, and proceedings"),
-                                         FoundingBlock(kind: "text", text: "(a) Each agency shall make available to the public information as follows:")]))
-        chain = FoundingChainInfo(folder: "~/.local/state/\(Brand.slug)/chain/founding", head: "sha512:" + String(repeating: "9c1e40b7", count: 16),
-                                  created: "2026-11-21T12:00:00Z", versions: 1, verified: true, problem: nil)
+                                         FoundingBlock(kind: "text", text: "(a) Each agency shall make available to the public information as follows:")],
+                                short: "FOIA", when: "1966-07-04", kind: "statute"))
+        links = [
+            FoundingLink(from: "constitution", to: "declaration", how: "follows",
+                         why: "The Constitution counts its years from the Declaration, dating itself “of the Independance of the United States of America the Twelfth”."),
+            FoundingLink(from: "rights", to: "magna-carta", how: "drew on",
+                         why: "The Fifth Amendment’s “nor be deprived of life, liberty, or property, without due process of law” descends from chapter 39."),
+            FoundingLink(from: "rights", to: "constitution", how: "amends",
+                         why: "The ten are Articles “in addition to, and Amendment of the Constitution of the United States of America”."),
+            FoundingLink(from: "foia", to: "constitution", how: "follows",
+                         why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552."),
+        ]
+        chain = FoundingChainInfo(folder: "~/.local/state/\(Brand.slug)/chain/charters", head: "sha512:" + String(repeating: "9c1e40b7", count: 16),
+                                  created: "2026-11-21T12:00:00Z", versions: 2, texts: 10, links: 17, verified: true, problem: nil)
         showing = "constitution"
         query = "choose"
         asked = "choose"
@@ -251,10 +290,11 @@ private struct FoundingBar: View {
             Picker("Document", selection: Binding(get: { f.doc?.id ?? f.showing }, set: { f.show($0) })) {
                 ForEach(f.docs) { d in
                     let n = f.count(d.id)
-                    Text(f.searching && n > 0 ? "\(d.short) \(n)" : d.short).tag(d.id)
+                    let year = d.year.isEmpty ? "" : ", \(d.year)"
+                    Text(f.searching && n > 0 ? "\(d.label)\(year) · \(n)" : "\(d.label)\(year)").tag(d.id)
                 }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .labelsHidden()
             .accessibilityLabel("Which document")
             HStack(spacing: 6) {
@@ -325,6 +365,7 @@ private struct FoundingPage: View {
                         .font(Theme.font(11.5))
                         .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
+                    FoundingLinks(doc: doc)
                         .padding(.bottom, 4)
                     ForEach(Array(doc.blocks.enumerated()), id: \.offset) { i, b in
                         FoundingBlockView(block: b, found: found.contains(i), current: f.target == i)
@@ -345,6 +386,82 @@ private struct FoundingPage: View {
                 proxy.scrollTo(f.target ?? 0, anchor: f.target == nil ? .top : .center)
             }
         }
+    }
+}
+
+/// How the document bears on the texts before it, and which later texts
+/// drew on it: the graph's edges at this node. Each names the other text,
+/// which a click shows, and says why in a sentence.
+@MainActor
+private struct FoundingLinks: View {
+    @Environment(Store.self) private var store
+    let doc: FoundingDoc
+
+    var body: some View {
+        let f = store.founding
+        let from = f.linksFrom(doc.id)
+        let to = f.linksTo(doc.id)
+        if !from.isEmpty || !to.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(from, id: \.to) { l in
+                    FoundingLinkLine(lead: Self.verb(l.how) + " ", name: f.label(l.to), trail: "", why: l.why) { f.show(l.to) }
+                }
+                ForEach(to, id: \.from) { l in
+                    FoundingLinkLine(lead: "", name: f.label(l.from), trail: " " + Self.verb(l.how).lowercased() + " this", why: l.why) { f.show(l.from) }
+                }
+            }
+            .padding(.top, 6)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("How this text bears on the others")
+        }
+    }
+
+    /// The link's kind as the start of a sentence.
+    static func verb(_ how: String) -> String {
+        switch how {
+        case "drew on": return "Drew on"
+        case "amends": return "Amends"
+        case "replaced": return "Replaced"
+        case "beside": return "Stands beside"
+        case "follows": return "Follows"
+        default: return how.prefix(1).uppercased() + how.dropFirst()
+        }
+    }
+}
+
+/// One link: an arrow, the sentence with the other text's name as a
+/// button, and why, muted.
+@MainActor
+private struct FoundingLinkLine: View {
+    let lead: String
+    let name: String
+    let trail: String
+    let why: String
+    let show: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.muted)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 0) {
+                    Text(lead).font(Theme.font(11.5)).foregroundStyle(Theme.ink)
+                    Button(name, action: show)
+                        .buttonStyle(.plain)
+                        .font(Theme.font(11.5, .semibold))
+                        .foregroundStyle(Theme.accentInk)
+                        .help("Show " + name)
+                    Text(trail).font(Theme.font(11.5)).foregroundStyle(Theme.ink)
+                }
+                Text(why)
+                    .font(Theme.font(11))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -428,10 +545,14 @@ private struct FoundingPrint: View {
     /// How the chain checked, in words.
     static func line(_ c: FoundingChainInfo) -> String {
         guard c.verified, let head = c.head else {
-            return "The local chain doesn’t check: " + (c.problem ?? "it can’t be read.")
+            return "The Charters chain doesn’t check: " + (c.problem ?? "it can’t be read.")
         }
         let versions = c.versions == 1 ? "1 version" : "\(c.versions) versions"
-        return "On your local chain: \(versions), each checked; the newest is " + String(head.dropFirst("sha512:".count).prefix(12)) + "."
+        var holds = ""
+        if let t = c.texts, let l = c.links, t > 0 {
+            holds = " It holds \(t) texts and \(l) links."
+        }
+        return "On your Charters chain: \(versions), each checked; the newest is " + String(head.dropFirst("sha512:".count).prefix(12)) + "." + holds
     }
 
     private var fingerprint: some View {

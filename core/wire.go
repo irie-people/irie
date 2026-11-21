@@ -57,6 +57,7 @@ type (
 	DockUntrusted     = ipc.DockUntrusted
 	FoundingArgs      = ipc.FoundingArgs
 	FoundingResult    = ipc.FoundingResult
+	FoundingLink      = ipc.FoundingLink
 	FoundingChain     = ipc.FoundingChain
 	FoundingVersion   = ipc.FoundingVersion
 	FoundingDoc       = ipc.FoundingDoc

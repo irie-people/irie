@@ -12,12 +12,12 @@ import (
 	"github.com/irie-people/irie/internal/plugins"
 )
 
-// The founding documents (DESIGN §4.17): while the founding plugin is on,
-// the founding op gives the Mac app's Founding tab the Declaration of
-// Independence, the Constitution, the Bill of Rights and the Freedom of
-// Information Act, the passages a search finds, and their local chain,
-// which the core keeps: the texts this build carries go on it at start and
-// at each look, as a new version only when a text has changed. go build
+// The charters (DESIGN §4.17): while the founding plugin is on, the
+// founding op gives the Mac app's Charters tab the texts of rights, from
+// Magna Carta to the Privacy Act, the passages a search finds, the links
+// that say how the texts bear on one another, and their local chain, which
+// the core keeps: the texts and links this build carries go on it at start
+// and at each look, as a new version only when one has changed. go build
 // -tags nofounding leaves this file out, and founding_off.go stands in.
 
 const foundingBuilt = true
@@ -26,18 +26,30 @@ const foundingBuilt = true
 // and in it one call at a time.
 var foundingMu sync.Mutex
 
-// recordFounding puts the texts this build carries on the local chain,
-// unless its newest version holds them already, and checks every version.
+// chartersChain is the chain in its folder, with the first build's chain,
+// the founding documents' at chain/founding, moved in once when it is
+// there and this folder has nothing yet.
+func (c *Core) chartersChain() founding.Chain {
+	ch := founding.OpenChain(c.paths.Charters())
+	if err := ch.Adopt(c.paths.FoundingChainFirst()); err != nil {
+		c.log.Warn("charters: the first build's chain didn't move in", "err", err)
+	}
+	return ch
+}
+
+// recordFounding puts the texts and links this build carries on the local
+// chain, unless its newest version holds them already, and checks every
+// version.
 func (c *Core) recordFounding() ipc.FoundingChain {
 	foundingMu.Lock()
 	defer foundingMu.Unlock()
-	ch := founding.OpenChain(c.paths.FoundingChain())
+	ch := c.chartersChain()
 	texts, err := founding.Texts()
 	if err == nil {
 		var made bool
 		var name string
-		if name, made, err = ch.Record(texts, time.Now()); err == nil && made {
-			c.log.Info("founding: the texts are on the local chain", "version", name)
+		if name, made, err = ch.Record(texts, founding.Links, time.Now()); err == nil && made {
+			c.log.Info("charters: the texts are on the local chain", "version", name)
 		}
 	}
 	st := ch.Check()
@@ -55,7 +67,7 @@ func (c *Core) recordFoundingAtStart() {
 		return
 	}
 	if st := c.recordFounding(); !st.Verified {
-		c.log.Warn("founding: the local chain doesn't check", "problem", st.Problem)
+		c.log.Warn("charters: the local chain doesn't check", "problem", st.Problem)
 	}
 }
 
@@ -67,18 +79,24 @@ func (c *Core) foundingOp(_ int, a ipc.FoundingArgs) (ipc.FoundingResult, error)
 	}
 	docs, err := founding.Load()
 	if err != nil {
-		return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeInternal, "the founding documents don't read: %v", err)
+		return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeInternal, "the charters don't read: %v", err)
 	}
 	r := ipc.FoundingResult{Docs: docs}
 	if q := strings.TrimSpace(a.Find); q != "" {
 		r.Found = founding.Find(docs, q)
 		return r, nil
 	}
+	r.Links = founding.Links
 	st := c.recordFounding()
 	r.Chain = &st
 	if a.Log > 0 {
-		if r.Versions, err = founding.OpenChain(c.paths.FoundingChain()).Log(a.Log); err != nil {
-			return r, ipc.Errorf(ipc.CodeInternal, "the founding documents' chain: %v", err)
+		if r.Versions, err = c.chartersChain().Log(a.Log); err != nil {
+			return r, ipc.Errorf(ipc.CodeInternal, "the charters' chain: %v", err)
+		}
+	}
+	if a.Export {
+		if r.Export, err = c.chartersChain().Export(); err != nil {
+			return r, ipc.Errorf(ipc.CodeInternal, "the charters' chain: %v", err)
 		}
 	}
 	return r, nil
