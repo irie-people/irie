@@ -8,6 +8,7 @@
 package fixture
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/mux"
+	"github.com/irie-people/irie/internal/zen"
 )
 
 // Serve speaks the bridge's side of the mux on in and out until in ends,
@@ -117,6 +119,7 @@ type Core struct {
 	undo    string
 	subs    map[chan ipc.Frame]bool
 	next    int
+	rested  bool // zen's rest was answered
 }
 
 // NewCore is the fake core with its sessions.
@@ -150,6 +153,7 @@ func NewCore() *Core {
 	}
 	c.header = ipc.Header{Version: "1.4.0", Groups: []ipc.Group{{ID: "g1", Name: "Shop"}}}
 	c.setTheme("rosewater")
+	c.header.Zen = &ipc.Zen{Profile: zen.Default()}
 	c.outside = []ipc.OutsideSession{{VendorID: "5c1d0b7e", Name: "scratch idea", Kind: "interactive", Status: "waiting", WaitingFor: "permission prompt", Cwd: "/home/alice/scratch", Movable: true}}
 	c.closed = []ipc.ClosedSession{{ID: "c1", Name: "Rename the CLI flags", Closed: ago(2 * time.Hour), Auto: true}}
 	return c
@@ -260,6 +264,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.UndoResult{Label: c.undo, Did: ipc.DidUndo}, nil
 	case ipc.OpReorder:
 		return struct{}{}, nil
+	case ipc.OpZen:
+		return c.zen(raw), nil
 	case ipc.OpTheme:
 		c.mu.Lock()
 		c.setTheme(a.Theme)
@@ -292,6 +298,32 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			Parts: []ipc.PluginPart{{Name: "vpn", Title: "Mullvad VPN", Summary: "A VPN you drive from " + brand.Name + ".", Switch: "vpn.on", On: false, State: "off", Detail: "Off: turn it on to drive Mullvad from " + brand.Name + "."}}}}}, nil
 	}
 	return struct{}{}, nil
+}
+
+// zen is the zen op, near enough for a picture: a client's zen on, a rest
+// offered at once the first time, and gone once answered.
+func (c *Core) zen(raw json.RawMessage) ipc.ZenResult {
+	var a ipc.ZenArgs
+	json.Unmarshal(raw, &a)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	z := *c.header.Zen
+	switch {
+	case a.On != nil && *a.On:
+		z.On, z.Clients = true, []string{cmp.Or(a.Client, ipc.ZenApp)}
+		if !c.rested {
+			o := zen.RestOffer()
+			z.Offer = &o
+		}
+	case a.On != nil:
+		z.On, z.Clients, z.Offer = false, nil, nil
+	case a.Answer != "":
+		z.Offer, c.rested = nil, true
+	}
+	c.header.Zen = &z
+	h := c.header
+	c.publish(ipc.Frame{T: ipc.FrameHeader, Header: &h})
+	return ipc.ZenResult{Zen: z}
 }
 
 func (c *Core) input(text string) (any, error) {

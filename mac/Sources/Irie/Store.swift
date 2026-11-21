@@ -380,7 +380,7 @@ final class Store {
     /// The chat plugin's accounts, drafts and channels, which its tab
     /// draws (Chat.swift).
     let chat: ChatModel
-    /// The founding documents, which the Founding tab draws (Founding.swift).
+    /// The charters, which the Charters tab draws (Founding.swift).
     let founding: FoundingModel
     /// The Jammin plugin's music, which its tab draws (Jammin.swift).
     let jammin: JamminModel
@@ -847,6 +847,9 @@ final class Store {
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")
+        // No trod bot or VPN in the title bar, unless a picture asks.
+        trod = nil
+        vpn = nil
         repoNames = ["bigup", "\(Brand.slug)", "notes"]
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
@@ -901,6 +904,16 @@ final class Store {
         canUndo = true
         canConfirmUndo = true
         taskRepo = "\(Brand.slug)"
+    }
+
+    /// The title bar at its fullest, for `--snapshot`: the trod bot within
+    /// its hours and the VPN on, so the moon and the shield follow the
+    /// counts.
+    func loadTitleBarFixture() {
+        trod = TrodShift(until: Date().addingTimeInterval(3600), away: false, awake: true)
+        vpn = VPNMark(kind: "mullvad", title: "Mullvad VPN", can: ["place", "lockdown", "time"], state: "connected",
+                      city: "Malmö", country: "Sweden", host: "se-mma-wg-002", lockdown: true,
+                      text: "VPN on: Malmö, Sweden (se-mma-wg-002), lockdown on")
     }
 
     /// The list's order, which the core keeps and the user sets: a new

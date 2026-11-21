@@ -57,6 +57,7 @@ type (
 	DockUntrusted     = ipc.DockUntrusted
 	FoundingArgs      = ipc.FoundingArgs
 	FoundingResult    = ipc.FoundingResult
+	FoundingLink      = ipc.FoundingLink
 	FoundingChain     = ipc.FoundingChain
 	FoundingVersion   = ipc.FoundingVersion
 	FoundingDoc       = ipc.FoundingDoc
@@ -681,6 +682,11 @@ const (
 	ZenShowHistory       = ipc.ZenShowHistory
 	ZenYes               = ipc.ZenYes
 	ZenNo                = ipc.ZenNo
+	ZenApp               = ipc.ZenApp
+	ZenSidebar           = ipc.ZenSidebar
+	ZenPhone             = ipc.ZenPhone
+	ZenRenew             = ipc.ZenRenew
+	ZenLapse             = ipc.ZenLapse
 	MaxZenWhy            = ipc.MaxZenWhy
 	MaxZenLog            = ipc.MaxZenLog
 )

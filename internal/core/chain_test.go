@@ -553,7 +553,7 @@ func TestTheChainIsKeptInTheVault(t *testing.T) {
 // A chain the first build kept, plain at the top of the chains' folder,
 // moves into a folder of its own beside the other chains, and into the
 // vault, as the core first starts: its versions as they were, sealed, its
-// plain files and locks gone. The founding documents' chain beside it is
+// plain files and locks gone. The charters' chain beside it is
 // left be.
 func TestAChainKeptBeforeTheVaultMovesIntoIt(t *testing.T) {
 	c := prepare(t, agentConfig{})

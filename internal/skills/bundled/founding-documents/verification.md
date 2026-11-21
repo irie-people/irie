@@ -1,28 +1,48 @@
 # How these copies were verified
 
-Checked on 21 November 2026. The three founding documents are the National Archives' transcriptions, and the Freedom of Information Act is the United States Code's text, each set in plain Markdown. Each was then checked against every other copy at hand: word for word, and for the Bill of Rights, the Constitution's articles and the Freedom of Information Act, mark for mark.
+Checked on 21 November 2026. The three founding documents are the National Archives' transcriptions, and the Freedom of Information Act is the United States Code's text, each set in plain Markdown. Each was then checked against every other copy at hand: word for word, and for the Bill of Rights, the Constitution's articles and the Freedom of Information Act, mark for mark. In four marks the Archives' transcription differs from its own parchments, and there these copies follow the parchments ("Settled from the parchments", below). Later that day six texts joined them, the ones those four grew from or into, each from the body that keeps it and checked the same way: Magna Carta, the English Bill of Rights, the Virginia Declaration of Rights, the Articles of Confederation, the Universal Declaration of Human Rights and the Privacy Act of 1974.
 
 ## The texts
 
 | File | Source |
 |---|---|
+| magna-carta.md | The charter of 1215 in William Sharp McKechnie's translation (Magna Carta: A Commentary on the Great Charter of King John, 2nd ed., 1914), as Albert Beebe White and Wallace Notestein printed it in Source Problems in English History (Harper and Brothers, New York, 1915), Appendix IV, from Wikisource's transcription of that edition: https://en.wikisource.org/wiki/Source_Problems_in_English_History/Appendix/Magna_Carta._1215. The preamble and the 63 chapters, numbered as the edition numbers them |
+| english-bill-of-rights.md | "The Bill of Rights 1688", original (as enacted), on legislation.gov.uk, published by The National Archives (UK) from The Statutes of the Realm, vol. 6 (Record Commission, 1819): https://www.legislation.gov.uk/aep/WillandMarSess2/1/2/enacted. The Act whole, with the edition's marginal notes as headings and its footnotes as notes. Open Government Licence v3.0 |
+| virginia-declaration-of-rights.md | "The Virginia Declaration of Rights", the National Archives' rendering of the text the Virginia Convention adopted on June 12, 1776: https://www.archives.gov/founding-docs/virginia-declaration-of-rights. The Archives gives it in modern spelling, grammar and punctuation, and the file says so |
 | declaration.md | "Declaration of Independence: A Transcription", https://www.archives.gov/founding-docs/declaration-transcript |
+| articles-of-confederation.md | "Articles of Confederation (1777)", the National Archives' transcription on its milestone-documents page: https://www.archives.gov/milestone-documents/articles-of-confederation. The recital, the thirteen articles and the closing; the transcription gives no signers' names |
 | constitution.md | "The Constitution of the United States: A Transcription", https://www.archives.gov/founding-docs/constitution-transcript; Amendments I–X from the Bill of Rights transcription; Amendments XI–XXVII from https://www.archives.gov/founding-docs/amendments-11-27 |
 | bill-of-rights.md | "The Bill of Rights: A Transcription", https://www.archives.gov/founding-docs/bill-of-rights-transcript: the preamble, the two articles not ratified in 1791 and the attestation from its transcription of the 1789 joint resolution, and the ten amendments in their original form |
+| universal-declaration-of-human-rights.md | The United Nations' English text, https://www.un.org/en/about-us/universal-declaration-of-human-rights, following the resolution's official record, A/RES/217(III) (General Assembly, 10 December 1948), in the four places where they differ. The preamble and the thirty articles |
 | freedom-of-information-act.md | 5 U.S.C. § 552 in the United States Code, the Government Publishing Office's 2024 edition, current through January 6, 2025: https://www.govinfo.gov/content/pkg/USCODE-2024-title5/html/USCODE-2024-title5-partI-chap5-subchapII-sec552.htm. The statute and its source credit; the Code's editorial notes after it are left out |
+| privacy-act.md | 5 U.S.C. § 552a in the same edition of the Code: https://www.govinfo.gov/content/pkg/USCODE-2024-title5/html/USCODE-2024-title5-partI-chap5-subchapII-sec552a.htm. The statute and its source credit, likewise |
 
-Only the markup and the lines in italics are ours. The Code's one footnote in § 552, at subsection (a)(3)(E), is a note in italics after its paragraph. The Archives marks two passages in Amendments XII and XIV that later amendments changed, with brackets and an asterisk. Here each mark is a note in italics after its passage instead, and the passage's words are unchanged.
+Only the markup and the lines in italics are ours. The Code's footnotes, one in § 552 at subsection (a)(3)(E) and two in § 552a marked at (a)(1), (a)(8)(B)(x) and (u)(4)(A), are notes in italics after their paragraphs. The Archives marks two passages in Amendments XII and XIV that later amendments changed, with brackets and an asterisk. Here each mark is a note in italics after its passage instead, and the passage's words are unchanged. The Statutes of the Realm's footnotes to the English Bill of Rights, two variant readings, a word interlined on the Roll and three passages annexed to the Act in a separate schedule, are notes the same way, and its marginal notes are the headings; the Act itself has none. Where an edition sets a word in italics, the 1915 edition's Latin and French terms or the Code's "Provided, That", the word is plain here, since italics mark only our notes. Non-breaking spaces are plain spaces. Everything else, words, spelling, capitals and punctuation, is the source's.
 
 ## What they were checked against
 
+- **Magna Carta**: the Internet Archive's text recognition of the same 1915 scan, three of the printed pages themselves (Wikimedia Commons), the Avalon Project's uncredited copy of the same translation, and, for what remains in force, legislation.gov.uk's Magna Carta (1297) c. 9.
+- **The English Bill of Rights**: British History Online's copy of the Statutes of the Realm, the Avalon Project's modernized copy, legislation.gov.uk's revised text (the Act as in force), and the Internet Archive's text recognition of the 1819 print.
+- **The Virginia Declaration**: the Avalon Project's copy, and, for the words, William Waller Hening's Statutes at Large of Virginia, vol. 9 (1821), which prints the adopted text, as the Internet Archive's text recognition reads it.
 - **The Declaration**: the Avalon Project's transcription at Yale Law School.
+- **The Articles of Confederation**: the Archives' own second copy on DocsTeach, the Avalon Project's copy (Tansill's 1927 government print), the Constitution Society's and Wikisource's.
 - **The Constitution**: a literal print of the original, a government print with notes ("Constitution of the United States of America—1787"), the National Constitution Center's copy, and a 19th-century printing scanned by the Library of Congress, which was read by text recognition.
 - **The Bill of Rights**: the National Archives' handout from its Center for Legislative Archives, ConstitutionFacts.com's copy, the amendments in each of the Constitution's copies, and the Archives' own transcription of the 1789 joint resolution.
+- **The Universal Declaration**: the official record, A/RES/217(III), as scanned by the UN's document system and read by text recognition, every disagreement looked at in the scan; the UN's own PDF of the Declaration; and OHCHR's English PDF (OHCHR's web page refused the fetch).
 - **The Freedom of Information Act**: the Government Publishing Office's 2023 edition, the copy at Cornell's Legal Information Institute, which follows the House's Office of the Law Revision Counsel, and the Department of Justice's copy.
+- **The Privacy Act**: the Government Publishing Office's 2023 edition and Cornell's copy.
 
 ## What was found
 
+**Magna Carta.** The translator is McKechnie, named by the 1915 edition's headnote; the translation and the edition are both long out of copyright. Wikisource's transcription of the edition had copied two errors of text recognition that the printed page does not have, "one measure of com" for "corn" (chapter 35) and "clergy and lajonen" for "laymen" (chapter 62); each was checked against the page image and corrected, so the file reads as the page does. Against the Internet Archive's text recognition of the same scan, 4,920 words here against 4,941, every one of the 48 differences in words and 58 with marks is the recognition's: "oiu" for "our", "WiUiam", the running head "Appendix", a line-end hyphen, and one stop where the page reads on ("by our father, King Henry"). The Avalon Project's copy is McKechnie's translation altered throughout, "forever", "towards", "to wit", "enroll", with slips of its own and passages left out, so it is not a copy of this text, though it agrees with the printed page where Wikisource erred. legislation.gov.uk carries only the chapters of the 1297 charter still in force, in another translation: its chapter 29 is chapters 39 and 40 here.
+
+**The English Bill of Rights.** Every word and every mark matches British History Online's copy of the Statutes of the Realm, which prints the long title only as its page heading and marks the footnoted words with brackets. Every word matches legislation.gov.uk's revised text, apart from the words that text leaves out as repealed (the jurors in trials for high treason, the clauses on marrying a Papist, most of section II and all of section III), its "Comons" and "pretence" for the edition's "Com[m]ons" and "p[re]tence", its "utterly directly" for "utterly and directly" and "this Highnesse" for "his Highnesse" (the print agrees with ours), and three readings where it agrees with the print against ours, below. The Avalon Project modernizes the whole text, 138 spellings in 371 places ("parlyament" to "parliament", "cruell" to "cruel"), lowers its capitals and adds its own commas, so it was compared word for word only; it adds "[old style date]" twice, leaves out a line of the succession clause ("the Heires of her Body and for default of such Issue to"), and reads "the life of the survivor to them", "by the force of law" and "in all time to come".
+
+**The Virginia Declaration.** The Archives' page is a modern rendering, not a literal transcription, and the file says so: it has today's spellings ("burdens", "favor", "offense", "defense", "public", "despotic" for the 1776 "burthens", "favour", "offence", "defence", "publick", "despotick") and grammar ("is entitled", "has", "inalienable", "when" for "are entitled", "hath", "unalienable", "whenever"). The Avalon Project's copy is another modern rendering, so the two differ in words in eleven sections and in marks in most; Hening's 1821 print of the adopted text was the referee. Hening agrees with the Archives against Avalon in "judiciary" (Section 5), "judge to be hereditary" (Section 4), "judgment" (Section 8), "great bulwarks" (Section 12), "governed by" (Section 13), and "only by reason" and "practise" (Section 16); it agrees with Avalon against the Archives in "are entitled" and "not being descendible" (Section 4), "whenever", "hath" and "unalienable" (Section 3), "burthens" (Section 5), "hath" and no "of twelve men" (Section 8), "any officer" (Section 10) and "towards" (Section 16). The Archives repeats "Section 1." at the start of the first section's words, under a heading that already says it; the repeat is dropped. Nothing else is changed.
+
 **The Declaration.** Every word matches the Avalon Project's copy, apart from two kinds of difference. First, Avalon modernizes spellings: "shewn", "endeavoured", "harrass", "Offences", "neighbouring", "burnt", "compleat" and "Brittish". Second, it follows another version in six places. The Archives' transcription of the parchment reads "the dangers of invasion", "their migrations hither", "domestic insurrections amongst us", "Nor have We been wanting in attentions", "by Authority of the good People" and "and to do all other Acts". Avalon also writes "and" for the parchment's "&". All 56 signers are in both.
+
+**The Articles of Confederation.** The Archives' DocsTeach copy matches every word and every mark but one kind: in Article IX's list of powers the milestone page separates the items with a spaced hyphen, " - ", 13 times, and DocsTeach with an en dash. The Avalon Project prints Tansill's 1927 text, which the Constitution Society and Wikisource follow, and it is another version rather than a copy with slips: 3,501 words here against 3,402. It leaves out the recital that opens the ratified document ("Whereas the Delegates of the United States of America in Congress assembled did on the fifteenth day of November …"); it modernizes "defence", "pretence", "offence" and "favour" and writes "New Hampshire" and "Rhode Island" for the parchment's "Newhampshire" and "Rhodeisland"; it keeps older spellings the Archives does not ("cloath", "judgement", "attendence", "accoutered"); it reads otherwise in some thirty places ("For the most convenient" for "For the more convenient", "any other causes whatever" for "cause", "one of their members to preside" for "number", "letters of marque or reprisal" for "marque and reprisal"); and it has slips of its own, "filed" for "field", "solid like manner" for "soldier-like manner", "spread" for "spared", and a clause of Article IX dropped by an eye-skip ("than its quota, and that any other state should raise a greater number"). With the marks, Avalon capitalizes where the Archives keeps the parchment's "united states" and "congress" (169 places), drops 67 commas and adds 17.
 
 **The Constitution: the Preamble, the seven articles and the signers.**
 - **The literal print and the government print** match it word for word with one exception, "the Independance of the United States". That is the parchment's own spelling, which the Archives keeps and both prints correct to "Independence".
@@ -31,14 +51,16 @@ Only the markup and the lines in italics are ours. The Code's one footnote in §
 
 **Amendments XI–XXVII.** The literal print and the government print match them word for word. The National Constitution Center's copy differs in nine small words: it drops "the" five times, adds it three times, and drops "elect" in Amendment XX and "any" in Amendment XXIV.
 
-**The Bill of Rights.** The ten amendments match the National Archives' handout and the government print mark for mark. In the other copies only commas and capitals differ:
+**The Bill of Rights.** The ten amendments match the National Archives' handout and the government print mark for mark, apart from the capital in Amendment VII's "In suits" (below). In the other copies only commas and capitals differ:
 
 - Amendment I: ConstitutionFacts and the Constitution Center have "of the press, or the right" for "of the press; or the right".
 - Amendment V: ConstitutionFacts has "life or limb, nor" for "life or limb; nor", and no comma after "for public use".
 - Amendment VI: ConstitutionFacts has "committed; which district" for "committed, which district", and "assistance of counsel" in lower case.
-- Amendment VII: the literal print, the Constitution Center and ConstitutionFacts have no comma after "tried by a jury". The Constitution Center has "In suits" for "In Suits".
+- Amendment VII: the literal print, the Constitution Center and ConstitutionFacts have no comma after "tried by a jury". Every copy but the Constitution Center's writes "In Suits"; the enrolled original has "In suits", as these copies do.
 - Amendment IX: ConstitutionFacts has no commas around "of certain rights".
 - Amendments II, III, IV, VIII and X are the same in every copy. The Second Amendment keeps all three of its commas in all of them.
+
+**The Universal Declaration.** The UN's web page differs from the 1948 official record in four places, and the file follows the record in each: the record sets "Furthermore, no distinction shall be made …" in Article 2 as a paragraph of its own, reads "life, liberty and the security of person" in Article 3 and "the borders of each State" in Article 13, and writes "The General Assembly" with no comma in the preamble. Every other disagreement between the record's text recognition and the file is a reading error, each looked at in the scan ("independeut", "seck", "Jack" for "lack", "4." for "1."). The record sets "Whereas", "Now, therefore," and "Proclaims" in italics and heads the articles in small capitals; here they are plain. The UN's own PDF and OHCHR's PDF match the file word for word and mark for mark apart from "cooperation" for "co-operation", "Article I" for "Article 1", the comma after "The General Assembly", and, in the UN's PDF alone, "the right to equal access to public service" for "the right of equal access" (Article 21), where the record and OHCHR read "of"; both PDFs agree with the record on Articles 2, 3 and 13.
 
 **The Freedom of Information Act.**
 - **The 2023 and 2024 editions** hold the same § 552; only the date the Code was current through differs.
@@ -46,16 +68,40 @@ Only the markup and the lines in italics are ours. The Code's one footnote in §
 - **The Department of Justice's page** shows the 2016 amendments as a redline. With its struck words left out, it differs in eight places, each its own slip, where the Code and Cornell agree. Two examples: "for good cause is shown" for the Code's "for good cause shown", and "compiled by a criminal law enforcement authority" for "compiled by criminal law enforcement authority".
 - **The House's own online Code**, current through Public Law 119-142 (November 10, 2026), was down for maintenance on 21 November 2026. Cornell follows it, and matched.
 
+**The Privacy Act.**
+- **Cornell's copy** matches it exactly: the same hashes, by the same method, for the statute and its credit together, 7,846 words and 9,636 words with marks (7,556 and 9,042 for the statute alone). Cornell writes seven words with a soft hyphen ("rec­ords"), uses curly quotes where the Code has straight ones and puts a space more after each "§" in the credit, none of which changes a word or a mark.
+- **The 2023 edition** is older than the latest amendment. It lacks (b)(11), the disclosure "to the Director of the Congressional Budget Office", which Pub. L. 118–104 (October 2, 2024) added, and so numbers the last two paragraphs of (b) as (11) and (12); its source credit ends at Pub. L. 113–295. Apart from that it holds the same § 552a.
+- The Code's notes after the credit are left out, as for § 552, among them section 7 of Pub. L. 93–579 on Social Security numbers, which the Code keeps as a note and not in the section's text.
+
+## Settled from the parchments
+
+Four marks where the Archives' transcription and other careful copies disagreed. Each was read on the parchment itself, in the Archives' high-resolution scans (https://www.archives.gov/founding-docs/downloads): pages 2 and 3 of the Constitution, and the Bill of Rights. Each was set beside marks the same hand made on the same line. These copies follow the parchments.
+
+| Where | The parchment, as these copies have it | The Archives' transcription | How it reads |
+|---|---|---|---|
+| Art. I §9 | "the Census or Enumeration herein before directed" | "enumeration" | The E is a capital, as large as the C of "Census". The literal print and the government print agree |
+| Art. II §2 | "as they think proper; in the President alone" | "proper," | A dot stands above the comma after "proper". The comma after "Officers" on the same line has none, and the dot of the next word's i stands apart. The literal print agrees |
+| Art. III §2 | "Citizens of another State;—between Citizens of different States,—" | "another State,—" | A dot stands above the comma after "another State". The comma after "different States" has none. The literal print and the government print agree |
+| Amendment VII | "In suits at common law" | "In Suits" | A small s, not the scribe's tall, flourished capital, as in "a free State". The Archives' own transcription of the joint resolution agrees |
+
 ## Not settled
 
-Four marks, where the Archives' transcription and other careful copies disagree. These copies follow the Archives; checking the parchments would settle each one.
+Words and marks where a text's source and other careful copies disagree. These copies follow their sources; the originals, or a literal print, would settle each one, as the parchments settled the four above.
 
-| Where | These copies (the Archives) | The other reading |
+| Where | These copies (the source) | The other reading |
 |---|---|---|
-| Art. I §9 | "the Census or enumeration herein before directed" | "Enumeration": the literal print and the government print |
-| Art. II §2 | "as they think proper, in the President alone" | "proper;": the literal print |
-| Art. III §2 | "between a State and Citizens of another State,—between Citizens of different States" | "another State;": the literal print and the government print |
-| Amendment VII | "In Suits at common law" | "In suits": the Archives' own transcription of the 1789 joint resolution |
+| English Bill of Rights, the second right declared | "That the pretended Power of Suspending of Laws or the Execution of Laws by Regall Authority as it hath beene assumed and exercised of late is illegall.", which repeats the first right's words | "Dispensing with Laws … by Regall Authoritie": the 1819 print as read by text recognition, legislation.gov.uk's revised text, Avalon, and the right's own marginal note, "Late dispensing Power." |
+| English Bill of Rights, "Illegal Prosecutions" | "congizable onely in Parlyament" | "cognizable": the 1819 print and the revised text |
+| Virginia Declaration, Section 8 | "an impartial jury of twelve men of his vicinage" | no "of twelve men": Hening's adopted text and Avalon; the words are Mason's draft's |
+| Virginia Declaration, Section 4 | "nor being descendible" | "not being descendible": Hening and Avalon |
+| Virginia Declaration, Section 15 | "the blessings of liberty" | "the blessing of liberty": Hening, as text recognition reads it |
+| Articles, Arts. VII and IX | "clothe", "clothed" | "cloath", "cloathed": Avalon and its followers; the older spelling may be the parchment's |
+| Articles, Arts. VI and IX | "judgment" (7 times) | "judgement": Avalon and its followers |
+| Articles, Art. XIII | "con-firmed" | "confirmed": the hyphen looks like a line break of the parchment carried into the transcription |
+| Magna Carta, chapter 63 | "abovenamed" | "above-named": the page breaks the word at a line end, and the book prints "above-named" elsewhere |
+| Universal Declaration, the preamble | "The General Assembly", as the official record prints it | "The General Assembly,": the UN's web page, the UN's PDF and OHCHR's |
+
+Two of the texts are not the originals' words at all, and say so in their about lines: Magna Carta is a translation of the Latin, and the Virginia Declaration is the Archives' modern rendering. The National Archives' own translation of the 1297 Magna Carta on display in its Rotunda is under copyright ("Translation by Professor Nicholas Vincent, Copyright Sotheby's Inc. 2007") and is not used; the 1215 charter is King John's, the 1297 one Edward I's confirmation of it, with 37 chapters to the 63.
 
 ## Fingerprints
 
@@ -63,9 +109,15 @@ The SHA-512 of each file's bytes: UTF-8, with a line feed ending each line. A co
 
 | File | SHA-512 |
 |---|---|
+| magna-carta.md | `b77ca59483c2db87a85fdc1f13d86c444e8db45735a70d6951c986769e3b330ee8e67be21babcdd2fe6c4dd083a5115fdcb9590c6e5fb786544462883343e742` |
+| english-bill-of-rights.md | `5d8d84c983cbcb7773feafa997383fc4989fd4dfed1ab2c32b215ce3735373c9f0862592c9095438057ab93a36913dd288777ede82de2eb4c58dcf0bb4b3c521` |
+| virginia-declaration-of-rights.md | `6b7bd897c3f8a68d10bdb1dcb177284eb8830aea5f7dc5b71869cf0ed1f0c7bd43d48285608f23b07b210f725df3d50cb8c478cc964d970b436547b7caffec33` |
 | declaration.md | `7447f9380e888a68b2ca72b1452487dabae23325abc3442f78fe5f9dd7474d1e20ab1157d0364064acecdb5c7aa4d87902dfd97c73c0230d9442187b0600d2ad` |
-| constitution.md | `1e2a63f6de9bc5080a4f9d6aad9beb0146c5bf1bb9fc45a262b2f57dc52415342dcaf77fd2da3ffcfba8d505b8dc4c1ed736a73a46d42ed339e5c0be03f27cb5` |
-| bill-of-rights.md | `03a89a2272ca2bcc2c05abba58853c016433745cdb77a0a7e16e30ee705813bfea43de8cb655c9089dd46852dc978c69fe8949d74234f817a37d56b96331b957` |
+| articles-of-confederation.md | `294ede2d3df9deaa240693227e825bb05370560aaee93c771369a996dd8888d7283e41a1be83791b719ee04fefd669e069c72ed38ba9a01eb619a2a18c272f5e` |
+| constitution.md | `9041dcfa6fbecc37746b3f66b0149a214a67b9ee73b8226a91daf8364936bf17f8862c8e19fdef37fd853ad13b0ef4653818717f84dcf47b47aef8e695090c8f` |
+| bill-of-rights.md | `9fb03ede2e3a7d15ab209c3daf3671454df84ef78976da6bfbb641cad4d2691ab682d2d3e639280f39bfc858c2b9422a87f8b224e02bdbad8b64331ea8655b9c` |
+| universal-declaration-of-human-rights.md | `db1586868567df5191228fda8a527e3c13b47c9e030152cdcb2f5cd2ae1016e9f3bb052bd42c301fec287607b42900aecfbd1f9685bb208010a59e80947c0db0` |
 | freedom-of-information-act.md | `f18fc8dc626f921ab560f5480067a354ad3b894cc8c9f4092ed5a03d6100db8b5f9d091d892271530aefe36323cc1680212c67d93c8be6aef76cef50b359d299` |
+| privacy-act.md | `3380620d2adfede3abc3e6e99c43bf4bd5aff23ed500326aaa2cd227243f86b2eecb0c9fe0492da4a051dcd2f491a12f3c5c8f7b1e0e9253bd8d5f509575b7c8` |
 
-Irie's tests pin these fingerprints, so a change to any of the texts fails them until the change is meant and the fingerprints here are updated with it. Irie also keeps the texts on a local chain, each version naming the one before it (SKILL.md, "On the local chain").
+Irie's tests pin these fingerprints, so a change to any of the texts fails them until the change is meant and the fingerprints here are updated with it. Irie also keeps the texts on a local chain, the Charters chain, each version naming the one before it (SKILL.md, "On the local chain"), with the links that say how the texts bear on one another; its tests check every quotation in a link against the texts.

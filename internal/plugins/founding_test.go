@@ -21,20 +21,20 @@ func foundingStatus(t *testing.T, e Env) ipc.Plugin {
 	return ipc.Plugin{}
 }
 
-// TestFoundingIsOffByDefault: a new Irie shows no Founding tab and hands
+// TestFoundingIsOffByDefault: a new Irie shows no Charters tab and hands
 // sessions no founding-documents skill until asked, and Why says which
 // switch turns it on.
 func TestFoundingIsOffByDefault(t *testing.T) {
 	e := env(t)
 	p := foundingStatus(t, e)
-	if p.On || p.Title != "Founding documents" || len(p.Parts) != 1 {
+	if p.On || p.Title != "Charters" || len(p.Parts) != 1 {
 		t.Fatalf("founding = %+v", p)
 	}
 	x := part(t, p, Founding)
 	if x.State != ipc.PartPluginOff || x.Switch != "" {
 		t.Errorf("part = %+v", x)
 	}
-	if x.Pane == nil || x.Pane.ID != "founding.founding" || x.Pane.Kind != PaneFounding || x.Pane.Title != "Founding" {
+	if x.Pane == nil || x.Pane.ID != "founding.founding" || x.Pane.Kind != PaneFounding || x.Pane.Title != "Charters" {
 		t.Errorf("pane = %+v", x.Pane)
 	}
 	if why := Why(e.Config, Founding); !strings.Contains(why, "irie plugins on founding") {
@@ -48,13 +48,13 @@ func TestFoundingIsOffByDefault(t *testing.T) {
 	}
 }
 
-// TestFoundingOnIsReady: on, the four documents read, and the skill goes
-// to sessions.
+// TestFoundingOnIsReady: on, the ten texts read, and the skill goes to
+// sessions.
 func TestFoundingOnIsReady(t *testing.T) {
 	e := env(t)
 	e.Config.Plugins.Founding = true
 	x := part(t, foundingStatus(t, e), Founding)
-	if x.State != ipc.PartReady || !strings.Contains(x.Detail, "4 documents") {
+	if x.State != ipc.PartReady || !strings.Contains(x.Detail, "10 texts") {
 		t.Errorf("part = %+v", x)
 	}
 	if why := Why(e.Config, Founding); why != "" {

@@ -64,9 +64,17 @@ var oldSpellings = map[string]string{
 	"labour": "labor", "behaviour": "behavior", "endeavoured": "endeavored", "neighbouring": "neighboring",
 	"encreased": "increased", "controul": "control", "compleat": "complete", "shewn": "shown",
 	"harrass": "harass", "brittish": "british", "independance": "independence",
-	// The originals write "any Thing", and "re-examined", which fold
-	// splits at its hyphen.
-	"anything": "any thing", "reexamined": "re examined",
+	// The Articles of Confederation.
+	"stile": "style", "pretence": "pretense",
+	// The English Bill of Rights of 1689, in the Statutes of the Realm's
+	// spelling.
+	"parlyament": "parliament", "kingdome": "kingdom", "lawes": "laws", "crowne": "crown",
+	"baile": "bail", "cruell": "cruel", "unusuall": "unusual", "illegall": "illegal", "regall": "regal",
+	"criminall": "criminal", "freedome": "freedom", "declareing": "declaring", "setleing": "settling",
+	"beene": "been", "hath": "has",
+	// The originals write "any Thing", "re-examined" and "co-operation",
+	// which fold splits at their hyphens.
+	"anything": "any thing", "reexamined": "re examined", "cooperation": "co operation",
 }
 
 // fold makes a passage and a query comparable, so a search finds a passage

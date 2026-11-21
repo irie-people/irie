@@ -1,6 +1,6 @@
 # The Bill of Rights
 
-_The first ten amendments to the Constitution, ratified on December 15, 1791: the National Archives' transcription of the enrolled original of the Joint Resolution of Congress that proposed them, in 1789. Spelling, capitals and punctuation are the original's._
+_The first ten amendments to the Constitution, ratified on December 15, 1791: the National Archives' transcription of the enrolled original of the Joint Resolution of Congress that proposed them, in 1789. Spelling, capitals and punctuation are the original's: in one capital where the Archives' transcription and the enrolled original differ, it follows the original (verification.md)._
 
 ## Preamble
 
@@ -40,7 +40,7 @@ In all criminal prosecutions, the accused shall enjoy the right to a speedy and 
 
 ### Amendment VII
 
-In Suits at common law, where the value in controversy shall exceed twenty dollars, the right of trial by jury shall be preserved, and no fact tried by a jury, shall be otherwise re-examined in any Court of the United States, than according to the rules of the common law.
+In suits at common law, where the value in controversy shall exceed twenty dollars, the right of trial by jury shall be preserved, and no fact tried by a jury, shall be otherwise re-examined in any Court of the United States, than according to the rules of the common law.
 
 ### Amendment VIII
 

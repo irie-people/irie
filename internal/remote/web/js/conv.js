@@ -10,6 +10,7 @@ import { md, esc } from './md.js';
 import * as L from './look.js';
 import { Stream, call } from './net.js';
 import { TermView } from './term.js';
+import * as Z from './zen.js';
 
 const GAP = 30 * 60e3; // a time line goes between items this far apart
 const VIEW = 'irie.view'; // browser or term, for every session
@@ -47,6 +48,8 @@ export class SessionView {
     this.sending = false;
     this.scheduled = false;
     this.view = loadView();
+    this.zen = false; // the phone's zen shows this session (zen.js)
+    this.zenTimer = null;
     this.term = new TermView(conn, sid, {
       options: () => {
         this.needsKey = '';
@@ -72,6 +75,7 @@ export class SessionView {
     this.stream.start();
     this.onVisible = () => {
       if (document.visibilityState === 'visible' && this.watching()) this.poll(true);
+      if (document.visibilityState === 'visible') this.sayZen();
     };
     document.addEventListener('visibilitychange', this.onVisible);
     this.setView(this.view, true);
@@ -82,6 +86,9 @@ export class SessionView {
   }
 
   destroy() {
+    // Zen ends with the screen, unless it goes on to another session.
+    if (this.zen && !this.zenCarried) this.zenCall(Z.say(false));
+    clearInterval(this.zenTimer);
     this.destroyed = true;
     if (this.ro) this.ro.disconnect();
     this.stream.stop();
@@ -100,7 +107,8 @@ export class SessionView {
     const header = h('header', { class: 'bar nav on-dark' },
       h('button', { class: 'icon-btn back', 'aria-label': 'Back to the sessions', html: ICON.back, onclick: () => this.ctx.back() }),
       this.titleBtn,
-      h('button', { class: 'icon-btn', 'aria-label': 'Actions for this session', html: ICON.more, onclick: () => this.openActions() }));
+      this.moreBtn = h('button', { class: 'icon-btn', 'aria-label': 'Actions for this session', html: ICON.more, onclick: () => this.openActions() }),
+      this.leaveBtn = h('button', { class: 'zen-leave', hidden: true, text: 'Leave Zen', onclick: () => this.leaveZen() }));
     this.detailsEl = h('div', { class: 'details', hidden: true });
     this.moreEl = h('div', { class: 'conv-more', hidden: true, text: 'Earlier messages are in its terminal.' });
     // Quiet until the first frame is drawn, so VoiceOver doesn't read the whole history.
@@ -141,12 +149,14 @@ export class SessionView {
     this.browserBtn = h('button', { class: 'seg-btn', role: 'tab', text: 'Browser', onclick: () => this.setView('browser') });
     this.termBtn = h('button', { class: 'seg-btn', role: 'tab', onclick: () => this.setView('term') }, h('span', { class: 'seg-ic', html: ICON.terminal }), 'Term');
     this.zoomBtn = h('button', { class: 'zoom-btn', hidden: true, onclick: () => this.term.toggleZoom() });
+    // What zen offers, and the soft line, over the message box (zen.js).
+    this.zenEl = h('div', { class: 'zen-calm', hidden: true });
     const modes = h('div', { class: 'modes on-dark' },
       h('span', { class: 'modes-side' }),
       h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Show it as' }, this.browserBtn, this.termBtn),
       h('span', { class: 'modes-side end' }, this.zoomBtn));
     return h('section', { class: 'screen session', 'aria-label': 'Session' }, header, modes, this.detailsEl,
-      h('div', { class: 'feed-wrap' }, this.scrollEl, this.pill, this.term.el), this.bottomEl);
+      h('div', { class: 'feed-wrap' }, this.scrollEl, this.pill, this.term.el), this.zenEl, this.bottomEl);
   }
 
   /** The keys under the Term view, pressed in order, one after another. */
@@ -290,6 +300,7 @@ export class SessionView {
   render() {
     this.renderHeader();
     this.renderFeed();
+    this.renderZen();
     this.renderBottom();
   }
 
@@ -814,6 +825,80 @@ export class SessionView {
       this.sendBtn.disabled = !this.input.value.trim();
     }
     this.toBottom(true);
+  }
+
+  // ---- Zen ------------------------------------------------------------------
+
+  /** Into zen: this conversation alone, calm, with what zen offers (zen.js). */
+  enterZen() {
+    if (this.zen) return;
+    this.zen = true;
+    this.el.classList.add('zen');
+    this.moreBtn.hidden = true;
+    this.leaveBtn.hidden = false;
+    if (!this.detailsEl.hidden) this.toggleDetails();
+    this.setView('browser');
+    this.sayZen();
+    this.zenTimer = setInterval(() => this.sayZen(), Z.RENEW_MS);
+    this.invalidate();
+  }
+
+  leaveZen() {
+    if (!this.zen) return;
+    this.zen = false;
+    clearInterval(this.zenTimer);
+    this.zenTimer = null;
+    this.el.classList.remove('zen');
+    this.moreBtn.hidden = false;
+    this.leaveBtn.hidden = true;
+    this.zenCall(Z.say(false));
+    this.invalidate();
+  }
+
+  /** Says the phone is in zen, showing this session; again each minute while it shows. */
+  sayZen() {
+    if (this.zen && !this.destroyed && document.visibilityState === 'visible') this.zenCall(Z.say(true, this.sid));
+  }
+
+  async zenCall(args) {
+    try {
+      await call(this.conn.m, 'zen', args);
+    } catch (e) {
+      if (e.status === 401) this.ctx.unpaired(this.conn, e.message);
+      else if (!this.destroyed) toast(`Zen: ${e.message}`);
+    }
+  }
+
+  renderZen() {
+    if (!this.zen) {
+      if (!this.zenEl.hidden) {
+        this.zenEl.hidden = true;
+        this.zenEl.replaceChildren();
+        this.zenKey = '';
+      }
+      return;
+    }
+    const o = Z.offer(this.conn.header);
+    const waiting = Z.others(this.conn.sessions.values(), this.sid);
+    const key = JSON.stringify([o, waiting.map((s) => s.id)]);
+    if (key === this.zenKey) return;
+    this.zenKey = key;
+    const kids = [];
+    if (waiting.length) {
+      kids.push(h('button', { class: 'zen-soft', 'aria-label': `${Z.othersWords(waiting.length)}. Shows it; zen stays on.`, onclick: () => this.ctx.open(this.conn, waiting[0].id) },
+        h('span', { class: 'zen-mark' }), Z.othersWords(waiting.length)));
+    }
+    if (o) {
+      const card = h('div', { class: 'zen-card', role: 'group', 'aria-label': 'Zen offers' }, h('p', { class: 'zen-text', text: o.text }));
+      if (o.link) card.append(h('a', { class: 'zen-link', href: o.link, target: '_blank', rel: 'noopener', text: o.link.replace(/^https:\/\//, '').replace(/\/$/, '') }));
+      if (o.kind === 'rest') card.append(h('div', { class: 'zen-breath', 'aria-hidden': 'true' }, h('span', { class: 'zen-dot' })));
+      const answers = h('div', { class: 'zen-answers' }, h('button', { class: 'btn primary', text: o.yes, onclick: () => this.zenCall(Z.answer(o, true)) }));
+      if (o.no) answers.append(h('button', { class: 'btn', text: o.no, onclick: () => this.zenCall(Z.answer(o, false)) }));
+      card.append(answers);
+      kids.push(card);
+    }
+    this.zenEl.replaceChildren(...kids);
+    this.zenEl.hidden = kids.length === 0;
   }
 
   openActions() {
