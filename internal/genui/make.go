@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/irie-people/irie/internal/localmodel"
-	"github.com/irie-people/irie/internal/terms"
 )
 
 // MaxContext is the most of a card's context a model reads, in bytes:
@@ -33,10 +32,10 @@ Keep it short: at most eight parts, in plain words, with no Markdown and no link
 
 // Make has the local model m make the card prompt asks for, from text
 // alone, the card's context, and gives the card's JSON, compacted, once it
-// passes Check. m runs on this computer (terms.FindModel never picks a
-// cloud model), so a card costs no tokens. The caller bounds how long it
-// may take with ctx.
-func Make(ctx context.Context, m terms.Model, prompt, text string) (json.RawMessage, error) {
+// passes Check. m runs on this computer (localmodel.FindChatModel never
+// picks a cloud model), so a card costs no tokens. The caller bounds how
+// long it may take with ctx.
+func Make(ctx context.Context, m localmodel.ChatModel, prompt, text string) (json.RawMessage, error) {
 	if len(text) > MaxContext {
 		text = strings.ToValidUTF8(text[:MaxContext], "") + "\n[cut short]"
 	}
@@ -68,7 +67,7 @@ func Make(ctx context.Context, m terms.Model, prompt, text string) (json.RawMess
 // writes around it, such as its thinking or a code fence, is left out:
 // the object runs from the first brace to the last.
 func cardJSON(reply string) (json.RawMessage, error) {
-	reply = terms.StripThinking(reply)
+	reply = localmodel.StripThinking(reply)
 	i, j := strings.Index(reply, "{"), strings.LastIndex(reply, "}")
 	if i < 0 || j < i {
 		return nil, errors.New("it wrote no JSON object")

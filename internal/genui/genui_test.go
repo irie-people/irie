@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irie-people/irie/internal/terms"
+	"github.com/irie-people/irie/internal/localmodel"
 )
 
 const store = `{"title":"Three ways to keep sessions","body":[` +
@@ -97,7 +97,7 @@ func TestALocalModelMakesTheCard(t *testing.T) {
 	f := &fakeOllama{reply: "```json\n" + store + "\n```"}
 	srv := httptest.NewServer(f)
 	defer srv.Close()
-	m := terms.Model{URL: srv.URL, Name: "qwen3:4b"}
+	m := localmodel.ChatModel{URL: srv.URL, Name: "qwen3:4b"}
 	spec, err := Make(context.Background(), m, "Which store should keep sessions?", "SQLite does 5000 writes a second.")
 	if err != nil {
 		t.Fatal(err)

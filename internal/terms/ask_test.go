@@ -150,7 +150,7 @@ func TestALocalModelWordsTheAnswer(t *testing.T) {
 	defer srv.Close()
 	ctx := context.Background()
 	m, err := FindModel(ctx, []string{"http://127.0.0.1:1", srv.URL}, "")
-	if err != nil || m.Name != "qwen-mid:9b" || !m.think {
+	if err != nil || m.Name != "qwen-mid:9b" || !m.Thinks() {
 		t.Fatalf("FindModel: %+v, %v", m, err)
 	}
 	if m, err := FindModel(ctx, []string{srv.URL}, "qwen-small:4b"); err != nil || m.Name != "qwen-small:4b" {

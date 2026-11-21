@@ -11,8 +11,8 @@ import (
 
 	"github.com/irie-people/irie/internal/genui"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/materialize"
-	"github.com/irie-people/irie/internal/terms"
 )
 
 // Materialized cards (docs/proposals/materialized-cards.md): the core keeps
@@ -145,7 +145,7 @@ func (c *Core) remakeCard(s *materialize.Store, rm materialize.Remake) {
 // cloud, so a card costs no tokens.
 func (c *Core) makeCard(ctx context.Context, r materialize.Recipe) (json.RawMessage, string, error) {
 	cfg := c.cfg()
-	m, err := terms.FindModel(ctx, terms.Servers(*cfg), cfg.Materialize.Model)
+	m, err := localmodel.FindChatModel(ctx, localmodel.ChatServers(cfg.Local.URL, cfg.Local.Port), cfg.Materialize.Model)
 	if err != nil {
 		return nil, "", err
 	}
