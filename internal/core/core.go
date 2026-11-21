@@ -510,6 +510,9 @@ func Run(o Options) error {
 			// is gone; the next one keeps it awake again if there is work.
 			c.lidLetGo()
 			c.mailClose()
+			// What the sidebar's chain still has to write, as an install
+			// restarts the core (chain.go).
+			c.stopChain(chainStop)
 			return nil
 		}
 	}
