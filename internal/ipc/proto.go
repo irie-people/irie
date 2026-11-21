@@ -1022,6 +1022,11 @@ type SpawnArgs struct {
 	// Claude Code's titles and passed to it with --name. Without one the
 	// task's first line names the session until Claude Code titles it.
 	Name string `json:"name,omitempty"`
+	// Skill is a skill the session starts on, as a profile's skill starts
+	// +chaos (DESIGN §4.19): one of Irie's or a plugin's of yours, which a
+	// word of the plugin's names, as :grants does (DESIGN §4.17). The task
+	// goes to the skill, and names the session.
+	Skill string `json:"skill,omitempty"`
 	// Force spawns a local profile even when its model's context or the
 	// machine's memory falls short, with a warning (M10).
 	Force bool `json:"force,omitempty"`
