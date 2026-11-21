@@ -389,7 +389,7 @@ func Run(o Options) error {
 	c.loadTrodHand()
 	c.loadRaphael()
 	c.loadNotepad()
-	c.loadZen()
+	c.startZen()
 
 	// The freeze dog, Irie's one watchdog, runs first: the first tick
 	// waits for tmux, and a stopped server would hold it until the dog
