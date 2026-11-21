@@ -16,7 +16,10 @@ import (
 // leaves the session without skills, and its warnings say why. The caller
 // holds c.mu.
 func (c *Core) skillsFolder(p config.Profile, x *session) string {
-	on := skills.On(skills.Choose(skills.Bundled(), plugins.SkillSettings(*c.cfg(), p.TakesSkills())))
+	// Irie's own, then yours from plugins of your own that are on
+	// (DESIGN §4.17).
+	all, settings := plugins.SessionSkills(plugins.Env{Config: *c.cfg(), Paths: c.paths}, p.TakesSkills())
+	on := skills.On(skills.Choose(all, settings))
 	if len(on) == 0 {
 		return ""
 	}

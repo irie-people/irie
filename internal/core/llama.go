@@ -13,6 +13,8 @@ package core
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -280,15 +282,41 @@ func llamaPick(name string, p config.Profile, list []ipc.LocalModel) (string, er
 	return "", ipc.Errorf(ipc.CodeAmbiguous, "+%s has no model yet; name one in its model, such as %s", name, strings.Join(ok, ", "))
 }
 
+// llamaArgv is the command line of Irie's llama-server on model m: the
+// build bin, with Irie's cache type and local.llama_slots slots of
+// local.context each, then local.llama_args. llama-server splits its
+// context evenly between its slots.
+func (c *Core) llamaArgv(bin string, m llamaModel) []string {
+	l := c.cfg().Local
+	argv := []string{bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
+		"-c", strconv.Itoa(l.Context * l.LlamaSlots), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", strconv.Itoa(l.LlamaSlots)}
+	return append(argv, l.LlamaArgs...)
+}
+
+// llamaSig is a short hash of a llama-server's command line, which its
+// pane keeps (tmux.OptArgs).
+func llamaSig(argv []string) string {
+	sum := sha256.Sum256([]byte(strings.Join(argv, "\x00")))
+	return hex.EncodeToString(sum[:8])
+}
+
+// llamaSigOf is the hash of the command line the llama-server in pane
+// started with, or "" for one an Irie from before it kept them started.
+// The caller holds c.mu.
+func (c *Core) llamaSigOf(pane string) string {
+	out, err := c.tmux.Run("show-options", "-p", "-q", "-v", "-t", pane, tmux.OptArgs)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
 // startLlama starts Irie's own llama-server on model m, in place of the
 // one it runs, and waits until the model is loaded: llama-server under
-// `irie runtime`, which stops it with its window, in its own window, with
-// Irie's cache type and local.llama_slots slots of local.context each,
-// then local.llama_args. llama-server splits its context evenly between
-// its slots. A server that exits first is an error with the last lines it
-// printed.
+// `irie runtime`, which stops it with its window, in its own window, on
+// llamaArgv's command line, which its pane keeps a hash of. A server that
+// exits first is an error with the last lines it printed.
 func (c *Core) startLlama(bin string, m llamaModel) error {
-	l := c.cfg().Local
 	o := localmodel.Llama{URL: c.llamaURL(), HTTP: c.http}
 	answers := func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -323,10 +351,8 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 	for _, k := range slices.Sorted(maps.Keys(runnerCaps)) {
 		args = append(args, "-e", k+"="+runnerCaps[k])
 	}
-	args = append(args, "--",
-		c.bin, "runtime", "--", bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
-		"-c", strconv.Itoa(l.Context*l.LlamaSlots), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", strconv.Itoa(l.LlamaSlots))
-	args = append(args, l.LlamaArgs...)
+	argv := c.llamaArgv(bin, m)
+	args = append(append(args, "--", c.bin, "runtime", "--"), argv...)
 	out, err := c.tmux.Run(args...)
 	if err != nil {
 		c.mu.Unlock()
@@ -336,6 +362,7 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 	if _, err := c.tmux.RunList([][]string{
 		{"set-option", "-p", "-t", pane, tmux.OptRole, tmux.RoleLlama},
 		{"set-option", "-p", "-t", pane, tmux.OptName, m.name},
+		{"set-option", "-p", "-t", pane, tmux.OptArgs, llamaSig(argv)},
 	}); err != nil {
 		c.tmux.Run("kill-pane", "-t", pane)
 		c.mu.Unlock()
@@ -371,6 +398,10 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 // starts Irie's llama-server on it unless it runs it already, and checks
 // the context the server gave it. With force a model short of free memory,
 // or one in place of another that live sessions run on, loads anyway.
+// A server that runs it on another command line, as after local.llama_args
+// changed, starts again on the new one once no live session runs on it;
+// with force, at once, and also one whose command line an older Irie did
+// not keep.
 func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config.Profile, force bool) localmodel.Check {
 	chk := localmodel.Check{URL: c.llamaURL(), Model: m.name}
 	problem := func(format string, a ...any) { chk.Problems = append(chk.Problems, fmt.Sprintf(format, a...)) }
@@ -395,10 +426,14 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 	defer c.llamaMu.Unlock()
 	c.mu.Lock()
 	c.refresh()
-	running, _ := c.llamaRunning()
+	running, pane := c.llamaRunning()
+	had := ""
+	if pane != nil && running == m.name {
+		had = c.llamaSigOf(pane.ID)
+	}
 	byProfile := map[string][]string{}
 	for _, x := range c.sessions {
-		if x.local && !x.dead && x.model == running && running != m.name {
+		if x.local && !x.dead && x.model == running {
 			byProfile[x.profile] = append(byProfile[x.profile], x.name)
 		}
 	}
@@ -412,7 +447,19 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 	slices.Sort(users)
 	need := c.llamaNeed(m)
 	chk.Need = need.Total
-	if running != m.name {
+	restart := false
+	if want := llamaSig(c.llamaArgv(bin, m)); running == m.name && had != want && (had != "" || force) {
+		switch {
+		case len(users) > 0 && !force:
+			warn("%s runs on "+brand.Name+"'s llama-server with settings from before local.llama_args or another of its settings changed, for %s; it starts again with the new ones once they are done, or at once at a preflight with --force", m.name, strings.Join(users, ", "))
+		case len(users) > 0:
+			warn("%s's llama-server starts again with its new settings, so the replies %s were waiting for start over", m.name, strings.Join(users, ", "))
+			restart = true
+		default:
+			restart = true
+		}
+	}
+	if running != m.name || restart {
 		machine := c.readMachine()
 		budget := localmodel.Budget(c.cfg().Local.MemoryGiB, machine)
 		c.mu.Lock()
@@ -432,7 +479,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 				problem("%s; close something first, pick a smaller model, or spawn with --force", msg)
 			}
 		}
-		if len(users) > 0 {
+		if len(users) > 0 && !restart {
 			msg := fmt.Sprintf(brand.Name+"'s llama-server runs %s for %s, and runs one model at a time", running, strings.Join(users, ", "))
 			if force {
 				warn("%s; %s takes its place", msg, m.name)

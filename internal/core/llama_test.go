@@ -276,6 +276,106 @@ func mapsEqual(a, b map[string]string) bool {
 	return true
 }
 
+// A change to the llama-server's settings, such as local.llama_args,
+// starts it again on them at the next spawn or preflight, once no live
+// session runs on it. While one does, it keeps running, with a warning,
+// unless a preflight is forced; the same settings start nothing.
+func TestTheLlamaServerStartsAgainOnNewSettings(t *testing.T) {
+	dir := t.TempDir()
+	models := filepath.Join(dir, "models")
+	if err := os.MkdirAll(models, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteGGUF(t, filepath.Join(models, "coder.gguf"), qwenGGUF(true, nil), layerTensors(8, 2<<20, 12))
+	log := filepath.Join(dir, "llama-args.json")
+	t.Setenv("IRIE_FAKE_LLAMA_LOG", log)
+	port := testutil.FreePort(t)
+	fake := testutil.BuildFakeAgent(t)
+	c := setupWith(t, agentConfig{
+		extra: fmt.Sprintf("[profiles.coder]\ncommand = %q\nmodel = \"coder\"\nlocal = { runtime = \"llama-server\" }\n", fake),
+		local: fmt.Sprintf("ollama = \"/nonexistent/ollama\"\nllama_server = %q\nllama_port = %d\nllama_slots = 2\nllama_args = [\"--one\"]\nmodels = %q\n",
+			testutil.BuildFakeLlama(t), port, models),
+	})
+	server := func() string {
+		for _, p := range c.panes() {
+			if p["@irie_role"] == "llama" {
+				return p["pane_id"]
+			}
+		}
+		return ""
+	}
+	args := func(v string) {
+		set := ipc.ConfigArgs{Set: []ipc.ConfigSet{{Key: "local.llama_args", Value: json.RawMessage(v)}}}
+		if err := c.call(ipc.OpConfig, set, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	last := func() string {
+		a := readArgs(t, log)
+		return a[len(a)-1]
+	}
+	preflight := func(force bool) ipc.PreflightResult {
+		var pr ipc.PreflightResult
+		if err := c.call("preflight", ipc.PreflightArgs{Profile: "coder", Force: force}, &pr); err != nil || !pr.OK {
+			t.Fatalf("preflight (force %v) = %+v, %v", force, pr, err)
+		}
+		return pr
+	}
+
+	var r ipc.SpawnResult
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "coder"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	c.waitState(r.Session.ID, ipc.StateWorking)
+	first := server()
+	if first == "" || last() != "--one" {
+		t.Fatalf("the server is %q on %q", first, readArgs(t, log))
+	}
+
+	// A session runs on it, so a spawn after the settings changed leaves it
+	// running, and says why.
+	args(`["--two"]`)
+	var r2 ipc.SpawnResult
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "coder"}, &r2); err != nil {
+		t.Fatal(err)
+	}
+	row := c.waitState(r2.Session.ID, ipc.StateWorking)
+	if !strings.Contains(strings.Join(row.Warnings, " "), "settings from before") {
+		t.Errorf("the second session's warnings = %q", row.Warnings)
+	}
+	if server() != first || last() != "--one" {
+		t.Errorf("a spawn beside a live session started the server again, on %q", readArgs(t, log))
+	}
+
+	// A forced preflight starts it again at once, and says whose replies
+	// start over.
+	if pr := preflight(true); !strings.Contains(strings.Join(pr.Warnings, " "), "start over") {
+		t.Errorf("forced preflight warnings = %q", pr.Warnings)
+	}
+	second := server()
+	if second == first || last() != "--two" {
+		t.Errorf("after a forced preflight the server is %q on %q", second, readArgs(t, log))
+	}
+
+	// With no session on it, the next preflight starts it again by itself;
+	// the same settings again start nothing.
+	args(`["--three"]`)
+	for _, id := range []string{r.Session.ID, r2.Session.ID} {
+		if err := c.call("close", ipc.CloseArgs{Session: id}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	preflight(false)
+	third := server()
+	if third == second || last() != "--three" {
+		t.Errorf("with no session on it the server is %q on %q", third, readArgs(t, log))
+	}
+	preflight(false)
+	if server() != third {
+		t.Error("a preflight on the same settings started the server again")
+	}
+}
+
 func TestLlamaSlotsServeSessionsAtOnce(t *testing.T) {
 	dir := t.TempDir()
 	models := filepath.Join(dir, "models")

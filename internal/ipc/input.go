@@ -56,6 +56,10 @@ type InputArgs struct {
 	// Unattended starts the task as a session that no one watches
 	// (SpawnArgs.Unattended), as a bench on a peer starts its runs.
 	Unattended bool `json:"unattended,omitempty"`
+	// From starts the task in a copy of this git repo's last commit, in a
+	// scratch folder of its own (SpawnArgs.From), as a bench started with
+	// --from starts its runs on a peer.
+	From string `json:"from,omitempty"`
 }
 
 // Paste is a long paste that a client shows as Label in what was typed.
