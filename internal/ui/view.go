@@ -406,6 +406,9 @@ func (m Model) View() tea.View {
 	}
 	// Every line is painted on the sidebar's own ground, padded to the
 	// pane's width, so the palette's contrast holds on any terminal theme.
+	if m.zen {
+		return m.zenView(v)
+	}
 	lines := []string{m.ground(m.header())}
 	if m.headerLines() > 1 {
 		lines = append(lines, m.ground(m.historyLine()))
@@ -444,6 +447,12 @@ func (m Model) View() tea.View {
 	case m.statusVisible():
 		lines = append(lines, m.ground(m.statusLine()))
 	}
+	return m.withBar(v, lines)
+}
+
+// withBar puts the command bar under lines, which fill the pane above it,
+// with the terminal's cursor in the bar while it has the keyboard.
+func (m Model) withBar(v tea.View, lines []string) tea.View {
 	bar := strings.Split(m.bar.View(), "\n")
 	if h := m.barHeight(); len(bar) > h {
 		bar = bar[:h]

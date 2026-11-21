@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"slices"
 	"time"
@@ -54,13 +55,14 @@ type zenState struct {
 	tried      time.Time      // the vault was last tried
 	profile    ipc.ZenProfile // your zen: the newest version's, or the first
 	head       string
-	on         bool
-	session    string          // the session zen shows
-	since      time.Time       // zen on since
-	gone       time.Time       // the app went while zen was on
-	windowText int             // the window's text size, as the app last said
-	trial      *ipc.ZenProfile // a step's change on trial
-	trying     string          // that step's id
+	on         bool               // a client holds zen
+	holds      map[string]zenHold // each client's zen, by ipc.ZenArgs' Client
+	session    string             // the session zen shows: the one a client said last
+	since      time.Time          // zen on since
+	gone       time.Time          // the app went while it held zen
+	windowText int                // the window's text size, as the app last said
+	trial      *ipc.ZenProfile    // a step's change on trial
+	trying     string             // that step's id
 	offer      *ipc.ZenOffer
 	answered   time.Time       // the last offer was answered
 	desk       time.Time       // at the computer since; zero while away
@@ -69,17 +71,25 @@ type zenState struct {
 	told       map[string]bool // sessions told zen is on
 }
 
+// zenHold is a client's zen: the session it shows, and when it last said
+// it was in zen.
+type zenHold struct {
+	Session string    `json:"session,omitempty"`
+	Said    time.Time `json:"said"`
+}
+
 // zenSaved is the state file's: how far along the path the person is, the
 // night zen last spoke, the sessions told zen is on, so a core that
 // restarts tells no agent twice, and your zen as it is, for a core whose
 // vault isn't open yet. Nothing about how anyone feels, and none of the
 // history, which stays in the vault.
 type zenSaved struct {
-	Path    zen.Progress    `json:"path"`
-	Night   string          `json:"night,omitempty"`
-	Told    []string        `json:"told,omitempty"`
-	Profile *ipc.ZenProfile `json:"profile,omitempty"`
-	Head    string          `json:"head,omitempty"`
+	Path    zen.Progress       `json:"path"`
+	Night   string             `json:"night,omitempty"`
+	Told    []string           `json:"told,omitempty"`
+	Profile *ipc.ZenProfile    `json:"profile,omitempty"`
+	Head    string             `json:"head,omitempty"`
+	Holds   map[string]zenHold `json:"holds,omitempty"` // the clients in zen, which a restarted core keeps until they lapse
 }
 
 // loadZen reads the state file, with your zen as it was, as the core
@@ -117,7 +127,39 @@ func (c *Core) loadZen() {
 	for _, id := range c.zen.saved.Told {
 		c.zen.told[id] = true
 	}
+	// The clients that were in zen are still, until they lapse or say
+	// otherwise: each that restarts with the core comes back into zen.
+	z.holds = map[string]zenHold{}
+	for client, h := range z.saved.Holds {
+		if zenClient(client) {
+			z.holds[client] = h
+		}
+	}
+	if len(z.holds) > 0 {
+		now := time.Now()
+		z.on, z.since, z.desk, z.session = true, now, now, z.latest()
+	}
 	c.zen.loaded = true
+}
+
+// zenClient says whether a client may hold zen.
+func zenClient(client string) bool {
+	switch client {
+	case ipc.ZenApp, ipc.ZenSidebar, ipc.ZenPhone:
+		return true
+	}
+	return false
+}
+
+// latest is the session of the client that said last it was in zen.
+func (z *zenState) latest() string {
+	var last zenHold
+	for _, h := range z.holds {
+		if h.Said.After(last.Said) {
+			last = h
+		}
+	}
+	return last.Session
 }
 
 // saveZen writes the state file. The caller holds c.mu.
@@ -130,6 +172,7 @@ func (c *Core) saveZen() {
 	slices.Sort(s.Told)
 	p := c.zen.profile
 	s.Profile, s.Head = &p, c.zen.head
+	s.Holds = maps.Clone(c.zen.holds)
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err == nil {
 		err = filetx.WriteFile(c.paths.ZenState(), append(b, '\n'), 0o600)
@@ -146,6 +189,9 @@ func (c *Core) zenHeader() *ipc.Zen {
 		return nil
 	}
 	h := &ipc.Zen{Profile: z.profile, Head: z.head, On: z.on, Trying: z.trying}
+	if len(z.holds) > 0 {
+		h.Clients = slices.Sorted(maps.Keys(z.holds))
+	}
 	if z.trial != nil {
 		h.Profile = *z.trial
 	}
@@ -178,8 +224,10 @@ func (c *Core) zenOp(a ipc.ZenArgs) (ipc.ZenResult, error) {
 		res.Version, err = c.zenSet(*a.Set, a.Why, now)
 	case a.Answer != "":
 		res.Version, err = c.zenAnswer(a.Offer, a.Answer, now)
+	case a.On != nil && a.Client != "" && !zenClient(a.Client):
+		err = ipc.Errorf(ipc.CodeBadArgs, "zen: client %q: must be %s, %s or %s", a.Client, ipc.ZenApp, ipc.ZenSidebar, ipc.ZenPhone)
 	case a.On != nil:
-		c.zenShow(*a.On, a.Session, a.WindowText, now)
+		c.zenShow(*a.On, a.Client, a.Session, a.WindowText, now)
 	}
 	if err == nil && a.Log > 0 {
 		res.Versions, err = c.zen.book.Log(min(a.Log, ipc.MaxZenLog))
@@ -202,26 +250,41 @@ func (c *Core) zenOp(a ipc.ZenArgs) (ipc.ZenResult, error) {
 // zenShow is the app saying zen started or ended, or went on to another
 // session. Each session zen shows is told, once, to be gentle. The caller
 // holds c.mu.
-func (c *Core) zenShow(on bool, session string, windowText int, now time.Time) {
+func (c *Core) zenShow(on bool, client, session string, windowText int, now time.Time) {
 	z := &c.zen
+	if client == "" {
+		client = ipc.ZenApp
+	}
 	if windowText >= zen.MinText && windowText <= 96 {
 		z.windowText = windowText
 	}
 	if !on {
-		if z.on {
+		_, held := z.holds[client]
+		delete(z.holds, client)
+		switch {
+		case len(z.holds) == 0 && (z.on || len(z.told) > 0):
+			// The last client left zen; or zen ended while no core
+			// heard it, as across a restart.
 			c.zenLeave()
-		} else if len(z.told) > 0 {
-			// Zen ended while no core heard it, as across a restart.
-			c.zenLeave()
+		case held:
+			z.session = z.latest()
+			c.saveZen()
 		}
 		return
 	}
-	z.gone = time.Time{}
+	if client == ipc.ZenApp {
+		z.gone = time.Time{}
+	}
+	if z.holds == nil {
+		z.holds = map[string]zenHold{}
+	}
+	z.holds[client] = zenHold{Session: session, Said: now}
 	if !z.on {
 		z.on, z.since, z.desk = true, now, now
 	}
 	z.session = session
 	c.zenTell(session)
+	c.saveZen()
 }
 
 // zenTell queues the gentle note for the agent of a session zen shows,
@@ -248,6 +311,7 @@ func (c *Core) zenTell(id string) {
 func (c *Core) zenLeave() {
 	z := &c.zen
 	z.on, z.session, z.gone = false, "", time.Time{}
+	clear(z.holds)
 	z.trial, z.trying, z.offer = nil, "", nil
 	for id := range z.told {
 		if x := c.sessions[id]; x != nil {
@@ -543,15 +607,37 @@ func (c *Core) zenMoment(now time.Time, idle time.Duration) {
 	if !z.on {
 		return
 	}
-	if c.appViews == 0 {
+	// A client's zen ends once it has gone: the app's zenGone after its
+	// last window, another's ipc.ZenLapse after it last said it was in
+	// zen. While only the app holds zen and its windows are gone, zen
+	// offers nothing.
+	away := false
+	if _, ok := z.holds[ipc.ZenApp]; ok && c.appViews == 0 {
 		if z.gone.IsZero() {
 			z.gone = now
-		} else if now.Sub(z.gone) >= zenGone {
-			c.zenLeave()
 		}
+		if now.Sub(z.gone) >= zenGone {
+			delete(z.holds, ipc.ZenApp)
+			z.gone = time.Time{}
+		} else {
+			away = true
+		}
+	} else {
+		z.gone = time.Time{}
+	}
+	for client, h := range z.holds {
+		if client != ipc.ZenApp && now.Sub(h.Said) >= ipc.ZenLapse {
+			delete(z.holds, client)
+		}
+	}
+	if len(z.holds) == 0 {
+		c.zenLeave()
 		return
 	}
-	z.gone = time.Time{}
+	z.session = z.latest()
+	if away && len(z.holds) == 1 {
+		return
+	}
 	// Away from the computer counts as a rest: the count starts again
 	// when the person comes back, and a rest offered meanwhile goes.
 	if idle >= zen.Away {

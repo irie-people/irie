@@ -144,7 +144,13 @@ Mycylic, the owner's graph product, keeps graph versions as SHA-512-named canoni
    - In the Mac app: zen read from the core and changed through it (the app's old zen settings become the first version), the offer and rest bubbles, the soft line, calm words in Keep Watch, Settings, and View › Your Zen… with the arc diagram.
 2. **Built: the vault.** Zen's versions sealed at rest (§4): `internal/chain`'s vault and `internal/keyring`, the first part of local-chain.md's step 2, and `irie ctl zen export` for Mycylic.
 3. **Mycylic:** its importer and `mycylic anchor`, in Mycylic's own repo.
-4. **Other clients:** the terminal sidebar and the phone app draw zen's quiet from the header.
+4. **Other clients, each with a zen of its own** (the terminal sidebar's built):
+   - **Who holds zen.** The core keeps zen on while any client holds it: the Mac app (`client` empty, or `app`), the terminal sidebar (`sidebar`) or the phone (`phone`). A client's "off" ends only its own hold, so the Mac app, which says whether it is in zen at each new selection, never ends the sidebar's.
+   - **The header's `zen.clients`** lists the holders, so a client that restarts, as each does on an install, comes back into zen by itself.
+   - **When a hold ends.** The app's hold ends 2 minutes after its last window goes, as before. Another client renews its hold by saying `on` again at least every minute, and the hold lapses 2 minutes after the last. Holds are kept in `zen.json`, so a core that restarts keeps them until they lapse.
+   - **Every session zen shows,** in any client, is told once to be gentle.
+   - **The terminal sidebar,** with `~`: the card of the session on show alone, a soft line when another session would like you, and what zen offers, with `y` and `n` for its two answers. A rest comes with a dot that rises for 4 seconds and falls for 6. There are no counts, no status strip and no tagline. `j` and `k` go on to the next session or the one before, which the slot shows. `~` leaves.
+   - **The phone app** comes next.
 
 ## Open questions
 
