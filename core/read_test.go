@@ -96,6 +96,13 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":yoink audio https://www.example.com/watch?v=abc", "", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://www.example.com/watch?v=abc", Get: "audio"}},
 		{":yoink https://www.example.com/watch?v=abc 720p", "", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://www.example.com/watch?v=abc", Get: "720p"}},
 		{":yoink   mp3   www.example.com/v/1  ", "", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://www.example.com/v/1", Get: "mp3"}},
+		{":jammin", "", "", OpJammin, JamminArgs{}},
+		{":jammin pause", "s1", "", OpJammin, JamminArgs{Do: JamPause}},
+		{":jammin  Next ", "", "", OpJammin, JamminArgs{Do: JamNext}},
+		{":jammin back", "", "", OpJammin, JamminArgs{Do: JamPrevious}},
+		{":jammin spotify play", "", "", OpJammin, JamminArgs{Do: JamPlay, Source: JamSpotify}},
+		{":jammin apple music next", "", "", OpJammin, JamminArgs{Do: JamNext, Source: JamMusic}},
+		{":jammin music", "", "", OpJammin, JamminArgs{Source: JamMusic}},
 		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
 		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
 		{":markets", "s1", "", OpMarkets, MarketsArgs{}},
@@ -175,6 +182,10 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":bench +anon fix it", "", "", CodeBadArgs, "no anonymous research"},
 		{":markets @web add the cloud market", "", "", CodeBadArgs, "takes no @repo"},
 		{":yoink audio", "", "", CodeBadArgs, ":yoink takes a link, and best, audio or a height"},
+		{":jammin louder", "", "", CodeBadArgs, ":jammin takes play, pause, next or previous"},
+		{":jammin pause next", "", "", CodeBadArgs, ":jammin takes one control at a time."},
+		{":jammin pause spotify", "", "", CodeBadArgs, ":jammin takes play, pause, next or previous"},
+		{":jammin spotify music", "", "", CodeBadArgs, ":jammin takes play, pause, next or previous"},
 		{":yoink audio 720p https://example.com/v", "", "", CodeBadArgs, ":yoink takes a link, and best, audio or a height"},
 		{":yoink https://example.com/a https://example.com/b", "", "", CodeBadArgs, ":yoink takes one link at a time."},
 		{":markets +a +b add it", "", "", CodeBadArgs, "Only one +profile per task."},
@@ -358,6 +369,10 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputAnswered, Op: OpYoink, Text: "No downloads yet."}},
 		{"yoink a link", Step{Op: OpYoink, Args: YoinkArgs{Do: YoinkStart, URL: "https://example.com/v"}}, YoinkResult{Text: "Yoinking “A clip” into ~/Downloads."}, nil,
 			InputResult{Did: InputRan, Op: OpYoink, Text: "Yoinking “A clip” into ~/Downloads."}},
+		{"jammin", Step{Op: OpJammin, Args: JamminArgs{}}, JamminResult{Text: "Spotify: nothing plays.\nApple Music: nothing plays.\n"}, nil,
+			InputResult{Did: InputAnswered, Op: OpJammin, Text: "Spotify: nothing plays.\nApple Music: nothing plays."}},
+		{"jammin pause", Step{Op: OpJammin, Args: JamminArgs{Do: JamPause}}, JamminResult{Text: "Paused Spotify."}, nil,
+			InputResult{Did: InputRan, Op: OpJammin, Text: "Paused Spotify."}},
 		{"hows", Step{Answer: "fix login: working", Session: login}, nil, nil,
 			InputResult{Did: InputAnswered, Session: login, Text: "fix login: working"}},
 	} {
@@ -453,7 +468,7 @@ func TestAPluginsWordStartsASession(t *testing.T) {
 		t.Errorf(":grantz: %v", err)
 	}
 	// Irie's own commands come first, and no word may take their names.
-	for _, name := range []string{"close", "write", "markets", "undo", "move", "open", "yoink"} {
+	for _, name := range []string{"close", "write", "markets", "undo", "move", "open", "yoink", "jammin"} {
 		if !IsCommand(name) {
 			t.Errorf("IsCommand(%q) = false", name)
 		}
