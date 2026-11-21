@@ -31,6 +31,19 @@ func TestTheCardOp(t *testing.T) {
 	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "markets"}); err == nil || !strings.Contains(err.Error(), "plugins on markets") {
 		t.Errorf("markets with its plugin off: %v", err)
 	}
+	if obsidianBuilt {
+		cfg := *c.cfg()
+		cfg.Plugins.Obsidian = false
+		c.useConfig(cfg)
+		if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "vault"}); err == nil || !strings.Contains(err.Error(), "plugins on obsidian") {
+			t.Errorf("the vault with its plugin off: %v", err)
+		}
+		cfg.Plugins.Obsidian = true
+		c.useConfig(cfg)
+		if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "vault"}); err == nil || !strings.Contains(err.Error(), "app is open") {
+			t.Errorf("the vault, no app open: %v", err)
+		}
+	}
 	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "mail"}); err == nil || !strings.Contains(err.Error(), "app is open") {
 		t.Errorf("no app open: %v", err)
 	}

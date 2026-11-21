@@ -1,4 +1,4 @@
-//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noterms && !noextension && !noyoink
+//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noterms && !noextension && !noyoink && !noobsidian
 
 package plugins
 
@@ -11,10 +11,11 @@ import (
 )
 
 // TestABuildWithoutPlugins: go build -tags novpn,noprivacy,nowriting,
-// nomarkets,nomail,nobitwarden,noterms,noextension,noyoink builds every package, and its irie
+// nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,noobsidian builds every package, and its irie
 // links none of the plugins' code (DESIGN §4.17); and a company's copy, which
-// keeps the VPN plugin to drive the VPN it approves (§4.18) and leaves the rest out,
-// builds and links the VPN's code and none of the others'.
+// keeps the VPN plugin to drive the VPN it approves (§4.18) and the vault of
+// notes, and leaves the personal plugins out, builds and links the VPN's code
+// and none of theirs.
 func TestABuildWithoutPlugins(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds Irie without its plugins")
@@ -25,7 +26,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink"
+	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,noobsidian"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
@@ -39,7 +40,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 		t.Fatalf("go list -deps %s: %v", tags, err)
 	}
 	deps := strings.Fields(string(out))
-	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink"} {
+	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink", "obsidian"} {
 		for _, d := range deps {
 			if d == "github.com/irie-people/irie/internal/"+pkg {
 				t.Errorf("a build without plugins links internal/%s", pkg)
@@ -74,6 +75,9 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	}
 	if !links["vpn"] {
 		t.Error("a company's copy lacks internal/vpn, so it can't drive its VPN")
+	}
+	if !links["obsidian"] {
+		t.Error("a company's copy lacks internal/obsidian, so it can't keep its notes in a vault")
 	}
 	for _, pkg := range []string{"anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink"} {
 		if links[pkg] {

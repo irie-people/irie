@@ -64,6 +64,7 @@ type Config struct {
 	Mail      Mail               `toml:"mail"`
 	Extension Extension          `toml:"extension"`
 	Yoink     Yoink              `toml:"yoink"`
+	Obsidian  Obsidian           `toml:"obsidian"`
 	Plugins   Plugins            `toml:"plugins"`
 }
 
@@ -104,6 +105,11 @@ type Plugins struct {
 	// run by the core into yoink.folder. Off until asked, so a new Irie
 	// downloads from no site of its own accord.
 	Yoink bool `toml:"yoink"`
+	// Obsidian is an Obsidian vault beside the sessions: its notes in the
+	// Mac app's Vault cards, read and written by Irie itself, and the
+	// notepad kept as a note in it, both ways. It does nothing until
+	// obsidian.vault names the vault.
+	Obsidian bool `toml:"obsidian"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -1036,9 +1042,10 @@ func Default() Config {
 		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:     defaultMail(),
 		Yoink:    defaultYoink(),
+		Obsidian: defaultObsidian(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Obsidian: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1163,8 +1170,9 @@ func Parse(data []byte, path string) (Config, error) {
 		Mail      *Mail                     `toml:"mail"`
 		Extension *Extension                `toml:"extension"`
 		Yoink     *Yoink                    `toml:"yoink"`
+		Obsidian  *Obsidian                 `toml:"obsidian"`
 		Plugins   *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1846,13 +1854,14 @@ func (c Config) Validate() error {
 	checkMail(c.Mail, bad)
 	checkExtension(c.Extension, bad)
 	checkYoink(c.Yoink, bad)
+	checkObsidian(c.Obsidian, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ObsidianBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1909,6 +1918,10 @@ func (c Config) Write(w io.Writer) error {
 	if !YoinkBuilt {
 		delete(m, "yoink")
 		delete(plugins, "yoink")
+	}
+	if !ObsidianBuilt {
+		delete(m, "obsidian")
+		delete(plugins, "obsidian")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")
