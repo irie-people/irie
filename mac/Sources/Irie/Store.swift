@@ -68,6 +68,9 @@ final class Store {
     private(set) var agents: [Agent] = []
     /// Whether the core takes a model for one task.
     private(set) var canPickModel = false
+    /// Whether the core sends a task to the top, first in Pinned and
+    /// boosted (spawn-top): the task bar's Send to Top.
+    private(set) var canSendToTop = false
     /// The core takes a tutor mode for one task, and serves the Help menu
     /// (docs/proposals/learning.md).
     private(set) var canTutor = false
@@ -160,6 +163,10 @@ final class Store {
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
+    /// The task bar's Send to Top, armed: the next task sent goes to the
+    /// top, first in Pinned and boosted (DESIGN §4.1), and disarms it
+    /// (sendTop). Kept between runs, as an install relaunches the app.
+    private(set) var sendToTop = UserDefaults.standard.bool(forKey: "sendToTop")
     /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
     /// it for the marks; this draws the views again when it changes.
     private(set) var redOnDone = false
@@ -437,6 +444,7 @@ final class Store {
                 // A core that restarted asks again.
                 splitShown = nil
                 canPickModel = hello.features.contains("spawn-model")
+                canSendToTop = hello.features.contains("spawn-top")
                 canTutor = hello.features.contains("spawn-tutor")
                 canLearn = hello.features.contains("learn")
                 canMaterialize = hello.features.contains("materialize")
@@ -783,6 +791,13 @@ final class Store {
         UserDefaults.standard.set(r, forKey: "taskRepo")
     }
 
+    /// Arms Send to Top, or disarms it: armed, the next task sent goes to
+    /// the top, first in Pinned and boosted.
+    func setSendToTop(_ on: Bool) {
+        sendToTop = on
+        UserDefaults.standard.set(on, forKey: "sendToTop")
+    }
+
     /// Asks for a folder for the task bar's tasks: a git repo gets a worktree,
     /// any other folder runs in place.
     func chooseTaskFolder() {
@@ -811,6 +826,7 @@ final class Store {
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
+        canSendToTop = true
         canTutor = true
         canLearn = true
         sessionCards = [Fixture.selected: Fixture.standsCard]
@@ -1219,6 +1235,16 @@ final class Store {
         await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil)
     }
 
+    /// Sends a jot, what was typed in the task bar or a note sent as one,
+    /// as input does, with the bar's Send to Top as it stands (sendTop).
+    /// top sends this one to the top, as ⌘Return does, armed or not. The
+    /// app's other tasks, the new-task sheet's and its buttons', go as
+    /// typed, whatever the bar's toggle says.
+    func jot(_ text: String, note: String? = nil, top: Bool = false) async -> Bool {
+        let args = inputArgs(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil, note: note)
+        return await sendTop(args, top: top) != nil
+    }
+
     /// Shows the session a note was sent to, or says it is closed.
     func showNoteSession(_ id: String) {
         if sessions.contains(where: { $0.id == id }) {
@@ -1233,12 +1259,18 @@ final class Store {
     /// history takes it too, as if typed there.
     func sendNote(_ text: String, note: String) async -> Bool {
         TaskHistory.remember(text)
-        return await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil, note: note)
+        return await jot(text, note: note)
     }
 
     /// Sends text from the bar or the new-task sheet. The @repo, +agent and
     /// tutor words in it win over the menus' repo, agent and tutor mode.
     func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?, note: String? = nil) async -> Bool {
+        await send(inputArgs(text, repo: repo, worktree: worktree, agent: agent, model: model, tutor: tutor, note: note)) != nil
+    }
+
+    /// The input of text, with the menus' repo, agent, model and tutor
+    /// mode, the selected card and the space on show.
+    private func inputArgs(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?, note: String?) -> InputArgs {
         var args = InputArgs(text: text)
         args.note = note
         // A : command acts on the selected card, or :move on the selected
@@ -1257,7 +1289,29 @@ final class Store {
         if canTutor { args.tutor = tutor }
         // A task starts in the space on show.
         if !spaces.isEmpty { args.space = space }
-        return await send(args)
+        return args
+    }
+
+    /// Sends args with Send to Top as it stands, and settles the toggle.
+    /// top is a send to the top asked for this once (⌘Return), whatever the
+    /// toggle says. Returns what the core says the input did: spawned,
+    /// added, answered, ran or asked; nil when it did not go, and its text
+    /// came back to the bar to fix. The core reads top only for a task: a
+    /// : command or a question goes as it would without it, and a task
+    /// sent to the top always starts a session, never added (DESIGN §4.1).
+    private func sendTop(_ args: InputArgs, top: Bool) async -> String? {
+        var args = args
+        let armed = canSendToTop && sendToTop
+        if canSendToTop, top || armed { args.top = true }
+        // One task each time it is armed, "the jot that sends". It disarms
+        // as this one goes, since the bar empties at once and a task typed
+        // while this one starts must not ride along, and arms again unless
+        // a session started: a : command, a question or a task that did not
+        // go leaves it for the next.
+        if armed { setSendToTop(false) }
+        let did = await send(args)
+        if armed, did != "spawned" { setSendToTop(true) }
+        return did
     }
 
     /// What the Help menu shows: the resources, with the shown session's
@@ -1292,7 +1346,9 @@ final class Store {
         Task { _ = await send(args) }
     }
 
-    private func send(_ args: InputArgs) async -> Bool {
+    /// Sends args to the core and says what came of it. Returns the input's
+    /// did, or nil when it did not go.
+    private func send(_ args: InputArgs) async -> String? {
         tasksStarting += 1
         defer { tasksStarting -= 1 }
         do {
@@ -1345,10 +1401,10 @@ final class Store {
                     show(s.id, focus: true)
                 }
             }
-            return true
+            return r.did
         } catch {
             say(error.localizedDescription, error: true)
-            return false
+            return nil
         }
     }
 

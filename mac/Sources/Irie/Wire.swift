@@ -591,9 +591,12 @@ struct InputArgs: Encodable, Equatable {
     /// The note of the notepad the text came from: the core ticks it off
     /// once the input goes through (Notes.swift).
     var note: String?
+    /// Send to Top: a task goes first in Pinned, boosted (DESIGN §4.1).
+    /// Only a core whose hello lists spawn-top takes it.
+    var top: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model, apart, tutor, space, note
+        case text, session, outside, repo, profile, model, apart, tutor, space, note, top
         case inPlace = "in_place"
     }
 }

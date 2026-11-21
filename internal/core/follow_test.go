@@ -66,6 +66,7 @@ func TestAJotAddsOnlyToARecentLiveJotInTheSamePlace(t *testing.T) {
 		{"another agent", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Profile: "haiku"}, 30 * time.Second, nil, false},
 		{"another model", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Model: "sonnet"}, 30 * time.Second, nil, false},
 		{"a name of its own", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Name: "Header"}, 30 * time.Second, nil, false},
+		{"sent to the top", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Top: true}, 30 * time.Second, nil, false},
 		{"after the window", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 2*time.Minute + time.Second, nil, false},
 		{"with the window off", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second,
 			func(c *Core, _ *lastJot, _ *session) {

@@ -171,11 +171,13 @@ func refusedThere(err error) bool {
 
 // placeTask starts a task typed here on the peer the balancer picks, and
 // says whether it did. A task that reads as more for the jot before it
-// stays with that jot's agent, and one the peer refuses starts here.
+// stays with that jot's agent, and one the peer refuses starts here. So
+// does one sent to the top: only this machine's sessions pin here (pin.go),
+// and its boost is to give it this machine first.
 func (c *Core) placeTask(a ipc.InputArgs, sa ipc.SpawnArgs) (ipc.InputResult, bool, error) {
 	now := time.Now()
 	c.mu.Lock()
-	if _, _, follows := c.addable(sa, now); follows || sa.Apart != "" {
+	if _, _, follows := c.addable(sa, now); follows || sa.Apart != "" || sa.Top {
 		c.mu.Unlock()
 		return ipc.InputResult{}, false, nil
 	}

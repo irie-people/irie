@@ -2,6 +2,7 @@ package core
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/irie-people/irie/internal/ipc"
@@ -224,5 +225,62 @@ func TestNewTabsFirstPutsANewSessionJustUnderPinned(t *testing.T) {
 	}
 	if got := pinned(rows); !slices.Equal(got, []string{"alpha"}) {
 		t.Errorf("pinned = %v", got)
+	}
+}
+
+// A task sent to the top goes first in Pinned, over the cards pinned before
+// it, and boosted, as the user's own pin and boost would leave it: kept
+// through a restart, with its start the one step of the history. Typed,
+// the reply says where it went, and it is a task of its own however it
+// reads; the jot after it may still add to it.
+func TestATaskSentToTheTopGoesFirstInPinnedBoosted(t *testing.T) {
+	c := setup(t)
+	alpha := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "alpha"})
+	c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "beta"})
+	c.pin(alpha.ID, true)
+	steps := len(c.history().Undo)
+	gamma := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "gamma", Top: true})
+	if !gamma.Pinned || gamma.Priority != 1 {
+		t.Errorf("sent to the top, it started pinned %v at priority %d", gamma.Pinned, gamma.Priority)
+	}
+	check := func(when string, want ...string) {
+		t.Helper()
+		rows := c.list()
+		if got := pinned(rows); !slices.Equal(got, want) {
+			t.Errorf("%s, pinned = %v, want %v", when, got, want)
+		}
+		if got := unpinnedHere(rows); !slices.Equal(got, []string{"beta"}) {
+			t.Errorf("%s, the rest = %v, want beta alone", when, got)
+		}
+		for _, s := range rows {
+			if boosted := s.Priority > 0; boosted != (s.Name != "alpha" && s.Name != "beta") {
+				t.Errorf("%s, %s is at priority %d", when, s.Name, s.Priority)
+			}
+		}
+	}
+	check("at once", "gamma", "alpha")
+	if got := labels(c.history().Undo)[steps:]; !slices.Equal(got, []string{`start "gamma"`}) {
+		t.Errorf("history %v, want its start alone", got)
+	}
+	c.restartCore()
+	check("after a restart", "gamma", "alpha")
+
+	// Typed as more for the task just before, it still starts a session of
+	// its own, at the top.
+	if _, err := c.input(ipc.InputArgs{Text: "prompt"}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := c.input(ipc.InputArgs{Text: "also check the docs", Top: true})
+	if err != nil || r.Did != ipc.InputSpawned || r.Session == nil || !strings.Contains(r.Text, "It's at the top, first in Pinned, and boosted.") {
+		t.Fatalf("typed to the top: %+v, %v", r, err)
+	}
+	rows := c.list()
+	if got := pinned(rows); len(got) != 3 || got[0] != r.Session.Name || got[1] != "gamma" {
+		t.Errorf("typed to the top, pinned = %v, want %s first", got, r.Session.Name)
+	}
+	// The jot after it adds to it, as to any jot.
+	more, err := c.input(ipc.InputArgs{Text: "also the tests"})
+	if err != nil || more.Did != ipc.InputAdded || more.Session == nil || more.Session.ID != r.Session.ID {
+		t.Errorf("more for the jot sent to the top: %+v, %v", more, err)
 	}
 }

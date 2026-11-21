@@ -84,7 +84,7 @@ func Read(in InputArgs, v View) (Step, error) {
 	if a.Tutor == "" {
 		a.Tutor = in.Tutor
 	}
-	a.Model, a.Unattended, a.From = in.Model, in.Unattended, in.From
+	a.Model, a.Unattended, a.From, a.Top = in.Model, in.Unattended, in.From, in.Top
 	// A typed task is a jot: one that reads as more for the jot sent just
 	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
 	// one that went there on its own after all. An unattended task, such
@@ -643,6 +643,11 @@ func started(s Session) string {
 	// What did not go as asked comes first, while a short strip shows it.
 	for _, w := range s.Warnings {
 		out += " " + sentence(w)
+	}
+	// Only a task sent to the top starts pinned and boosted, and the row
+	// says so only where the core did it (SpawnArgs.Top).
+	if s.Pinned && s.Priority > 0 {
+		out += " It's at the top, first in Pinned, and boosted."
 	}
 	if len(s.Copied) > 0 {
 		out += " Copied " + strings.Join(s.Copied, ", ") + "."
