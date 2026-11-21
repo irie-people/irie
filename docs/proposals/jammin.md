@@ -1,6 +1,6 @@
 # Proposal: Jammin, a jam box for your music beside your sessions
 
-Date: 2026-11-21. Status: step 1 of §10 built: the plugin, with Spotify through an app of yours and Apple Music through the Music app, the core's `jammin` op, `irie jammin`, `:jammin` and the Mac app's Jammin tab. The owner asked for "an irie music plugin", made "so users can hook up apple music google spotify local whatever", and for their own Spotify login to be kept in Bitwarden for "a spotify integration plugin that goes into the jam box, thats what i want to call it jammin". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-21. Status: steps 1 and 2 of §10 built: the plugin, with Spotify through an app of yours or else the Spotify app on this Mac, Apple Music through the Music app, and music files in a folder of yours; the core's `jammin` op, `irie jammin`, `:jammin` and the Mac app's Jammin tab. The owner asked for "an irie music plugin", made "so users can hook up apple music google spotify local whatever", and for their own Spotify login to be kept in Bitwarden for "a spotify integration plugin that goes into the jam box, thats what i want to call it jammin". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 ## Goal
 
@@ -21,6 +21,7 @@ Irie's twelfth plugin, **Jammin** (DESIGN §4.17), is on by default: `[plugins] 
 |---|---|---|
 | Spotify | Your Spotify account, through a Spotify app of yours: its Client ID, from Spotify's developer dashboard, and the Web API, signed in with the Authorization Code flow with PKCE | ready once you have signed in and the core's last look didn't fail |
 | Apple Music | The Music app on this Mac, through its scripting dictionary, with JavaScript for Automation | ready where the Music app is. macOS asks you once whether Irie may control it |
+| Music files | The music files in a folder of yours, `jammin.folder` (~/Music unless you choose another), played by `afplay` (§4b) | ready where the folder is |
 
 ## 2. Sources
 
@@ -101,6 +102,10 @@ Spotify's Developer Terms, its Developer Policy and its design guidelines say ho
 - **No voice control, no AI and no business use:** Jammin takes no spoken commands, gives no agent Spotify's content, and is for the person's own listening.
 - **Nothing kept:** only the refresh token is kept, in the Keychain. What Spotify sends, the artwork's addresses included, stays in memory and goes with the core, or at sign-out.
 
+### Without an app of yours
+
+With no Spotify app of the person's linked, the Spotify source is the Spotify app on this Mac, while it runs: its scripting dictionary (`Spotify.sdef` in its bundle) gives what plays, with its artwork's address and its own URI, and takes play, pause, skip, seek, volume, shuffle and repeat, and a URI to play within a context. It needs no Premium and no Client ID, and it reaches only the app here: no playlists, search or devices, which the source then doesn't offer (`via` is `app`). The core sends the Spotify app nothing while the process table says it isn't running. A linked account always goes through the Web API (`via` is `account`).
+
 ## 4. Apple Music
 
 The core speaks to the Music app with `osascript -l JavaScript`, through scripts of its own that take their words as the run handler's arguments, so a search or a playlist's name never becomes part of a script. Each script answers in JSON. The names the scripts use are the Music app's dictionary's (`com.apple.Music.sdef`) in JavaScript's form: player state, player position, current track, sound volume, shuffle enabled, song repeat, play, pause, playpause, next track, back track, search, user playlists and persistent ID.
@@ -108,6 +113,14 @@ The core speaks to the Music app with `osascript -l JavaScript`, through scripts
 - **Only while it runs:** the core sends Music nothing while it isn't running, which it learns from the processes, not from Music. While Music isn't running, the source shows nothing playing, and Play starts Music first with `open -g -j`, hidden and in the background, so no window of it comes forward, then plays.
 - **Permission:** macOS asks once whether Irie may control Music, the first time it is asked to, which is when you show the Jammin tab while Music runs, or press Play. Without it, the source says where to allow it: System Settings › Privacy & Security › Automation.
 - **Artwork:** the Music app gives a track's artwork as data, not an address. So when the track changes, the core writes it to `<state>/jammin/art`, named by the track's persistent ID, and keeps the newest 20. The phone shows no artwork for Apple Music.
+
+## 4b. Your music files
+
+The files source plays the music files in a folder of the person's, `jammin.folder`, ~/Music unless they choose another (Choose Folder… in the tab, or `irie jammin folder PATH`): mp3, m4a, AAC, AIFF, WAV, FLAC and CAF, without hidden folders, an app's or a project's bundle, or Apple Music's protected `.m4p`, at most 20,000 files 12 folders deep. Its lists are the folders that hold music, and its search matches the files' paths. A track plays within its folder, so the folder plays on after it.
+
+- **afplay plays it.** The core starts macOS's `afplay` for each track in a session of its own, so the track plays on while the core restarts, as it does at each install. What plays, the queue and where it is are kept in `<state>/jammin/files.json`; a core after it watches the same afplay, by its pid and start, and starts the next track when it ends, or at once when it ended while no core watched. Pause stops afplay (SIGSTOP) and play continues it (SIGCONT); next and previous end it and start another; previous starts the track over after its first three seconds.
+- **What a track is** comes from Spotlight's metadata (`mdls`: title, artists, album, length), else the file's and its folder's names, with the length from `afinfo`; its artwork is a cover image in its folder (`cover.jpg`, `folder.jpg`, `front.jpg` and the like).
+- **What it can't do:** afplay can't start partway into a track, so there's no seek, and the volume is the Mac's.
 
 ## 5. One source at a time
 
@@ -134,8 +147,6 @@ The tab shows one source, picked from a strip of them, each with its own mark, a
 
 ## 7. Later
 
-- **The Spotify app on this Mac**, through its own scripting dictionary, so an account without Premium gets play, pause and skip here, with no app at Spotify's dashboard.
-- **Files on this computer:** a folder of yours (`jammin.folder`), its tracks read with Spotlight's metadata and played by the core, with no service at all.
 - **YouTube Music** has no public API, YouTube's terms forbid automated access, and Google refuses sign-ins in an app's web view. It waits for a way in that keeps to them.
 - **Others**, each a source if it has a public API that allows it: a media server of yours (Plex, Jellyfin, or one that speaks the Subsonic API), internet radio by a stream's address, SoundCloud, Tidal, Deezer.
 - **AirPlay** devices for Apple Music, under Devices.
@@ -163,7 +174,7 @@ client_id = "0123456789abcdef0123456789abcdef"   # your Spotify app's Client ID:
 
 ## 10. Order of the work
 
-1. This proposal, the plugin with Spotify and Apple Music, the op, `irie jammin`, `:jammin`, the Mac app's Jammin tab and its sign-in sheet with Bitwarden, and the build tag.
-2. The Spotify app on this Mac, and files on this computer.
+1. This proposal, the plugin with Spotify and Apple Music, the op, `irie jammin`, `:jammin`, the Mac app's Jammin tab and its sign-in sheet with Bitwarden, and the build tag. Built.
+2. The Spotify app on this Mac, and files on this computer. Built.
 3. AirPlay for Apple Music, a media server of yours, internet radio.
 4. Whatever else §7 holds, one source at a time.

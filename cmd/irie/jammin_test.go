@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,7 @@ func TestIrieJamminSendsEachControl(t *testing.T) {
 		{[]string{"repeat", "all"}, ipc.JamminArgs{Do: ipc.JamRepeat, Repeat: "all"}},
 		{[]string{"search", "harbour", "lights"}, ipc.JamminArgs{Do: ipc.JamSearch, Query: "harbour lights"}},
 		{[]string{"unlink", "spotify", "--all"}, ipc.JamminArgs{Do: ipc.JamSignOut, Source: ipc.JamSpotify, All: true}},
+		{[]string{"--source", "files", "play"}, ipc.JamminArgs{Do: ipc.JamPlay, Source: ipc.JamFiles}},
 	} {
 		f := &fakeJam{}
 		if _, _, _, err := jamRun(t, f, "", false, c.args...); err != nil {
@@ -68,6 +70,12 @@ func TestIrieJamminSendsEachControl(t *testing.T) {
 	}
 	if _, _, _, err := jamRun(t, f, "", false, "shuffle", "on"); err != nil || f.calls[1].On == nil || !*f.calls[1].On {
 		t.Errorf("shuffle: %+v, %v", f.calls, err)
+	}
+	if _, _, _, err := jamRun(t, f, "", false, "folder", "~/Tapes"); err != nil || f.calls[2].Do != ipc.JamFolder || f.calls[2].Folder != "~/Tapes" {
+		t.Errorf("folder: %+v, %v", f.calls, err)
+	}
+	if _, _, _, err := jamRun(t, f, "", false, "folder", "Tapes"); err != nil || !filepath.IsAbs(f.calls[3].Folder) {
+		t.Errorf("a relative folder: %+v, %v", f.calls, err)
 	}
 	for _, bad := range [][]string{{"seek", "1:75"}, {"volume", "loud"}, {"shuffle", "maybe"}, {"dance"}, {"link", "tidal"}, {"pause", "now"}} {
 		if _, _, _, err := jamRun(t, &fakeJam{}, "", false, bad...); err == nil {

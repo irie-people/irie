@@ -453,6 +453,9 @@ func Run(o Options) error {
 	go c.recordFoundingAtStart()
 	// The chat plugin's mentions and DMs as they come (chat.go).
 	go c.chatListen(context.Background())
+	// Jammin's music files that played on through a restart go on to
+	// their next track (jammin.go).
+	go c.jamminResume()
 	// Raphael's look at the core's own loop (watchCore) counts from here.
 	c.beat()
 
