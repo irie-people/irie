@@ -90,6 +90,9 @@ type Notepad struct {
 	// Path is the notepad's file, for a client to show in its file
 	// manager; its copies are in the backups folder beside it.
 	Path string `json:"path,omitempty"`
+	// Vault is the note the notepad is kept as in the Obsidian vault too,
+	// while it is (DESIGN §4.17); nil = it is kept in Irie alone.
+	Vault *NotepadVault `json:"vault,omitempty"`
 	// Rev counts the changes the file has had. A reply and a frame come on
 	// connections of their own, so a client keeps the notepad with the
 	// highest rev it has heard, and only a new subscription's first frame

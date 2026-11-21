@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/irie-people/irie/internal/brand"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,118 +22,24 @@ var PageAddress = "http://127.0.0.1:" + strconv.Itoa(PagePort) + "/"
 
 // Servers are the Ollama servers a model may word answers on, the first
 // that answers taking it: local.url, else Irie's own, then Ollama's usual
-// port.
+// port (localmodel.ChatServers).
 func Servers(cfg config.Config) []string {
-	if cfg.Local.URL != "" {
-		return []string{cfg.Local.URL}
-	}
-	return []string{"http://127.0.0.1:" + strconv.Itoa(cfg.Local.Port), "http://127.0.0.1:11434"}
+	return localmodel.ChatServers(cfg.Local.URL, cfg.Local.Port)
 }
 
 // Model is a local model that words answers: one on this computer, from
-// an Ollama server here, so no tokens are bought.
-type Model struct {
-	URL   string `json:"url"`  // its Ollama server
-	Name  string `json:"name"` // such as qwen3.5:9b
-	think bool   // it thinks before it answers, which answers turn off
-}
+// an Ollama server here, so no tokens are bought (localmodel.ChatModel,
+// which materialized cards share).
+type Model = localmodel.ChatModel
 
 // ErrNoModel says no local model is here to word answers.
-var ErrNoModel = errors.New("no local model here to word answers")
+var ErrNoModel = localmodel.ErrNoChatModel
 
-// maxModelGB is the most a model may take on disk to word answers: one
-// bigger takes the memory the person's own work needs.
-const maxModelGB = 10
-
-// FindModel finds a local model to word answers: want, by its name, on the
-// first of the servers at urls that has it, else the best model for chat
-// that the first server to answer has. A cloud model is never one: it
-// runs on someone else's computer, at a price.
+// FindModel finds a local model to word answers: want, by its name, else
+// the best for chat that fits (localmodel.FindChatModel). A cloud model is
+// never one: it runs on someone else's computer, at a price.
 func FindModel(ctx context.Context, urls []string, want string) (Model, error) {
-	var tried []string
-	for _, u := range urls {
-		o := localmodel.Ollama{URL: u}
-		c, cancel := context.WithTimeout(ctx, 2*time.Second)
-		_, err := o.Version(c)
-		cancel()
-		if err != nil {
-			tried = append(tried, u)
-			continue
-		}
-		c, cancel = context.WithTimeout(ctx, 5*time.Second)
-		models, err := o.Models(c)
-		cancel()
-		if err != nil {
-			return Model{}, err
-		}
-		models = slices.DeleteFunc(models, func(m localmodel.Model) bool { return m.Remote })
-		if want != "" {
-			i := slices.IndexFunc(models, func(m localmodel.Model) bool { return m.Name == want || strings.TrimSuffix(m.Name, ":latest") == want })
-			if i < 0 {
-				continue
-			}
-			return model(ctx, o, models[i].Name)
-		}
-		// The biggest that fits, by its parameters, of those that chat.
-		slices.SortStableFunc(models, func(a, b localmodel.Model) int {
-			pa, pb := params(a.Params), params(b.Params)
-			switch {
-			case pa > pb:
-				return -1
-			case pa < pb:
-				return 1
-			}
-			return int(b.Size/1e6 - a.Size/1e6)
-		})
-		for _, m := range models {
-			if m.Size > maxModelGB<<30 || params(m.Params) > 16 || strings.Contains(m.Name, "embed") {
-				continue
-			}
-			got, err := model(ctx, o, m.Name)
-			if err == nil {
-				return got, nil
-			}
-		}
-		return Model{}, fmt.Errorf("%w: the Ollama at %s has no model for chat that fits; `ollama pull qwen3:4b` gets a small one", ErrNoModel, u)
-	}
-	if want != "" {
-		return Model{}, fmt.Errorf("%w: no Ollama here has %s (tried %s)", ErrNoModel, want, strings.Join(urls, ", "))
-	}
-	return Model{}, fmt.Errorf("%w: no Ollama answers at %s", ErrNoModel, strings.Join(tried, ", "))
-}
-
-// model checks a model can chat.
-func model(ctx context.Context, o localmodel.Ollama, name string) (Model, error) {
-	c, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	info, err := o.Show(c, name)
-	if err != nil {
-		return Model{}, err
-	}
-	if !slices.Contains(info.Capabilities, "completion") {
-		return Model{}, fmt.Errorf("%s doesn't write text", name)
-	}
-	return Model{URL: o.URL, Name: name, think: slices.Contains(info.Capabilities, "thinking")}, nil
-}
-
-// params is a model's size in billions of parameters, from Ollama's "9.7B"
-// or "270M"; 0 when it doesn't say.
-func params(s string) float64 {
-	s = strings.ToUpper(strings.TrimSpace(s))
-	mult := 1.0
-	switch {
-	case strings.HasSuffix(s, "B"):
-		s = strings.TrimSuffix(s, "B")
-	case strings.HasSuffix(s, "M"):
-		s, mult = strings.TrimSuffix(s, "M"), 0.001
-	default:
-		return 0
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0
-	}
-	return f * mult
+	return localmodel.FindChatModel(ctx, urls, want)
 }
 
 // maxPassages is how many passages a model answers from.
@@ -176,7 +81,7 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 	fmt.Fprintf(&b, "Question: %s", a.Question)
 	o := localmodel.Ollama{URL: m.URL}
 	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "10m"}
-	if m.think {
+	if m.Thinks() {
 		off := false
 		opt.Think = &off
 	}
@@ -193,7 +98,7 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 		}
 	}
 	text, err := o.Chat(ctx, m.Name, []localmodel.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: b.String()}}, opt, clean)
-	text = strings.TrimSpace(Clean(stripThinking(text)))
+	text = strings.TrimSpace(Clean(StripThinking(text)))
 	if err != nil || text == "" {
 		if err == nil {
 			err = errors.New(m.Name + " said nothing")
@@ -213,18 +118,6 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 	return a, nil
 }
 
-// stripThinking takes out a model's thinking, which some write between
-// <think> tags in the answer itself.
-func stripThinking(s string) string {
-	for {
-		i := strings.Index(s, "<think>")
-		if i < 0 {
-			return s
-		}
-		j := strings.Index(s[i:], "</think>")
-		if j < 0 {
-			return s[:i]
-		}
-		s = s[:i] + s[i+j+len("</think>"):]
-	}
-}
+// StripThinking takes out a model's thinking, which some write between
+// <think> tags in the answer itself (localmodel.StripThinking).
+func StripThinking(s string) string { return localmodel.StripThinking(s) }

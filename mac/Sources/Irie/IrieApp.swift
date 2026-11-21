@@ -340,6 +340,10 @@ struct ContentView: View {
         .sheet(isPresented: Bindable(store).newTaskSheet) {
             NewTaskSheet().environment(store)
         }
+        // View › Your Zen…: your zen's versions as a graph (ZenHistory.swift).
+        .sheet(isPresented: Bindable(store.zen).historyShown) {
+            ZenHistory().environment(store)
+        }
         .background(WindowReader { window in
             keys.window = window
             WindowPanes.window = window

@@ -41,7 +41,7 @@ import SwiftUI
 enum PaneKind: String, Codable, CaseIterable, Identifiable {
     // Helpers and Dock are a session's own, so they are cards here, not
     // tabs of the right sidebar, which is the same for every session.
-    case terminal, browser, code, markets, mail, helpers, dock
+    case terminal, browser, code, vault, markets, mail, helpers, dock
 
     var id: String { rawValue }
 
@@ -50,6 +50,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "Terminal"
         case .browser: return "Browser"
         case .code: return "Code"
+        case .vault: return "Vault"
         case .markets: return "Markets"
         case .mail: return "Mail"
         case .helpers: return "Helpers"
@@ -62,6 +63,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "terminal"
         case .browser: return "globe"
         case .code: return "chevron.left.forwardslash.chevron.right"
+        case .vault: return "books.vertical"
         case .markets: return "chart.bar.doc.horizontal"
         case .mail: return "envelope"
         case .helpers: return "person.2"
@@ -75,6 +77,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "t"
         case .browser: return "b"
         case .code: return "c"
+        case .vault: return "v"
         case .markets: return "m"
         case .mail: return "e"
         case .helpers: return "h"
@@ -88,6 +91,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "Your own shell in this session’s folder"
         case .browser: return "A page: your app, docs, anything"
         case .code: return "This session’s files, saved as you type"
+        case .vault: return "Your Obsidian vault’s notes, and your Notes kept in it"
         case .markets: return "Your market map"
         case .mail: return "Your Gmail and Proton Mail, in one list"
         case .helpers: return "This session’s helpers: what each was asked, does and found"
@@ -98,6 +102,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
     /// The plugin it comes with, which must be on for it to be offered.
     var plugin: String? {
         switch self {
+        case .vault: return "obsidian"
         case .markets: return "markets"
         case .mail: return "mail"
         default: return nil
@@ -130,6 +135,7 @@ struct DeckPane: Codable, Equatable, Identifiable {
     /// What its index tab says.
     var label: String {
         if kind == .code { return file.map { ($0 as NSString).lastPathComponent } ?? kind.title }
+        if kind == .vault { return file.map(VaultPane.title) ?? kind.title }
         if let t = title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
         if kind == .browser, let host = url.flatMap(URL.init(string:))?.host { return host }
         return kind.title
@@ -955,6 +961,7 @@ final class RolodexModel {
         ] + (front == .mail ? [DeckPane(id: "fixturemail", kind: .mail, slot: 5)] : [])
             + (front == .helpers ? [DeckPane(id: "fixturehelpers", kind: .helpers, slot: 3)] : [])
             + (front == .dock ? [DeckPane(id: "fixturedock", kind: .dock, slot: 6)] : [])
+            + (front == .vault ? [DeckPane(id: "fixturevault", kind: .vault, slot: 3, files: [Fixture.vaultNote], file: Fixture.vaultNote)] : [])
         decks = [session: Deck(panes: panes, front: panes.first { $0.kind == front }?.id)]
         keys = panes.first { $0.kind == front }?.id
     }
@@ -1318,13 +1325,13 @@ extension Store {
             Task { _ = try? await client.call("pane", PaneArgs(session: s.id, pane: id, end: true), timeout: 10, as: PaneShell.self) }
         }
         if p.kind == .browser { WebPool.shared.drop(id) }
-        if p.kind == .code {
+        if p.kind == .code || p.kind == .vault {
             for f in p.files ?? [] { CodeDocs.shared.existing(f)?.saveNow() }
         }
         let place = tabPlace(for: s.id)
         let wasFront = d.frontPane?.id == id
         r.remove(id, from: s.id)
-        if p.kind == .code { CodeDocs.shared.keep(only: r.openFiles) }
+        if p.kind == .code || p.kind == .vault { CodeDocs.shared.keep(only: r.openFiles) }
         guard wasFront else { return }
         let after = r.deck(s.id)
         let next = after.frontPane
@@ -2322,7 +2329,7 @@ enum PaneGround {
     @MainActor static func of(_ kind: PaneKind, dark: Bool, code: String) -> Color {
         switch kind {
         case .terminal: return Color(nsColor: Theme.terminalBackground)
-        case .code: return Color(nsColor: CodeThemes.theme(code, dark: dark).background)
+        case .code, .vault: return Color(nsColor: CodeThemes.theme(code, dark: dark).background)
         default: return Theme.card
         }
     }
@@ -2343,6 +2350,8 @@ private struct PaneContent: View {
         case .terminal: ShellPane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
         case .browser: BrowserPane(session: owner.id, pane: pane, shows: shows, keys: keys, token: token)
         case .code: CodePane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
+        // The Obsidian vault's notes, and the notepad's note (VaultPane.swift).
+        case .vault: VaultPane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
         case .markets: MarketsPane(shows: shows, keys: keys, token: token)
         // Every account's mail beside the session, as the right sidebar's
         // Mail tab shows it (MailViews.swift).

@@ -230,6 +230,14 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	if want := (SpawnArgs{Task: "Bench 5 run 2.\nfix it", Unattended: true, From: "~/seed"}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) {
 		t.Errorf("from: %+v, %v", st, err)
 	}
+	// A task sent to the top starts there; a : command takes no notice.
+	st, err = Read(InputArgs{Text: "fix the login", Top: true}, view())
+	if want := (SpawnArgs{Task: "fix the login", Jot: true, Top: true}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) {
+		t.Errorf("to the top: %+v, %v", st, err)
+	}
+	if st, err = Read(InputArgs{Text: ":route fix it", Top: true}, view()); err != nil || st.Op != OpRoute {
+		t.Errorf(":route sent to the top: %+v, %v", st, err)
+	}
 	// :markets TASK takes the menus' agent, model and tutor mode as a task
 	// does, and its own + words before them, but never their repo: its
 	// task runs in the map's folder, which the core knows. It isn't a jot,
@@ -282,6 +290,9 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 		{"spawn", Step{Op: OpSpawn, Args: SpawnArgs{Task: "x"}}, SpawnResult{Session: started}, nil,
 			InputResult{Did: InputSpawned, Op: OpSpawn, Session: &started,
 				Text: "Started flaky test on irie/flaky-test. Memory is low: 2.1 GB free of 16 GB. Copied .env."}},
+		{"spawn to the top", Step{Op: OpSpawn, Args: SpawnArgs{Task: "x", Top: true}}, SpawnResult{Session: Session{ID: "s9", Name: "flaky test", Pinned: true, Priority: 1}}, nil,
+			InputResult{Did: InputSpawned, Op: OpSpawn, Session: &Session{ID: "s9", Name: "flaky test", Pinned: true, Priority: 1},
+				Text: "Started flaky test. It's at the top, first in Pinned, and boosted."}},
 		{"added", Step{Op: OpSpawn, Args: SpawnArgs{Task: "also x", Jot: true}}, SpawnResult{Session: *login, Added: true, Until: until}, nil,
 			InputResult{Did: InputAdded, Op: OpSpawn, Session: login, Until: until, Text: "Added to fix login, the task sent just before."}},
 		{"apart, too late", Step{Op: OpSpawn, Args: SpawnArgs{Task: "also x", Jot: true, Apart: "s1"}, Session: login}, SpawnResult{Session: Session{ID: "s9", Name: "also x"}, Late: true}, nil,
@@ -392,6 +403,64 @@ func TestTitleQuotesEachName(t *testing.T) {
 	} {
 		if got := Title(label); got != want {
 			t.Errorf("Title(%s) = %s, want %s", label, got, want)
+		}
+	}
+}
+
+// TestAPluginsWordStartsASession: a word of a plugin of yours (DESIGN
+// §4.17) starts a session on the plugin's skill, in its folder in place
+// when it names one, with the menus' agent, model and tutor mode but never
+// their repo; alone, it starts the skill with the word's title; off, it
+// says why; and the list of commands names it.
+func TestAPluginsWordStartsASession(t *testing.T) {
+	v := view()
+	v.Words = []Word{
+		{Name: "grants", Plugin: "grants-app", Title: "Grant work", Skill: "grants"},
+		{Name: "invoice", Plugin: "invoices", Title: ":invoice", Dir: "/home/alice/invoices"},
+		{Name: "crm", Plugin: "crm", Title: ":crm", Off: ":crm is off, as the crm plugin is: `irie plugins on crm` turns it on."},
+	}
+	menus := InputArgs{Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Session: "s1", Space: "work"}
+	for _, c := range []struct {
+		text string
+		want SpawnArgs
+	}{
+		{":grants find arts grants\nclosing this winter", SpawnArgs{Task: "find arts grants\nclosing this winter", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants +sonnet what's due", SpawnArgs{Task: "what's due", Skill: "grants", Profile: "sonnet", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants @~/Documents draft an outline", SpawnArgs{Task: "draft an outline", Repo: "/home/alice/Documents", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants", SpawnArgs{Task: "/irie:grants", Name: "Grant work", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":invoice bill the March work", SpawnArgs{Task: "bill the March work", Repo: "/home/alice/invoices", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+	} {
+		in := menus
+		in.Text = c.text
+		st, err := Read(in, v)
+		if err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, c.want) {
+			t.Errorf("%q: %s %+v, %v\nwant spawn %+v", c.text, st.Op, st.Args, err, c.want)
+		}
+	}
+	for _, c := range []struct{ text, want string }{
+		{":invoice", ":invoice takes a task: say what its session should do, as :invoice and then the task."},
+		{":invoice @web bill it", ":invoice runs its task in /home/alice/invoices, so it takes no @repo."},
+		{":crm add a lead", ":crm is off, as the crm plugin is: `irie plugins on crm` turns it on."},
+	} {
+		in := menus
+		in.Text = c.text
+		if _, err := Read(in, v); code(err) != CodeBadArgs || err.Error() != c.want {
+			t.Errorf("%q: %v, want %q", c.text, err, c.want)
+		}
+	}
+	_, err := Read(InputArgs{Text: ":grantz find"}, v)
+	if err == nil || !strings.HasSuffix(err.Error(), ":open FILE[:LINE], :grants [TASK], :invoice [TASK].") {
+		t.Errorf(":grantz: %v", err)
+	}
+	// Irie's own commands come first, and no word may take their names.
+	for _, name := range []string{"close", "write", "markets", "undo", "move", "open", "yoink"} {
+		if !IsCommand(name) {
+			t.Errorf("IsCommand(%q) = false", name)
+		}
+	}
+	for _, name := range []string{"grants", "clos", "writer", ""} {
+		if IsCommand(name) {
+			t.Errorf("IsCommand(%q) = true", name)
 		}
 	}
 }

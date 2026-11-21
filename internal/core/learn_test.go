@@ -163,18 +163,24 @@ func TestLearnServesTheHelpMenu(t *testing.T) {
 }
 
 // startArgv is the command line the fake agent of session id started with.
+// It waits for the agent's start: a spawn returns once the agent's window
+// is made, before the agent runs, so on a busy machine its log may not
+// have the start yet.
 func (c *coreEnv) startArgv(id string) []string {
 	c.t.Helper()
-	for _, l := range c.agentLog(id) {
-		if l["t"] == "start" {
-			raw, _ := l["argv"].([]any)
-			out := make([]string, len(raw))
-			for i, a := range raw {
-				out[i], _ = a.(string)
+	var out []string
+	testutil.Eventually(c.t, 15*time.Second, id+" never started", func() bool {
+		for _, l := range c.agentLog(id) {
+			if l["t"] == "start" {
+				raw, _ := l["argv"].([]any)
+				out = make([]string, len(raw))
+				for i, a := range raw {
+					out[i], _ = a.(string)
+				}
+				return true
 			}
-			return out
 		}
-	}
-	c.t.Fatalf("%s never started", id)
-	return nil
+		return false
+	})
+	return out
 }

@@ -37,6 +37,9 @@ var reaches = map[string]Reach{
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
 	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
 	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
+	OpObsidian: ReachRead,
+	// The founding documents' texts, built into the binary.
+	OpFounding: ReachRead,
 
 	// Steps of the history.
 	OpRename: ReachInside, OpPark: ReachInside, OpUnpark: ReachInside, OpPin: ReachInside,
@@ -52,7 +55,7 @@ var reaches = map[string]Reach{
 	OpPlugins: ReachInside, OpHelpers: ReachInside, OpGabriel: ReachInside, OpLocal: ReachInside, OpPreflight: ReachInside,
 	OpRate: ReachInside, OpLabel: ReachInside, OpPeers: ReachInside, OpContext: ReachInside, OpShow: ReachInside,
 	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpSizes: ReachInside, OpHook: ReachInside,
-	OpStatus: ReachInside,
+	OpStatus: ReachInside, OpMaterialize: ReachInside, OpZen: ReachInside,
 
 	// What leaves Irie.
 	OpSpawn: ReachOutside, OpFork: ReachOutside, OpBench: ReachOutside, OpTool: ReachOutside,
@@ -62,6 +65,8 @@ var reaches = map[string]Reach{
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
 	// A download fetches from a site and writes to the person's folder.
 	OpYoink: ReachOutside,
+	// A post goes to a channel of people, under the person's bot.
+	OpChat: ReachOutside,
 	// A check asks OSV.dev about the versions the locks name.
 	OpLock: ReachOutside,
 	// A sweep with drop removes closed sessions' worktrees: reopen adds

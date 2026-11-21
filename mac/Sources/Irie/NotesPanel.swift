@@ -43,7 +43,7 @@ struct NotesPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             header(pad)
             if open {
-                if let p = pad.problem, !p.isEmpty {
+                ForEach([pad.problem, pad.vault?.problem].compactMap { $0 }.filter { !$0.isEmpty }, id: \.self) { p in
                     Text(p)
                         .font(Theme.font(11))
                         .foregroundStyle(Theme.sunInk)
@@ -85,6 +85,14 @@ struct NotesPanel: View {
                         .font(Theme.font(Theme.headSize, .heavy))
                         .tracking(Theme.headTracking)
                         .foregroundStyle(Theme.muted)
+                    // Kept in the Obsidian vault too (Vault.swift).
+                    if let v = pad.vault, !v.path.isEmpty {
+                        Image(systemName: "books.vertical")
+                            .font(.system(size: 8.5, weight: .semibold))
+                            .foregroundStyle(v.problem == nil ? Theme.muted : Theme.sunInk)
+                            .help("Kept in your vault too, as \((v.path as NSString).lastPathComponent)")
+                            .accessibilityLabel("Kept in your vault too")
+                    }
                     // Folded, the next note to do shows after the title.
                     if !open, let next = pad.notes.first(where: { !$0.isDone && !$0.text.isBlank }) {
                         Text(next.text.firstLine)
@@ -109,6 +117,20 @@ struct NotesPanel: View {
             .accessibilityLabel("Notes, \(left) to do")
             .accessibilityHint(open ? "Folds the notes" : "Shows the notes")
             .accessibilityAddTraits([.isHeader, .isButton])
+            // The notes in a full pane beside the terminal: the vault's
+            // card, with the notepad's note on show (VaultPane.swift).
+            if store.paneKinds.contains(.vault) {
+                Button { store.openVault(note: pad.vault?.path.isEmpty == false ? pad.vault?.path : nil) } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .frame(width: 18, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.muted)
+                .help(pad.vault?.path.isEmpty == false ? "Open your notes in a pane, as your vault keeps them" : "Open your Obsidian vault in a pane beside the terminal")
+                .accessibilityLabel("Open in a pane")
+            }
             Menu {
                 NotesMenu(pad: pad, newNote: newNote)
             } label: {
@@ -498,6 +520,21 @@ private struct NotesMenu: View {
         if let path = pad.path {
             Divider()
             Button("Show the Notes File in Finder") { store.reveal(path) }
+        }
+        // The Obsidian plugin's (Vault.swift).
+        if store.paneKinds.contains(.vault) {
+            let kept = pad.vault?.path.isEmpty == false ? pad.vault?.path : nil
+            let part = store.plugins.first { $0.name == "obsidian" }?.parts.first { $0.name == "notes" }
+            Divider()
+            Button("Open in a Pane") { store.openVault(note: kept) }
+            if let part {
+                Toggle("Keep Notes in the Vault", isOn: Binding(get: { part.on }, set: { store.setPlugin("obsidian", part: "notes", on: $0) }))
+            }
+            if let kept {
+                Button("Show in Obsidian") { store.openInObsidian(kept) }
+                    .disabled(!VaultModel.obsidianHere)
+                Button("Show the Vault’s Note in Finder") { store.reveal(kept) }
+            }
         }
     }
 }

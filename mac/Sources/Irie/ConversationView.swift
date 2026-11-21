@@ -25,6 +25,7 @@ struct ConversationView: View {
                 // A helper shows in the right sidebar's Helpers tab
                 // (RightSidebar.swift), so the conversation stays whole.
                 ConversationFeed(model: model, session: s)
+                StandsCard(session: s)
                 Composer(model: model, session: s)
             } else {
                 ConversationNote(title: "Pick a session", text: "Its conversation shows here.")

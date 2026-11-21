@@ -130,6 +130,10 @@ const FeatureTutor = "spawn-tutor"
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
 
+// FeatureSpawnTop is in hello's features when spawn takes SpawnArgs.Top
+// and input InputArgs.Top: a task sent to the top.
+const FeatureSpawnTop = "spawn-top"
+
 // FeatureBoostAlways is in hello's features when the core boosts the
 // user's focus always with arch.gabriel.always, and its header says how
 // Gabriel boosts (Header.Boost).
@@ -785,6 +789,9 @@ type Header struct {
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
 	Theme *Theme `json:"theme,omitempty"`
+	// Zen is your zen, whether an app shows it, and what it offers now
+	// (docs/proposals/zen.md), so every client draws zen's calm alike.
+	Zen *Zen `json:"zen,omitempty"`
 }
 
 // Boost is Gabriel's boost as the header gives it: the user's focus gets
@@ -1018,6 +1025,11 @@ type SpawnArgs struct {
 	// Claude Code's titles and passed to it with --name. Without one the
 	// task's first line names the session until Claude Code titles it.
 	Name string `json:"name,omitempty"`
+	// Skill is a skill the session starts on, as a profile's skill starts
+	// +chaos (DESIGN §4.19): one of Irie's or a plugin's of yours, which a
+	// word of the plugin's names, as :grants does (DESIGN §4.17). The task
+	// goes to the skill, and names the session.
+	Skill string `json:"skill,omitempty"`
 	// Force spawns a local profile even when its model's context or the
 	// machine's memory falls short, with a warning (M10).
 	Force bool `json:"force,omitempty"`
@@ -1050,6 +1062,11 @@ type SpawnArgs struct {
 	// Continues), or, for a jot with ui.new_tabs = "next", the group of the
 	// session it goes beside; else in none.
 	Group string `json:"group,omitempty"`
+	// Top sends the new session to the top (DESIGN §4.1, "Pinned"): first
+	// in Pinned, over every card, and boosted (§4.3), as the user's own pin
+	// and boost would, wherever ui.new_tabs puts the rest. A jot sent to the
+	// top is a task of its own: it never adds to the jot before it.
+	Top bool `json:"top,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that
