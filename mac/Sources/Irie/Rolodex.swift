@@ -931,7 +931,8 @@ final class RolodexModel {
     /// Folded, its strip. With over, as wide as share of the room, over the
     /// terminal, raised or under it.
     func loadFixture(session: String, front: PaneKind?, open on: Bool = true, folded fold: Bool = false,
-                     over goesOver: Bool = false, share wide: Double = RolodexModel.startShare, raised up: Bool = true, guide aim: RolodexAim? = nil) {
+                     over goesOver: Bool = false, share wide: Double = RolodexModel.startShare, raised up: Bool = true, guide aim: RolodexAim? = nil,
+                     note: String? = nil) {
         fixture = true
         open = on
         folded = fold
@@ -961,7 +962,7 @@ final class RolodexModel {
         ] + (front == .mail ? [DeckPane(id: "fixturemail", kind: .mail, slot: 5)] : [])
             + (front == .helpers ? [DeckPane(id: "fixturehelpers", kind: .helpers, slot: 3)] : [])
             + (front == .dock ? [DeckPane(id: "fixturedock", kind: .dock, slot: 6)] : [])
-            + (front == .vault ? [DeckPane(id: "fixturevault", kind: .vault, slot: 3, files: [Fixture.vaultNote], file: Fixture.vaultNote)] : [])
+            + (front == .vault ? [DeckPane(id: "fixturevault", kind: .vault, slot: 3, files: [note ?? Fixture.vaultNote], file: note ?? Fixture.vaultNote)] : [])
         decks = [session: Deck(panes: panes, front: panes.first { $0.kind == front }?.id)]
         keys = panes.first { $0.kind == front }?.id
     }

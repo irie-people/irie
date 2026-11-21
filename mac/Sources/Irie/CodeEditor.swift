@@ -43,6 +43,9 @@ struct CodeActions {
     /// Turn a Markdown file's pretty view on or off (⇧⌘V); nil for any
     /// other file, so the key goes on as it would.
     var pretty: (() -> Void)?
+    /// Turn a Vault card's note into Reading view (⌘E, as in Obsidian);
+    /// nil in a code card, where ⌘E finds the selection.
+    var reading: (() -> Void)?
 }
 
 /// The text view, with the keys and touches a code editor has.
@@ -77,10 +80,11 @@ final class CodeTextView: NSTextView {
 
     /// The keys a code editor has, which the window's key router hands it
     /// before the menus see them, while it has the keyboard: ⌘F find, ⌥⌘F
-    /// replace, ⌘G and ⇧⌘G the next and last match, ⌘E find the selection,
-    /// ⌘S save now, ⌘P open a file, ⌘L go to a line, ⌘/ comment lines, ⌘]
-    /// and ⌘[ indent and outdent, ⌘W close the file, and in a Markdown file
-    /// ⇧⌘V its pretty view, as VS Code has it.
+    /// replace, ⌘G and ⇧⌘G the next and last match, ⌘E find the selection
+    /// (in a Vault card, Reading view), ⌘S save now, ⌘P open a file, ⌘L go
+    /// to a line, ⌘/ comment lines, ⌘] and ⌘[ indent and outdent, ⌘W close
+    /// the file, and in a Markdown file ⇧⌘V its pretty view, as VS Code has
+    /// it.
     func command(_ event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
         guard mods.contains(.command), let c = event.charactersIgnoringModifiers?.lowercased() else { return false }
@@ -89,7 +93,8 @@ final class CodeTextView: NSTextView {
         case ([.command, .option], "f"): find(.showReplaceInterface)
         case (.command, "g"): find(.nextMatch)
         case ([.command, .shift], "g"): find(.previousMatch)
-        case (.command, "e"): find(.setSearchString)
+        case (.command, "e"):
+            if let reading = actions.reading { reading() } else { find(.setSearchString) }
         case (.command, "s"): actions.save()
         case (.command, "p"): actions.quickOpen()
         case (.command, "l"): actions.goToLine()

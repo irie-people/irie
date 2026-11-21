@@ -336,15 +336,29 @@ enum Snapshot {
             // Notes panel marking it kept there; and the card with no vault.
             CodeFiles.shared.fixture(Fixture.vaultFolder, files: Fixture.vaultFiles)
             let kept = NotepadVault(path: Fixture.vaultNote, synced: Date(), problem: nil)
-            for (base, dark, ready) in [("panes-vault", false, true), ("panes-vault-dark", true, true), ("panes-vault-welcome", false, false)] {
-                store.rolodex.loadFixture(session: Fixture.selected, front: .vault)
+            // Then Reading view (VaultReading.swift): a note with what it
+            // draws, alone and beside its editor, and the notepad's note
+            // with its boxes to tick.
+            let vaultShots: [(String, Bool, Bool, String, String)] = [
+                ("panes-vault", false, true, Fixture.vaultNote, ""), ("panes-vault-dark", true, true, Fixture.vaultNote, ""),
+                ("panes-vault-welcome", false, false, Fixture.vaultNote, ""),
+                ("panes-vault-reading", false, true, Fixture.vaultLaunch, "r"), ("panes-vault-reading-dark", true, true, Fixture.vaultNote, "r"),
+                ("panes-vault-both", false, true, Fixture.vaultLaunch, "b"), ("panes-vault-reading-kit", true, true, Fixture.vaultKit, "r"),
+            ]
+            for (base, dark, ready, note, look) in vaultShots {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .vault, note: note)
                 store.notes.loadFixture(Fixture.notes, vault: ready ? kept : nil)
                 store.vault.loadFixture(ready ? ObsidianResult(state: "ready", text: "", vault: Fixture.vaultFolder, name: "Notes", opened: true, notes: kept)
                     : ObsidianResult(state: "needs", text: "No vault yet."))
                 _ = CodeDocs.shared.fixture(Fixture.vaultNote, text: Fixture.vaultText, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
                                             font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                _ = CodeDocs.shared.fixture(Fixture.vaultLaunch, text: Fixture.vaultLaunchText, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                _ = CodeDocs.shared.fixture(Fixture.vaultKit, text: Fixture.vaultKitText, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
-                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "vaultTree": true],
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "vaultTree": true,
+                                                         "vaultLooks": look.isEmpty ? "" : look + " " + note],
                                                         forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
                 let name = base + ".png"
@@ -831,7 +845,8 @@ enum Fixture {
     static var vaultFolder: String { "/home/alice/Notes" }
     static var vaultNote: String { vaultFolder + "/\(Brand.name) Notes.md" }
     static var vaultFiles: [String] {
-        ["\(Brand.name) Notes.md", "Inbox.md", "Reading list.md", "Projects/Launch.md", "Projects/Roadmap.md", "Daily/2026-11-20.md", "Daily/2026-11-21.md"]
+        ["\(Brand.name) Notes.md", "Inbox.md", "Reading list.md", "Projects/Launch.md", "Projects/Roadmap.md", "Daily/2026-11-20.md", "Daily/2026-11-21.md",
+         "Projects/Release kit.md", "Attachments/cover.png"]
     }
     static var vaultText: String {
         """
@@ -848,6 +863,81 @@ enum Fixture {
         """
     }
     static let vaultLinked = ["Daily/2026-11-21.md", "Projects/Launch.md"]
+    /// A note with what Reading view draws (VaultReading.swift): properties,
+    /// links, a tag and a highlight, a callout that folds, tasks, a table,
+    /// code, a picture and another note's section embedded.
+    static var vaultLaunch: String { vaultFolder + "/Projects/Launch.md" }
+    static var vaultLaunchText: String {
+        """
+        ---
+        status: in progress
+        tags: [launch, release]
+        due: 2026-12-08
+        ---
+        # Launch
+
+        The 1.2 release goes out with the [[Projects/Roadmap|roadmap]]'s first part. Notes from the [[Daily/2026-11-21]] stand-up are in #launch, and ==the screenshots come first==. %% a reminder only the editor shows %%
+
+        > [!tip] Before the post
+        > Check the links on **example.com** work, and that the [[Inbox]] is empty.
+
+        > [!faq]- Why a week early?
+        > The conference talk is on the 10th.
+
+        - [x] Draft the release notes ^ia7c2mx
+        - [ ] Record the demo
+        	- [ ] Write the script
+        - [ ] Post on the blog
+
+        | Part | Owner | Done |
+        | --- | --- | :-: |
+        | Notes | alice | yes |
+        | Demo | alice | no |
+
+        ```swift
+        let release = Release(version: "1.2", date: "2026-12-08")
+        print(release.notes) // ready
+        ```
+
+        ![[Attachments/cover.png|240]]
+
+        ![[Projects/Roadmap#Next]]
+        """
+    }
+    /// A note of code, a picture and another note's section embedded.
+    static var vaultKit: String { vaultFolder + "/Projects/Release kit.md" }
+    static var vaultKitText: String {
+        """
+        ## The kit
+        ```swift
+        let release = Release(version: "1.2", date: "2026-12-08")
+        print(release.notes) // ready
+        ```
+
+        ![[Attachments/cover.png|240]]
+
+        ![[Projects/Roadmap#Next]]
+
+        ![[Projects/Budget]]
+        """
+    }
+
+    /// The notes Reading view embeds, by their path in the vault.
+    static let vaultEmbeds: [String: String] = [
+        "Projects/Roadmap.md": "# Roadmap\n\n## Next\nThe phone's own view of the vault, and a graph of the links.\n\n## Later\nCanvas files.\n",
+    ]
+    /// The picture Reading view embeds: a gradient drawn here, as no file
+    /// is read.
+    static let vaultImage: NSImage? = {
+        let img = NSImage(size: NSSize(width: 480, height: 200))
+        img.lockFocus()
+        NSGradient(colors: [NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.62, alpha: 1), NSColor(calibratedRed: 0.62, green: 0.48, blue: 0.66, alpha: 1)])?
+            .draw(in: NSRect(x: 0, y: 0, width: 480, height: 200), angle: 20)
+        let words = NSAttributedString(string: "Irie 1.2", attributes: [.font: NSFont.systemFont(ofSize: 40, weight: .bold), .foregroundColor: NSColor.white])
+        words.draw(at: NSPoint(x: 40, y: 76))
+        img.unlockFocus()
+        return img
+    }()
 
     static let notes: [Note] = {
         let now = Date()
