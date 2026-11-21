@@ -68,7 +68,7 @@ Each change you keep makes a version of your zen. It's built like a git commit, 
 View › Your Zen… (and the path's own step) opens your zen's history as a graph. Each zen you've had is a node, and each change is an arc from the zen before to the one after.
 
 - **Arcs, not a hairball.** The nodes sit in a row in the order you first had them, and the changes arc above it. This is an arc diagram, as Wattenberg drew them for sequences that come back to earlier states. Going back to an earlier zen is one long arc home, and a zen you keep returning to gathers arcs.
-- **Size is time.** A node's size is how long you kept that zen. Your zen now is ringed.
+- **Size is time.** A node's size is how long you kept that zen. Your zen now is in the accent colour, and the one you're looking at is ringed.
 - **Details one step away.** Clicking a node shows its settings, when you had it and for how long, with **Go Back to This Zen**. The keys move along the row too (Roots §4.3).
 
 It's drawn by the app itself, with no web view and no network, in calm colours, and holds still while you look (Roots §5.1).
