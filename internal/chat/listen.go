@@ -146,7 +146,8 @@ func (s *Service) stopListening(name string) {
 }
 
 // heardOne keeps a mention or DM; one heard again, as after a resume,
-// counts once.
+// counts once. A message is known by its channel too: Slack's ts is unique
+// only within a channel.
 func (s *Service) heardOne(a Account, e Event) {
 	m := ipc.ChatMention{
 		Account: a.Name, Channel: e.Message.Channel, ChannelName: e.ChannelName, Message: e.Message.ID,
@@ -156,7 +157,9 @@ func (s *Service) heardOne(a Account, e Event) {
 	h := &s.heard
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if slices.ContainsFunc(h.list, func(x ipc.ChatMention) bool { return x.Account == m.Account && x.Message == m.Message }) {
+	if slices.ContainsFunc(h.list, func(x ipc.ChatMention) bool {
+		return x.Account == m.Account && x.Channel == m.Channel && x.Message == m.Message
+	}) {
 		return
 	}
 	h.list = append([]ipc.ChatMention{m}, h.list...)

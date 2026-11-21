@@ -303,6 +303,13 @@ func TestServiceHearsMentions(t *testing.T) {
 	if r := do(t, sv, person, ipc.ChatArgs{Do: ipc.ChatSeen}); r.Unseen != 0 || len(r.Mentions) != 3 {
 		t.Errorf("seen = %+v", r)
 	}
+	// The same ID in another channel is another message, as Slack's ts
+	// can be.
+	sv.heardOne(Account{Name: "acme"}, Event{Message: ipc.ChatMessage{ID: "704", Channel: "999", Author: "Carol"}, ChannelName: "other"})
+	sv.heardOne(Account{Name: "acme"}, Event{Message: ipc.ChatMessage{ID: "704", Channel: "999", Author: "Carol"}, ChannelName: "other"})
+	if r := do(t, sv, person, ipc.ChatArgs{}); len(r.Mentions) != 4 || r.Unseen != 1 {
+		t.Errorf("another channel's 704 = %d mentions, %d new", len(r.Mentions), r.Unseen)
+	}
 	// Removing the account takes its mentions with it.
 	if r := do(t, sv, person, ipc.ChatArgs{Do: ipc.ChatRemove, Account: "acme"}); len(r.Mentions) != 0 {
 		t.Errorf("after remove = %+v", r.Mentions)
