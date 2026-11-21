@@ -345,17 +345,18 @@ func (c *Core) keepFrozen() {
 	}
 }
 
-// takeNote returns the note an agent is due at the hook evs came from, once:
-// at its first tool call or prompt after a thaw. The caller holds c.mu.
+// takeNote returns the notes an agent is due at the hook evs came from,
+// once: at its first tool call or prompt after a thaw, and after zen began
+// or ended (zen.go). The caller holds c.mu.
 func (c *Core) takeNote(x *session, evs []event.Event) string {
-	if x.note == "" || x.track.frozen != nil {
+	if x.note == "" && x.zenNote == "" || x.track.frozen != nil {
 		return ""
 	}
 	for _, e := range evs {
 		switch e.Kind {
 		case event.ToolStarted, event.ToolFinished, event.ToolFailed, event.PromptSubmitted:
-			n := x.note
-			x.note = ""
+			n := joinNotes(x.note, x.zenNote)
+			x.note, x.zenNote = "", ""
 			return n
 		}
 	}

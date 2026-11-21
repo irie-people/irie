@@ -67,7 +67,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:setup anon`, `:setup browser`, `:setup privacy` | Starts a tool session that runs `irie setup NAME`: a part of the privacy plugin, or each part in turn (DESIGN §4.17) | `ran`, with `session` and `show` |
 | `:plugins` | Says each of Irie's plugins and how far each part is set up here, a line each (the `plugins` op, DESIGN §4.17) | `answered` |
 | `:write [TASK]` | Starts a writing session in Variorum: a Claude Code session on `+claude` with Irie's skill `/irie:variorum` and the task after it, which names the session. The task may run on over more lines ([writers.md](proposals/writers.md)) | `ran`, with `session` and `show` |
-| `:chat` | Says how the chat accounts stand and which drafts wait for the person (the `chat` op, DESIGN §4.17); a client with a Chat tab shows it | `answered` |
+| `:chat` | Says how the chat accounts stand, which drafts wait for the person, and the newest mentions not yet seen, a line each (the `chat` op, DESIGN §4.17); a client with a Chat tab shows it | `answered` |
 | `:markets` | Says how the market map stands (the `markets` op, DESIGN §4.17): a client with a window for the map opens it, and one without says the `text` | `answered` |
 | `:yoink [audio\|720p] LINK` | Starts a download of LINK into `yoink.folder` (the `yoink` op, DESIGN §4.17): the best there is, the sound alone as an mp3, or at most that tall. The words come in either order, and a link may leave out its `https://` | `ran`; a client with a Yoink tab shows it |
 | `:yoink` | Says how the downloads stand, the newest five a line each | `answered`; a client with a Yoink tab shows it instead |

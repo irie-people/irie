@@ -241,6 +241,13 @@ type (
 	YoinkInfo         = ipc.YoinkInfo
 	YoinkChoice       = ipc.YoinkChoice
 	YoinkDownload     = ipc.YoinkDownload
+	ZenProfile        = ipc.ZenProfile
+	ZenChange         = ipc.ZenChange
+	Zen               = ipc.Zen
+	ZenOffer          = ipc.ZenOffer
+	ZenArgs           = ipc.ZenArgs
+	ZenResult         = ipc.ZenResult
+	ZenVersion        = ipc.ZenVersion
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -582,4 +589,17 @@ const (
 	YoinkDone            = ipc.YoinkDone
 	YoinkFailed          = ipc.YoinkFailed
 	YoinkCanceled        = ipc.YoinkCanceled
+	OpZen                = ipc.OpZen
+	ZenKindLearn         = ipc.ZenKindLearn
+	ZenKindTry           = ipc.ZenKindTry
+	ZenKindKeep          = ipc.ZenKindKeep
+	ZenKindRest          = ipc.ZenKindRest
+	ZenKindNight         = ipc.ZenKindNight
+	ZenRest              = ipc.ZenRest
+	ZenNight             = ipc.ZenNight
+	ZenShowHistory       = ipc.ZenShowHistory
+	ZenYes               = ipc.ZenYes
+	ZenNo                = ipc.ZenNo
+	MaxZenWhy            = ipc.MaxZenWhy
+	MaxZenLog            = ipc.MaxZenLog
 )

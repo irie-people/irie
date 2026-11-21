@@ -477,10 +477,70 @@ enum Snapshot {
             try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
             print("\(name): \(layout.title)")
         }
+        // What zen offers, one thing at a time (ZenCalm.swift): a step of
+        // its path, a change to try, and a rest with its breath, still.
+        let rest = ZenOffer(id: "rest", kind: "rest", text: "You’ve been at it a while. Rest your eyes and follow the dot: breathe in as it rises, out as it falls.",
+                            yes: "Back to It", no: "In 10 Minutes")
+        let offers: [(String, Bool, ZenOffer)] = [
+            ("zen-offer", false, ZenOffer(id: "eyes", kind: "learn", text: "While your agent works, rest your eyes: look at something about six metres away for twenty seconds.", yes: "Got It")),
+            ("zen-try-dark", true, ZenOffer(id: "breaks", kind: "try", text: "Would you like a gentle reminder to rest every 50 minutes?", yes: "Try It", no: "Not Now")),
+            ("zen-help", false, ZenOffer(id: "help", kind: "learn", text: "You matter more than the work. If things feel heavy, findahelpline.com lists free, confidential helplines near you.",
+                                         yes: "Got It", link: "https://findahelpline.com/")),
+            ("zen-rest", false, rest), ("zen-rest-dark", true, rest),
+        ]
+        store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+        for (base, dark, offer) in offers {
+            store.zen.showFixture(.centred)
+            store.zen.offer = offer
+            Theme.use(Palette.standard.id)
+            let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1512, height: 945, zen: true)
+            let name = base + ".png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print("\(name): zen offers \(offer.id)")
+        }
+        store.zen.offer = nil
+        // Your Zen, the graph explorer (ZenHistory.swift): a history that
+        // goes on, comes back once, and goes on again.
+        store.zen.fixtureVersions = zenVersionsFixture()
+        defer { store.zen.fixtureVersions = [] }
+        for dark in [false, true] {
+            let (rep, _) = window(ZenHistory(seed: store.zen.fixtureVersions).environment(store), dark: dark, width: 660, height: 560)
+            let name = dark ? "zen-history-dark.png" : "zen-history.png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print("\(name): your zen's versions")
+        }
         // Off, and the first layout again for Settings' pictures.
         store.zen.showFixture(nil)
         store.zen.layout = .centred
         store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+    }
+
+    /// Five versions of a zen, newest first, as the core lists them: the
+    /// app's own settings first, a rest every 50 minutes, Edge to Edge for
+    /// a day, back to the rests, then text a point larger.
+    private static func zenVersionsFixture() -> [ZenVersion] {
+        let start = Date().addingTimeInterval(-80 * 3600)
+        let day = DateFormatter()
+        day.dateFormat = "d MMM HH:mm"
+        func zen(_ layout: String, breaks: Int, text: Int) -> ZenProfile {
+            ZenProfile(layout: layout, columns: 100, textSize: text, fullScreen: true, gentle: true, breaks: breaks, night: true)
+        }
+        let steps: [(String, ZenProfile, TimeInterval)] = [
+            ("Your zen as it was", zen("centred", breaks: 0, text: 0), 0),
+            ("A rest every 50 minutes", zen("centred", breaks: 50, text: 0), 3 * 3600),
+            ("Edge to Edge", zen("edge", breaks: 50, text: 0), 5 * 3600),
+            ("Back to your zen of " + day.string(from: start.addingTimeInterval(3 * 3600)), zen("centred", breaks: 50, text: 0), 29 * 3600),
+            ("Text a point larger", zen("centred", breaks: 50, text: 14), 77 * 3600),
+        ]
+        var out: [ZenVersion] = []
+        var parent: String?
+        for (i, (why, p, at)) in steps.enumerated() {
+            let state = "sha512:" + String(repeating: String(p.layout.count + p.breaks + p.textSize, radix: 16), count: 64).prefix(128)
+            let name = "sha512:" + String(repeating: String(format: "%02x", i + 10), count: 64)
+            out.append(ZenVersion(name: name, parent: parent, created: start.addingTimeInterval(at), why: why, state: state, zen: p))
+            parent = name
+        }
+        return out.reversed()
     }
 
     /// The layout reversed (Store.reversed): the sidebar on the right, the

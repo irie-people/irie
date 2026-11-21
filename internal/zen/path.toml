@@ -1,0 +1,56 @@
+# Zen's path (docs/proposals/zen.md §6): one small thing at a time, in this
+# order, offered only at a calm moment (rules.go), so a newcomer is led in
+# slowly. Each step is a sentence or two in plain words, at most 300
+# characters.
+#
+# A step with breaks or grow is a change: Try It shows it live, then keep
+# asks Keep or Go Back, and a kept change becomes a version of your zen,
+# saying why. A step with show opens that part of the app; one with a link
+# names a page. Every other step is a lesson, with Got It.
+#
+# Nothing counts how far along the path a person is.
+
+[[step]]
+id = "welcome"
+text = "This is zen: one session and nothing else. Your other sessions keep working, and zen tells you softly when one would like you."
+
+[[step]]
+id = "eyes"
+text = "While your agent works, rest your eyes: look at something about six metres away for twenty seconds."
+
+[[step]]
+id = "breaks"
+text = "Would you like a gentle reminder to rest every 50 minutes?"
+breaks = 50
+keep = "A rest every 50 minutes is on. Keep it?"
+why = "A rest every 50 minutes"
+
+[[step]]
+id = "ask"
+text = "Zen asks your agent to keep its words short and kind. You can ask it to change your zen too, such as “make my text larger”."
+
+[[step]]
+id = "text"
+text = "Larger text is easier on the eyes. Try it a point larger?"
+grow = 1
+keep = "Here is your text a point larger. Keep it?"
+why = "Text a point larger"
+
+[[step]]
+id = "history"
+text = "Every change you keep is a version of your zen, kept on this Mac. You can see where your zen has been, and go back to any of it."
+yes = "Show Me"
+show = "history"
+
+[[step]]
+id = "late"
+text = "Late at night, zen says once that your agents can carry on without you, so you can rest."
+
+[[step]]
+id = "help"
+text = "You matter more than the work. If things feel heavy, findahelpline.com lists free, confidential helplines near you."
+link = "https://findahelpline.com/"
+
+[[step]]
+id = "proof"
+text = "Each version of your zen is named by its SHA-512 hash and points to the one before, as commits do in git, so its history can be checked."

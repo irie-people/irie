@@ -789,6 +789,9 @@ type Header struct {
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
 	Theme *Theme `json:"theme,omitempty"`
+	// Zen is your zen, whether an app shows it, and what it offers now
+	// (docs/proposals/zen.md), so every client draws zen's calm alike.
+	Zen *Zen `json:"zen,omitempty"`
 }
 
 // Boost is Gabriel's boost as the header gives it: the user's focus gets
