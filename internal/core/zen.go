@@ -121,6 +121,11 @@ func (c *Core) zenHeader() *ipc.Zen {
 func (c *Core) zenOp(a ipc.ZenArgs) (ipc.ZenResult, error) {
 	now := time.Now()
 	c.mu.Lock()
+	// A core loads your zen as it starts; one that hasn't, as in a test,
+	// does now, so nothing is written but where it belongs.
+	if !c.zen.loaded {
+		c.loadZen()
+	}
 	var res ipc.ZenResult
 	var err error
 	switch {
@@ -177,6 +182,9 @@ func (c *Core) zenTell(id string) {
 	x := c.sessions[id]
 	if x == nil || !x.observed || z.told[id] || !z.profile.Gentle {
 		return
+	}
+	if z.told == nil {
+		z.told = map[string]bool{}
 	}
 	z.told[id] = true
 	x.zenNote = zen.GentleNote()
