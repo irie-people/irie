@@ -396,6 +396,7 @@ const (
 	OpRebuilds           = ipc.OpRebuilds
 	FeatureTutor         = ipc.FeatureTutor
 	FeatureSpawnModel    = ipc.FeatureSpawnModel
+	FeatureSpawnTop      = ipc.FeatureSpawnTop
 	FeatureBoostAlways   = ipc.FeatureBoostAlways
 	FeatureWatch         = ipc.FeatureWatch
 	FeatureUndoConfirm   = ipc.FeatureUndoConfirm
