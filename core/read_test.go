@@ -406,3 +406,61 @@ func TestTitleQuotesEachName(t *testing.T) {
 		}
 	}
 }
+
+// TestAPluginsWordStartsASession: a word of a plugin of yours (DESIGN
+// §4.17) starts a session on the plugin's skill, in its folder in place
+// when it names one, with the menus' agent, model and tutor mode but never
+// their repo; alone, it starts the skill with the word's title; off, it
+// says why; and the list of commands names it.
+func TestAPluginsWordStartsASession(t *testing.T) {
+	v := view()
+	v.Words = []Word{
+		{Name: "grants", Plugin: "grants-app", Title: "Grant work", Skill: "grants"},
+		{Name: "invoice", Plugin: "invoices", Title: ":invoice", Dir: "/home/alice/invoices"},
+		{Name: "crm", Plugin: "crm", Title: ":crm", Off: ":crm is off, as the crm plugin is: `irie plugins on crm` turns it on."},
+	}
+	menus := InputArgs{Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Session: "s1", Space: "work"}
+	for _, c := range []struct {
+		text string
+		want SpawnArgs
+	}{
+		{":grants find arts grants\nclosing this winter", SpawnArgs{Task: "find arts grants\nclosing this winter", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants +sonnet what's due", SpawnArgs{Task: "what's due", Skill: "grants", Profile: "sonnet", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants @~/Documents draft an outline", SpawnArgs{Task: "draft an outline", Repo: "/home/alice/Documents", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants", SpawnArgs{Task: "/irie:grants", Name: "Grant work", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":invoice bill the March work", SpawnArgs{Task: "bill the March work", Repo: "/home/alice/invoices", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+	} {
+		in := menus
+		in.Text = c.text
+		st, err := Read(in, v)
+		if err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, c.want) {
+			t.Errorf("%q: %s %+v, %v\nwant spawn %+v", c.text, st.Op, st.Args, err, c.want)
+		}
+	}
+	for _, c := range []struct{ text, want string }{
+		{":invoice", ":invoice takes a task: say what its session should do, as :invoice and then the task."},
+		{":invoice @web bill it", ":invoice runs its task in /home/alice/invoices, so it takes no @repo."},
+		{":crm add a lead", ":crm is off, as the crm plugin is: `irie plugins on crm` turns it on."},
+	} {
+		in := menus
+		in.Text = c.text
+		if _, err := Read(in, v); code(err) != CodeBadArgs || err.Error() != c.want {
+			t.Errorf("%q: %v, want %q", c.text, err, c.want)
+		}
+	}
+	_, err := Read(InputArgs{Text: ":grantz find"}, v)
+	if err == nil || !strings.HasSuffix(err.Error(), ":open FILE[:LINE], :grants [TASK], :invoice [TASK].") {
+		t.Errorf(":grantz: %v", err)
+	}
+	// Irie's own commands come first, and no word may take their names.
+	for _, name := range []string{"close", "write", "markets", "undo", "move", "open", "yoink"} {
+		if !IsCommand(name) {
+			t.Errorf("IsCommand(%q) = false", name)
+		}
+	}
+	for _, name := range []string{"grants", "clos", "writer", ""} {
+		if IsCommand(name) {
+			t.Errorf("IsCommand(%q) = true", name)
+		}
+	}
+}

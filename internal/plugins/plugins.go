@@ -82,9 +82,16 @@ type Part struct {
 	// (ownskills.go, owntools.go); nil = it is neither.
 	Skill *OwnSkill
 	Tools *OwnTools
+	// Word is the word of yours it is, from a manifest's [words.<id>]
+	// table (ownwords.go); nil = it is none.
+	Word *OwnWord
 
-	own   func(config.Config) bool       // its own switch, as the file has it
-	check func(Env, bool) (bool, string) // whether it has what it needs, and its state in a sentence, given whether it is on
+	own func(config.Config) bool // its own switch, as the file has it
+	// skillsOff says why its Skills stay out of sessions while its plugin
+	// is on, such as its own switch off, or "" when they go; nil = they go
+	// while the plugin is on.
+	skillsOff func(config.Config) string
+	check     func(Env, bool) (bool, string) // whether it has what it needs, and its state in a sentence, given whether it is on
 	// titled is its title as the config makes it, such as the VPN that
 	// vpn.provider names; nil = Title.
 	titled func(config.Config) string
@@ -110,15 +117,16 @@ type Env struct {
 type Live struct {
 	VPN  *ipc.VPN          // the VPN's mark, while vpn.on
 	Mail []ipc.MailAccount // the mail accounts, by the core's last look at each
+	Chat []ipc.ChatAccount // the chat accounts, by the core's last look at each
 }
 
 // order is the order plugins show in; a plugin this build leaves out is
 // skipped.
-var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden", "terms", "extension", "yoink", "founding"}
+var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden", "terms", "extension", "yoink", "chat", "obsidian", "founding"}
 
 // built are the plugins in this build, by name. Each plugin's file adds
 // itself, and a build tag leaves a plugin's file out with its parts' code:
-// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nofounding
+// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat,noobsidian,nofounding
 // builds Irie without any of them (DESIGN §4.17).
 var built = map[string]func() Plugin{}
 
@@ -291,16 +299,25 @@ func Why(cfg config.Config, part string) string {
 }
 
 // SkillsLeft are the skills of Irie's that sessions go without because
-// their plugin is off, each with why.
+// their plugin is off, or their part has nothing for them yet, each with
+// why.
 func SkillsLeft(cfg config.Config) map[string]string {
 	out := map[string]string{}
 	for _, p := range All() {
-		if p.on(cfg) {
-			continue
-		}
+		on := p.on(cfg)
 		for _, x := range p.Parts {
+			why := ""
+			switch {
+			case !on:
+				why = fmt.Sprintf("the %s plugin is off (%s)", p.Name, p.key)
+			case x.skillsOff != nil:
+				why = x.skillsOff(cfg)
+			}
+			if why == "" {
+				continue
+			}
 			for _, s := range x.Skills {
-				out[s] = fmt.Sprintf("the %s plugin is off (%s)", p.Name, p.key)
+				out[s] = why
 			}
 		}
 	}

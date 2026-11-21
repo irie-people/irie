@@ -300,6 +300,44 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // A Markdown file made pretty (CodePane.swift): its editor and its
+            // pretty view side by side, in both modes.
+            for (base, dark) in [("panes-code-pretty", false), ("panes-code-pretty-dark", true)] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .code)
+                _ = CodeDocs.shared.fixture(Fixture.codeOther, text: Fixture.readme, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                store.rolodex.show(file: Fixture.codeOther, on: "fixturecode", in: Fixture.selected)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "codeTree": false,
+                                                         "codePretty": Fixture.codeOther],
+                                                        forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // A Vault card (VaultPane.swift): the notepad's note as the vault
+            // keeps it, with the vault's notes beside it, in both modes, the
+            // Notes panel marking it kept there; and the card with no vault.
+            CodeFiles.shared.fixture(Fixture.vaultFolder, files: Fixture.vaultFiles)
+            let kept = NotepadVault(path: Fixture.vaultNote, synced: Date(), problem: nil)
+            for (base, dark, ready) in [("panes-vault", false, true), ("panes-vault-dark", true, true), ("panes-vault-welcome", false, false)] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .vault)
+                store.notes.loadFixture(Fixture.notes, vault: ready ? kept : nil)
+                store.vault.loadFixture(ready ? ObsidianResult(state: "ready", text: "", vault: Fixture.vaultFolder, name: "Notes", opened: true, notes: kept)
+                    : ObsidianResult(state: "needs", text: "No vault yet."))
+                _ = CodeDocs.shared.fixture(Fixture.vaultNote, text: Fixture.vaultText, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "vaultTree": true],
+                                                        forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.notes.loadFixture(Fixture.notes)
+            store.vault.loadFixture(nil)
             // A file's link clicked in the terminal: the code card comes to
             // the front with the file open at its line, and the keyboard.
             do {
@@ -633,6 +671,38 @@ enum Fixture {
     static let codeFiles = ["README.md", "go.mod", "main.go", "internal/session/store.go", "internal/session/store_test.go",
                             "internal/session/cookie.go", "internal/login/login.go", "internal/login/login_test.go",
                             "web/index.html", "web/app.js", "web/style.css", "docs/setup.md"]
+    /// The fixture folder's README.md, made pretty in the code card's
+    /// snapshots.
+    static let readme = """
+    # docs-guide
+
+    Keeps a team's docs next to the code they describe, and says which ones fell behind.
+
+    ## What it does
+
+    - Finds the docs that name a function you changed
+    - Opens each one beside the code, at the line
+      - in the session's own code card
+    - Marks the ones left behind, so **nothing goes stale**
+
+    ## Try it
+
+    ```sh
+    go run . check ./...
+    ```
+
+    | Command | What it does |
+    |---|---|
+    | `check` | Lists the docs out of step with the code |
+    | `open` | Shows a doc beside the code it names |
+
+    > A doc that drifts is worse than none.
+
+    ---
+
+    Written for the fixture, about a made-up tool.
+    """
+
     static let code = """
     package session
 
@@ -681,6 +751,29 @@ enum Fixture {
 
     /// The notepad's notes (NotesPanel.swift): two to do, one ticked off by
     /// hand, and one sent as a jot to the selected session.
+    /// A vault (VaultPane.swift): its folder, its notes, the notepad's note
+    /// in it as the core writes it, and the notes that link to that.
+    static var vaultFolder: String { "/home/alice/Notes" }
+    static var vaultNote: String { vaultFolder + "/\(Brand.name) Notes.md" }
+    static var vaultFiles: [String] {
+        ["\(Brand.name) Notes.md", "Inbox.md", "Reading list.md", "Projects/Launch.md", "Projects/Roadmap.md", "Daily/2026-11-20.md", "Daily/2026-11-21.md"]
+    }
+    static var vaultText: String {
+        """
+        %% \(Brand.name) keeps your notepad here, a task a note: tick, add or change one, and \(Brand.name)'s notepad follows within seconds, and back. %%
+
+        - [ ] Try the new parser on the big repo ^i3k2d9a
+        - [x] Ask for a review of the login fix ^ia7c2mx
+        - [ ] Write the release notes for 1.2, with the screenshots from the [[Projects/Launch|launch]] docs ^iq7z2bt
+        - [x] Rename the settings tab ^ip2m4kd
+
+        ## Later
+        Ideas that aren't tasks yet stay here, as written. #someday ==after 1.2==
+
+        """
+    }
+    static let vaultLinked = ["Daily/2026-11-21.md", "Projects/Launch.md"]
+
     static let notes: [Note] = {
         let now = Date()
         return [

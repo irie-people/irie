@@ -160,7 +160,7 @@ func TestASessionStartsWithYourSkillAndTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.WriteConfig(t, agentConfig{extra: fmt.Sprintf("[profiles.claude]\ncommand = %q\nenv = { IRIE_FAKE_PLUGINS = \"1\", IRIE_FAKE_MCP = \"1\" }\n\n[plugins.manifests]\ngrants-app = true\n", c.fake)}.toml(c.fake))
-	ownPlugin(t, c.paths.Plugins(), "grants-app", "[skills.grants]\npath = \""+skill+"\"\n\n[tools.grants]\nrun = [\""+server+"\", \"mcp\"]\n")
+	ownPlugin(t, c.paths.Plugins(), "grants-app", "[skills.grants]\npath = \""+skill+"\"\n\n[tools.grants]\nrun = [\""+server+"\", \"mcp\"]\n\n[words.grants]\ntitle = \"Grant work\"\nskill = \"grants\"\n")
 	t.Cleanup(func() {
 		filepath.WalkDir(c.paths.Skills(), func(p string, d fs.DirEntry, err error) error {
 			if err == nil && d.IsDir() {
@@ -200,4 +200,29 @@ func TestASessionStartsWithYourSkillAndTools(t *testing.T) {
 		t.Errorf("the skill isn't in the session's folder: %v", err)
 	}
 	c.waitState(sr.Session.ID, ipc.StateWorking)
+
+	// The plugin's word starts a session on its skill: with a task, which
+	// names it, and alone, named as the word is.
+	for _, w := range []struct{ text, name, task string }{
+		{":grants find arts grants", "Find Arts Grants", "/irie:grants find arts grants"},
+		{":grants", "Grant work", "/irie:grants"},
+	} {
+		var r ipc.InputResult
+		// The menus' agent, one whose Claude Code loads plugins.
+		if err := c.call(ipc.OpInput, ipc.InputArgs{Text: w.text, Profile: "claude"}, &r); err != nil {
+			t.Fatalf("%s: %v", w.text, err)
+		}
+		if r.Did != ipc.InputSpawned || r.Session == nil || r.Session.Name != w.name {
+			t.Fatalf("%s: %+v", w.text, r)
+		}
+		spec, err := host.ReadSpec(c.paths.SpecFile(r.Session.ID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := spec.Argv[len(spec.Argv)-1]; got != w.task {
+			t.Errorf("%s: the agent's task is %q, want %q", w.text, got, w.task)
+		}
+		// The fake agent, like Claude Code, refuses a skill it can't find.
+		c.waitState(r.Session.ID, ipc.StateWorking)
+	}
 }

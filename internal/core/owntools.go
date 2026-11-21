@@ -1,6 +1,7 @@
 package core
 
 import (
+	irie "github.com/irie-people/irie/core"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/plugins"
 )
@@ -33,4 +34,15 @@ func (c *Core) ownToolsMCP(x *session, mcp map[string]harness.MCPServer) map[str
 		mcp[t.Name] = harness.MCPServer{Command: prog, Args: append([]string{}, t.Run[1:]...)}
 	}
 	return mcp
+}
+
+// ownWords are your plugins' words for the task bar (DESIGN §4.17), each
+// with why it does nothing now, if it doesn't. It reads the manifests, so
+// the caller does not hold c.mu.
+func (c *Core) ownWords() []irie.Word {
+	var out []irie.Word
+	for _, w := range plugins.Words(plugins.Env{Config: *c.cfg(), Paths: c.paths}) {
+		out = append(out, irie.Word{Name: w.Name, Plugin: w.Plugin, Title: w.Title, Skill: w.Skill, Dir: w.Dir, Off: w.Off})
+	}
+	return out
 }

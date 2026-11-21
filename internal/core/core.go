@@ -77,6 +77,7 @@ type Core struct {
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
 	pad         notepad      // the person's notes for later (notepad.go); it has a lock of its own, never held with mu
+	vault       vaultNotes   // the notepad kept in the Obsidian vault too (obsidian.go); its lock is taken before pad's, never after
 	cards       cardState    // the materialized cards (materialize.go); it has a lock of its own, never held with mu
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
@@ -165,6 +166,7 @@ type Core struct {
 	variorum   variorumState         // Variorum's door: the note each session named last (variorum.go)
 	mail       mailState             // the mail plugin's accounts and connections (mail.go)
 	yoink      yoinkState            // the yoink plugin's downloads (yoink.go)
+	chat       chatState             // the chat plugin's accounts, drafts and log (chat.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -434,6 +436,8 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
+	// The notepad kept in the Obsidian vault too (obsidian.go).
+	go c.watchVaultNotes()
 	// Terms in short's page, for the Mac app's Terms tab (terms.go).
 	go c.serveTerms(context.Background())
 	// Raphael's look at the core's own loop (watchCore) counts from here.
@@ -825,6 +829,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.yoinkOp(peer, a)
+	case ipc.OpChat:
+		var a ipc.ChatArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.chatOp(peer, a)
 	case ipc.OpFounding:
 		var a ipc.FoundingArgs
 		if err := decode(raw, &a); err != nil {
@@ -874,10 +884,11 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpFounding, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 			ipc.OpLock, ipc.OpMaterialize,
 			ipc.OpWorktrees,
+			ipc.OpObsidian,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -1104,6 +1115,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.marketsOp(a)
+	case ipc.OpObsidian:
+		var a ipc.ObsidianArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.obsidianOp(a)
 	case ipc.OpCard:
 		var a ipc.CardArgs
 		if err := decode(raw, &a); err != nil {
@@ -1136,6 +1153,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.yoinkOp(0, a)
+	case ipc.OpChat:
+		// A call with no process to it, such as one from within the core.
+		var a ipc.ChatArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.chatOp(0, a)
 	case ipc.OpFounding:
 		// A call with no process to it, such as one from within the core.
 		var a ipc.FoundingArgs
