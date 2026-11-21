@@ -36,6 +36,8 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 		c.refreshOutside("input", outsideEvery, false)
 	}
 	home, _ := os.UserHomeDir()
+	// Your plugins' words, read from their manifests before the lock.
+	words := c.ownWords()
 	c.mu.Lock()
 	// ^name starts the task on that machine (peers.go), when that machine
 	// runs every Claude Code hook this one does (place.go). A bench reads
@@ -48,7 +50,7 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 	if p != nil {
 		why = c.hooksDiffer(p)
 	}
-	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home, Exists: fileExists, Profiles: c.plusNames()}
+	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home, Exists: fileExists, Profiles: c.plusNames(), Words: words}
 	c.mu.Unlock()
 	if p != nil {
 		if why != "" {

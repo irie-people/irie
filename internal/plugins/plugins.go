@@ -82,6 +82,9 @@ type Part struct {
 	// (ownskills.go, owntools.go); nil = it is neither.
 	Skill *OwnSkill
 	Tools *OwnTools
+	// Word is the word of yours it is, from a manifest's [words.<id>]
+	// table (ownwords.go); nil = it is none.
+	Word *OwnWord
 
 	own func(config.Config) bool // its own switch, as the file has it
 	// skillsOff says why its Skills stay out of sessions while its plugin

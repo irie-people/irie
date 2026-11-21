@@ -249,7 +249,7 @@ func TestABundleHoldsNoSkillsOrTools(t *testing.T) {
 	e := env(t)
 	manifest(t, e, "business.toml", "plugins = [\"grants-app\"]\n\n[tools.grants]\nrun = [\"sh\"]\n")
 	_, bs := Mine(e.Paths.Plugins())
-	if len(bs) != 1 || !strings.Contains(bs[0].Problem, "put its panes, helpers, skills, tools or schedules in a manifest of their own") {
+	if len(bs) != 1 || !strings.Contains(bs[0].Problem, "put its panes, helpers, skills, tools, words or schedules in a manifest of their own") {
 		t.Errorf("bundles = %+v", bs)
 	}
 }

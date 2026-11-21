@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +19,34 @@ import (
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
 const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :open FILE[:LINE]"
+
+// commandName finds each command's name in Commands.
+var commandName = regexp.MustCompile(`(?:^|, ):([a-z]+)`)
+
+// IsCommand says whether name, without its colon, is one of Irie's own
+// commands, which no word of a plugin's may take.
+func IsCommand(name string) bool {
+	for _, m := range commandName.FindAllStringSubmatch(Commands, -1) {
+		if m[1] == name {
+			return true
+		}
+	}
+	return false
+}
+
+// A Word is a word of a plugin of yours (DESIGN §4.17): :NAME TASK starts a
+// session for the plugin's app, on its skill and in its folder when it has
+// them, and :NAME alone one with no task, when it has a skill.
+type Word struct {
+	Name   string // the word, without its colon
+	Plugin string // the plugin it comes with
+	Title  string // the name of a session it starts with no task
+	Skill  string // the skill its sessions start on; "" = none
+	Dir    string // the folder its sessions run in, in place; "" = where the task says
+	// Off says why typing it does nothing now, in a sentence, such as its
+	// plugin being off; "" = it starts a session.
+	Off string
+}
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, the folder that ~ means and the profiles.
@@ -36,6 +65,8 @@ type View struct {
 	// client that does not know them must, and leaves the core to say
 	// which it has.
 	Profiles []string
+	// Words are the words of your plugins, :NAME [TASK] (DESIGN §4.17).
+	Words []Word
 }
 
 // A Step is what an input comes to: one op to run with its args, or, for a
@@ -358,7 +389,64 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		}
 		return Step{Op: OpMove, Args: MoveArgs{VendorID: o.VendorID}, Outside: o}, nil
 	}
-	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, Commands)
+	for _, w := range v.Words {
+		if w.Name == name {
+			return wordStep(w, arg, in, v)
+		}
+	}
+	all := Commands
+	for _, w := range v.Words {
+		if w.Off == "" {
+			all += ", :" + w.Name + " [TASK]"
+		}
+	}
+	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, all)
+}
+
+// wordStep reads :NAME [TASK] for a word of a plugin of yours (DESIGN
+// §4.17): a session on the word's skill, if it has one, for the task, which
+// may run on over more lines and takes +agent words as any task does, in
+// the word's folder in place when it has one, where it takes no @repo. The
+// task bar's own folder never applies: the word's session is for its
+// plugin's app. With no task, a word with a skill starts the skill alone,
+// named as the word is.
+func wordStep(w Word, arg string, in InputArgs, v View) (Step, error) {
+	if w.Off != "" {
+		return Step{}, Errorf(CodeBadArgs, "%s", w.Off)
+	}
+	task := arg
+	if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+		task = strings.TrimSpace(task + "\n" + more)
+	}
+	var a SpawnArgs
+	if task == "" {
+		if w.Skill == "" {
+			return Step{}, Errorf(CodeBadArgs, ":%s takes a task: say what its session should do, as :%s and then the task.", w.Name, w.Name)
+		}
+		a = SpawnArgs{Task: "/" + brand.Slug + ":" + w.Skill, Name: w.Title}
+	} else {
+		var err error
+		if a, err = v.parseTask(task); err != nil {
+			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
+		}
+		a.Task = Unpaste(a.Task, in.Pastes)
+	}
+	if w.Dir != "" {
+		if a.Repo != "" || a.Cwd != "" {
+			return Step{}, Errorf(CodeBadArgs, ":%s runs its task in %s, so it takes no @repo.", w.Name, w.Dir)
+		}
+		a.Repo, a.InPlace = w.Dir, true
+	}
+	a.Skill = w.Skill
+	if a.Profile == "" {
+		a.Profile = in.Profile
+	}
+	if a.Tutor == "" {
+		a.Tutor = in.Tutor
+	}
+	a.Model = in.Model
+	a.Space, a.After = in.Space, in.Session
+	return Step{Op: OpSpawn, Args: a}, nil
 }
 
 // vpnArgs reads the words after :vpn (DESIGN §4.18): nothing for the
