@@ -63,6 +63,10 @@ const (
 	// OptNamed is "1" when the user chose the session's name, else "0". A
 	// pane from before Irie kept it has none.
 	OptNamed = "@irie_named"
+	// OptArgs is, on the pane of Irie's llama-server, a hash of the command
+	// line it started with, so that one changed in the config restarts it.
+	// Snapshots leave it out: only the llama-server's check reads it.
+	OptArgs = "@irie_args"
 )
 
 // ErrNoServer means the server is not running.

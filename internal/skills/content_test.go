@@ -8,10 +8,6 @@ import (
 	"github.com/irie-people/irie/internal/config"
 )
 
-// grants are the frontmatter fields that change what an agent may do, which
-// no skill of Irie's sets (docs/proposals/skills.md §4.1).
-var grants = []string{"allowed-tools", "disallowed-tools", "hooks", "shell", "model", "effort", "context", "agent"}
-
 // TestBundledSkillsGrantNothing: every skill that comes with Irie is
 // Markdown only, grants no tools, runs nothing as it loads (Claude Code runs
 // an exclamation mark and a backtick before the skill reaches the model),

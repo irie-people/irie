@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -20,6 +21,65 @@ import (
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/testutil/peertest"
 )
+
+// startPeerLlama starts the fake llama-server that stands for a peer's,
+// on the port after a pair found free, as the tunnel reaches it, and
+// returns the first of the pair once it answers. On a busy machine another
+// process can take a port found free before the server binds it. The
+// server then exits at once, which a wait for it to answer took for five
+// minutes of slowness (an install on 2026-11-21, at a load of 16-20), so
+// it starts again on other ports, and says why it exited if it never ran.
+func startPeerLlama(t *testing.T, model string) int {
+	t.Helper()
+	bin := testutil.BuildFakeLlama(t)
+	why := "it never answered"
+	for range 5 {
+		first := testutil.FreePorts(t, 2)
+		url := fmt.Sprintf("http://127.0.0.1:%d", first+1)
+		var stderr bytes.Buffer
+		server := exec.Command(bin, "-m", model, "--alias", "dory-4b", "--port", fmt.Sprint(first+1), "-c", "196608", "-np", "3")
+		server.Stderr = &stderr
+		if err := server.Start(); err != nil {
+			t.Fatal(err)
+		}
+		exited := make(chan struct{})
+		go func() { server.Wait(); close(exited) }()
+		answers := func() bool {
+			for deadline := time.Now().Add(2 * time.Minute); time.Now().Before(deadline); {
+				select {
+				case <-exited:
+					return false
+				case <-time.After(50 * time.Millisecond):
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				ready, err := localmodel.Llama{URL: url}.Ready(ctx)
+				cancel()
+				if err == nil && ready {
+					// Another's server may hold the port and answer: this one
+					// must still be running.
+					select {
+					case <-exited:
+						return false
+					default:
+						return true
+					}
+				}
+			}
+			return false
+		}
+		if answers() {
+			t.Cleanup(func() { server.Process.Kill(); <-exited })
+			return first
+		}
+		server.Process.Kill()
+		<-exited
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			why = msg
+		}
+	}
+	t.Fatalf("the fake llama-server did not start: %s", why)
+	return 0
+}
 
 func TestTunnelPorts(t *testing.T) {
 	cfg := config.Default()
@@ -44,9 +104,13 @@ func TestTunnelPorts(t *testing.T) {
 func TestAModelOnAPeerRunsThroughATunnel(t *testing.T) {
 	g := peertest.Start(t)
 	g.Core.Start(nil, &ipc.Header{Version: "peer-v", Machine: &ipc.Machine{Name: "Asahi", Claude: "ok"}})
-	// The tunnel takes the port after llama_port (tunnelPort), so both
-	// must be free.
-	llamaPort := testutil.FreePorts(t, 2)
+	// The peer's llama-server, as the tunnel reaches it: on the port after
+	// llama_port (tunnelPort).
+	model := filepath.Join(t.TempDir(), "dory-4b.gguf")
+	if err := os.WriteFile(model, []byte("GGUF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	llamaPort := startPeerLlama(t, model)
 	tunnel := llamaPort + 1
 	fake := testutil.BuildFakeAgent(t)
 	c := prepare(t, agentConfig{
@@ -97,29 +161,14 @@ fake = 1.0
 		t.Fatal(err)
 	}
 
-	// The peer's llama-server, as the tunnel reaches it.
-	model := filepath.Join(t.TempDir(), "dory-4b.gguf")
-	if err := os.WriteFile(model, []byte("GGUF"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	server := exec.Command(testutil.BuildFakeLlama(t), "-m", model, "--alias", "dory-4b", "--port", fmt.Sprint(tunnel), "-c", "196608", "-np", "3")
-	if err := server.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { server.Process.Kill(); server.Wait() })
 	c.up()
 
-	// A spawn needs the peer followed and its server answering; on a busy
-	// machine either takes a while, so wait for both rather than race them.
+	// A spawn needs the peer followed, and its server answering, which
+	// startPeerLlama waited for; on a busy machine following takes a
+	// while, so wait for it rather than race it.
 	waitUntil(t, "the core follows the peer", func() bool {
 		var pr ipc.PeersResult
 		return c.call("peers", ipc.PeersArgs{}, &pr) == nil && len(pr.Peers) == 1 && pr.Peers[0].Up
-	})
-	waitUntil(t, "the peer's llama-server answers", func() bool {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		ready, err := localmodel.Llama{URL: fmt.Sprintf("http://127.0.0.1:%d", tunnel)}.Ready(ctx)
-		return err == nil && ready
 	})
 
 	var r ipc.SpawnResult

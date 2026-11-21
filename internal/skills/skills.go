@@ -39,6 +39,9 @@ type Skill struct {
 	Description string            // from its frontmatter
 	Source      string            // where it comes from
 	Files       map[string][]byte // its files, by slash path inside its folder
+	// Mine is set on a skill of yours, from a plugin of your own (Read):
+	// it comes with no version of Irie's.
+	Mine bool
 }
 
 // bundled are the skills that come with every build. A plugin's skills
@@ -203,7 +206,11 @@ func Layout(set []Skill, version string) map[string][]byte {
 	var src strings.Builder
 	src.WriteString("# Sources\n\n" + brand.Name + " made this folder for its sessions, and never changes it while one uses it. Each skill and where it comes from:\n\n| Skill | Source |\n|---|---|\n")
 	for _, s := range set {
-		fmt.Fprintf(&src, "| %s | %s %s |\n", s.Name, s.Source, version)
+		if s.Mine {
+			fmt.Fprintf(&src, "| %s | %s |\n", s.Name, s.Source)
+		} else {
+			fmt.Fprintf(&src, "| %s | %s %s |\n", s.Name, s.Source, version)
+		}
 		for p, b := range s.Files {
 			files["skills/"+s.Name+"/"+p] = b
 		}
