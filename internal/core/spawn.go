@@ -315,6 +315,9 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	if name == "" {
 		name, named, base = title(a.Task), false, slug(a.Task)
 	}
+	if a.Folder != "" {
+		base = slug(a.Folder)
+	}
 	// Anonymous research takes its compartment first, and work that an
 	// anonymous session hands on, or a failover carries on, stays in its
 	// compartment (DESIGN §4.16).

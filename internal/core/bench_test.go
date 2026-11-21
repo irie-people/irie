@@ -109,11 +109,15 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 		t.Fatalf("bench = %+v", b)
 	}
 	// Each run is a session of its own on the profile, on the task as
-	// typed, named for the bench.
+	// typed, named for the bench, in a folder named for the bench's number
+	// and its own.
 	for i, run := range b.Runs {
 		s, ok := c.row(run.Session)
 		if !ok || s.Profile != "cheap" || !strings.HasPrefix(s.Name, fmt.Sprintf("bench %d/3 · ", i+1)) || s.Class != route.Small {
 			t.Errorf("run %d = %+v", i+1, s)
+		}
+		if want := fmt.Sprintf("bench-1-run-%d", i+1); filepath.Base(s.Cwd) != want {
+			t.Errorf("run %d works in %s, want a folder %s", i+1, s.Cwd, want)
 		}
 		// No one watches a run, so it refuses what would wait on a
 		// permission prompt.
@@ -153,7 +157,7 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 		}
 	}
 	judge, ok := c.row(done.JudgeID)
-	if !ok || judge.Profile != "judge" || !strings.HasPrefix(judge.Name, "bench judge · ") {
+	if !ok || judge.Profile != "judge" || !strings.HasPrefix(judge.Name, "bench judge · ") || filepath.Base(judge.Cwd) != "bench-1-judge" {
 		t.Errorf("judge = %+v", judge)
 	}
 	if refuses, unattended := c.unattended(done.JudgeID); !refuses || !unattended {
@@ -332,18 +336,48 @@ func TestAJudgedBenchClosesItsSessions(t *testing.T) {
 }
 
 // A run on a peer is typed there, and the peer reads a typed task's first
-// line for @ and + words: that line is the run's number alone, so the
-// playbook, which names the +profile, reaches the run whole.
+// line for @ and + words and names its folder from it: that line names
+// the run's folder alone, so the playbook, which names the +profile,
+// reaches the run whole, and the run works in bench-5-run-2.
 func TestARunOnAPeerGetsItsPlaybookWhole(t *testing.T) {
-	b := &benchFile{Bench: ipc.Bench{Task: "fix the typo in README", Profile: "dory", Host: "Asahi"}, Playbook: []string{"Read a file before you edit it."}}
+	b := &benchFile{Bench: ipc.Bench{Task: "fix the typo in README", Profile: "dory", Host: "Asahi"}, Playbook: []string{"Read a file before you edit it."}, Seq: 5}
 	text := b.runTask(1, 3)
 	st, err := irie.Read(ipc.InputArgs{Text: text, Profile: "dory", Unattended: true}, irie.View{Home: "/home/alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	a, _ := st.Args.(ipc.SpawnArgs)
-	want := "[" + brand.Name + " bench] Run 2 of 3.\n" + playbookIntro("dory") + "\n- Read a file before you edit it.\n\nThe task:\n\nfix the typo in README"
+	want := "Bench 5 run 2.\n[" + brand.Name + " bench] Run 2 of 3: each run does the same task on its own.\n" + playbookIntro("dory") + "\n- Read a file before you edit it.\n\nThe task:\n\nfix the typo in README"
 	if st.Op != ipc.OpSpawn || a.Task != want || a.Profile != "dory" || !a.Unattended {
 		t.Errorf("the peer reads %q as %s %+v, want the task %q", text, st.Op, a, want)
+	}
+	if got := slug(a.Task); got != "bench-5-run-2" {
+		t.Errorf("the run's folder is named %q, want bench-5-run-2", got)
+	}
+	// Its judge's folder too, by the first line of its brief.
+	if got := slug(b.folder("judge")); got != "bench-5-judge" {
+		t.Errorf("the judge's folder is named %q, want bench-5-judge", got)
+	}
+}
+
+// A bench's number goes on from the highest one yet; before benches had
+// numbers, from the count of those that did not fail, as they were
+// counted then.
+func TestBenchNumbers(t *testing.T) {
+	c := &Core{}
+	old := func(state string) *benchFile { return &benchFile{Bench: ipc.Bench{State: state}} }
+	c.benches.all = map[string]*benchFile{"b1": old(ipc.BenchDone), "b2": old(ipc.BenchFailed), "b3": old(ipc.BenchDone)}
+	if got := c.nextSeq(); got != 3 {
+		t.Errorf("after two benches judged and one failed, the next is %d, want 3", got)
+	}
+	numbered := old(ipc.BenchFailed)
+	numbered.Seq = 3
+	c.benches.all["b4"] = numbered
+	if got := c.nextSeq(); got != 4 {
+		t.Errorf("after bench 3 failed, the next is %d, want 4", got)
+	}
+	c.benches.all = nil
+	if got := c.nextSeq(); got != 1 {
+		t.Errorf("the first bench is %d, want 1", got)
 	}
 }
