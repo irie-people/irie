@@ -673,6 +673,10 @@ func (d *discord) Messages(ctx context.Context, ch ipc.ChatChannel, p Page) ([]i
 	if p.Before != "" {
 		q.Set("before", p.Before)
 	}
+	if p.Thread != "" {
+		// A thread is a channel of its own.
+		ch.ID, ch.Kind, ch.Parent = p.Thread, ipc.ChannelThread, ch.ID
+	}
 	var list []discordMessage
 	if err := d.do(ctx, http.MethodGet, "/channels/"+ch.ID+"/messages?"+q.Encode(), nil, &list); err != nil {
 		return nil, err

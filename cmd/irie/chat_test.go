@@ -115,6 +115,22 @@ func TestIrieChat(t *testing.T) {
 	if _, err := chat("", "add", "matrix"); err == nil {
 		t.Error("a kind there is none of")
 	}
+	// Slack's two tokens, a line each, both reach the op.
+	if _, err := chat("xoxb-1\nxapp-1\n", "add", "slack"); err != nil {
+		t.Fatal(err)
+	}
+	if a := fake.last(); a.New.Kind != "slack" || a.New.Token != "xoxb-1" || a.New.App != "xapp-1" {
+		t.Errorf("add slack asked %+v", a.New)
+	}
+	if _, err := chat("xoxb-2\n", "add", "slack", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if a := fake.last(); a.New.Token != "xoxb-2" || a.New.App != "" || a.New.Name != "team" {
+		t.Errorf("add slack without an app token asked %+v", a.New)
+	}
+	if _, err := chat("", "read", "#general", "--thread", "1700000003.000300"); err != nil || fake.last().Thread != "1700000003.000300" {
+		t.Errorf("read a thread: %v %+v", err, fake.last())
+	}
 	out, err = chat("", "drafts")
 	if err != nil || !strings.HasPrefix(out, "dabc  waiting  to acme:#general, from writer") || !strings.Contains(out, "    line two") {
 		t.Errorf("drafts: %v\n%s", err, out)

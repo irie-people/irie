@@ -23,7 +23,7 @@ func chatStatus(t *testing.T, e Env) ipc.Plugin {
 
 // TestChatParts: the chat plugin is on and shows its tab; each kind of
 // account needs one until it is added, then stands by the core's last look;
-// Slack is held; and agents' drafts are on with their own switch.
+// and agents' drafts are on with their own switch.
 func TestChatParts(t *testing.T) {
 	e := env(t)
 	p := chatStatus(t, e)
@@ -34,7 +34,7 @@ func TestChatParts(t *testing.T) {
 	if d.State != ipc.PartNeeds || !strings.Contains(d.Detail, "chat add discord") || d.Pane == nil || d.Pane.ID != "chat.tab" || d.Pane.Kind != "chat" {
 		t.Errorf("discord = %+v", d)
 	}
-	if s := part(t, p, ChatSlack); s.State != ipc.PartHeld {
+	if s := part(t, p, ChatSlack); s.State != ipc.PartNeeds || !strings.Contains(s.Detail, "chat add slack") {
 		t.Errorf("slack = %+v", s)
 	}
 	a := part(t, p, ChatAgents)

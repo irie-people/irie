@@ -72,9 +72,10 @@ type ChatArgs struct {
 	Text string `json:"text,omitempty"`
 	// Reply is the message a post answers.
 	Reply string `json:"reply,omitempty"`
-	// Thread is the title of a thread the post starts: from Reply's
-	// message when there is one, in a forum as a new post, else in the
-	// channel.
+	// Thread, for a post, is the title of a thread it starts: from
+	// Reply's message when there is one, in a forum as a new post, else in
+	// the channel. For a read it is the thread to read: on Slack the ts of
+	// its first message, on Discord the thread's ID.
 	Thread string `json:"thread,omitempty"`
 	// Before, for read, asks for the messages before this one.
 	Before string `json:"before,omitempty"`

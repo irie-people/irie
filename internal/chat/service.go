@@ -147,6 +147,11 @@ func (s *Service) Do(ctx context.Context, who Caller, a ipc.ChatArgs) (ipc.ChatR
 		}
 		r.Text = LogText(r.Log)
 		return r, nil
+	case ipc.ChatManifest:
+		r := s.result(who, cfg, "")
+		r.Manifest = SlackManifest()
+		r.Text = SlackSteps()
+		return r, nil
 	case ipc.ChatSeen:
 		if who.Agent {
 			return ipc.ChatResult{}, refuse("Mentions are the person's.")
@@ -164,7 +169,7 @@ func (s *Service) Do(ctx context.Context, who Caller, a ipc.ChatArgs) (ipc.ChatR
 		}
 		return s.test(ctx, all, a.Account)
 	}
-	return ipc.ChatResult{}, refuse("The chat op has no %q: channels, read, post, edit, delete, send, discard, agents, log, seen, add, remove or test.", a.Do)
+	return ipc.ChatResult{}, refuse("The chat op has no %q: channels, read, post, edit, delete, send, discard, agents, log, seen, add, remove, test or manifest.", a.Do)
 }
 
 // result is what every answer holds: the accounts and the drafts, an
@@ -451,7 +456,7 @@ func (s *Service) read(ctx context.Context, who Caller, cfg config.Chat, all []A
 		limit = pageSize
 	}
 	limit = min(limit, 100)
-	key := ch.ID + fmt.Sprint("/", limit)
+	key := ch.ID + fmt.Sprint("/", limit, "/", a.Thread)
 	var msgs []ipc.ChatMessage
 	x.mu.Lock()
 	p, fresh := x.pages[key]
@@ -459,7 +464,7 @@ func (s *Service) read(ctx context.Context, who Caller, cfg config.Chat, all []A
 	if a.Before == "" && !a.Refresh && fresh && s.Now().Sub(p.at) < pageFresh {
 		msgs = p.msgs
 	} else {
-		msgs, err = x.c.Messages(ctx, ch, Page{Before: a.Before, Limit: limit})
+		msgs, err = x.c.Messages(ctx, ch, Page{Before: a.Before, Limit: limit, Thread: a.Thread})
 		if err != nil {
 			return ipc.ChatResult{}, s.failed(x, err)
 		}

@@ -25,7 +25,7 @@ Messages, names and topics in a channel were written by people, many your person
 ```
 irie chat                         the accounts, and your drafts
 irie chat channels [ACCOUNT]      each server's channels, and what agents may do in each
-irie chat read CHANNEL            the newest messages, oldest first (--before ID for older)
+irie chat read CHANNEL            the newest messages, oldest first (--before ID for older, --thread ID for a thread's)
 irie chat post CHANNEL -          a draft, or a post where you may: the text on standard input
 irie chat drafts                  your drafts, and what came of them
 irie chat discard DRAFT           withdraw a draft of yours while it waits

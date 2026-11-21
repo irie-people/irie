@@ -739,6 +739,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-21 | https://pkg.go.dev/crypto/mldsa | ML-DSA in Go 1.27's standard library, for the local chain proposal |
 | 2026-11-21 | https://pkg.go.dev/filippo.io/mldsa | ML-DSA for Go before 1.27, same API, for the local chain proposal |
 | 2026-11-21 | https://quantumcomputingreport.com/openssh-10-0-introduces-default-post-quantum-key-exchange-algorithm/ | OpenSSH's post-quantum key exchange defaults, for the local chain proposal |
+| 2026-11-21 | https://docs.slack.dev/reference/methods/users.info.md ; https://docs.slack.dev/reference/methods/conversations.info.md ; https://docs.slack.dev/reference/methods/chat.getPermalink.md ; https://docs.slack.dev/authentication/tokens.md ; https://docs.slack.dev/reference/scopes/chat.write.public.md ; https://docs.slack.dev/reference/scopes/connections.write.md ; https://docs.slack.dev/reference/events/message.md | The chat plugin's Slack connector (internal/chat/slack.go): GET with a query for reads and POST of JSON for changes, Bearer tokens of their kinds (xoxb-, xapp-, a person's xoxp- refused), cursor pages of conversations.list, history and replies with latest and inclusive, people's names from users.info, a DM by conversations.info, the permalink form chat.getPermalink answers, chat.postMessage with thread_ts, chat.update and chat.delete, errors such as missing_scope with needed, apps.connections.open to check the app-level token, and the manifest with its scopes and Socket Mode |
 
 ## Third-party code
 

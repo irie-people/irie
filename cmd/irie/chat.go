@@ -32,8 +32,9 @@ const chatHelp = `usage:
   ` + brand.Slug + ` chat                    the accounts, and the drafts that wait for you
   ` + brand.Slug + ` chat channels [ACCOUNT] [--refresh]
                         each server's channels, and what agents may do in each
-  ` + brand.Slug + ` chat read CHANNEL [--before ID] [--limit N] [--refresh]
-                        a channel's newest messages, oldest first
+  ` + brand.Slug + ` chat read CHANNEL [--thread ID] [--before ID] [--limit N] [--refresh]
+                        a channel's newest messages, oldest first, or a
+                        thread's: on Slack the ID of its first message
   ` + brand.Slug + ` chat post CHANNEL [TEXT|-] [--reply ID] [--thread TITLE]
                         post TEXT, or standard input with -: a reply, or a
                         thread with TITLE (a forum's posts need one). An
@@ -53,12 +54,15 @@ const chatHelp = `usage:
                         whether agents may read an account's messages
   ` + brand.Slug + ` chat log [ACCOUNT] [--limit N]
                         what agents posted, edited and deleted, newest first
-  ` + brand.Slug + ` chat add discord [NAME] [--user ID]
-                        add a Discord bot of yours once its token signs in:
-                        the token comes on standard input, or is asked for
-                        without showing; it goes to the Keychain, never
-                        config.toml. --user is your own user ID there, so a
-                        mention of you counts too
+  ` + brand.Slug + ` chat add discord|slack [NAME] [--user ID]
+                        add a Discord bot of yours, or a Slack app of yours,
+                        once its token signs in: the token comes on standard
+                        input, or is asked for without showing; it goes to
+                        the Keychain, never config.toml. Slack's says first
+                        how to make the app, and takes its app-level token
+                        after the bot's (a line of its own; none to skip).
+                        --user is your own user ID there, so a mention of
+                        you counts too
   ` + brand.Slug + ` chat remove NAME        remove an account, its tokens and its drafts
   ` + brand.Slug + ` chat test NAME          sign in to an account again
 
@@ -161,6 +165,7 @@ func chatCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 	case "read":
 		fs := flag.NewFlagSet("chat read", flag.ContinueOnError)
 		before := fs.String("before", "", "the messages before this one")
+		thread := fs.String("thread", "", "the thread to read")
 		limit := fs.Int("limit", 0, "how many")
 		refresh := fs.Bool("refresh", false, "ask the service again now")
 		words, err := flags(fs, args)
@@ -168,9 +173,9 @@ func chatCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 			return err
 		}
 		if len(words) != 1 {
-			return errors.New("usage: " + brand.Slug + " chat read CHANNEL [--before ID] [--limit N]")
+			return errors.New("usage: " + brand.Slug + " chat read CHANNEL [--thread ID] [--before ID] [--limit N]")
 		}
-		return say(ipc.ChatArgs{Do: ipc.ChatRead, Channel: words[0], Before: *before, Limit: *limit, Refresh: *refresh}, wait)
+		return say(ipc.ChatArgs{Do: ipc.ChatRead, Channel: words[0], Thread: *thread, Before: *before, Limit: *limit, Refresh: *refresh}, wait)
 	case "post":
 		fs := flag.NewFlagSet("chat post", flag.ContinueOnError)
 		reply := fs.String("reply", "", "the message it answers")
@@ -289,7 +294,7 @@ func draftsText(drafts []ipc.ChatDraft) string {
 
 func chatAdd(args []string, stdin io.Reader, stdout io.Writer) error {
 	if len(args) < 1 {
-		return errors.New("usage: " + brand.Slug + " chat add discord [NAME] [--user ID]")
+		return errors.New("usage: " + brand.Slug + " chat add discord|slack [NAME] [--user ID]")
 	}
 	kind := args[0]
 	fs := flag.NewFlagSet("chat add", flag.ContinueOnError)
@@ -299,25 +304,38 @@ func chatAdd(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	if len(words) > 1 {
-		return errors.New("usage: " + brand.Slug + " chat add discord [NAME] [--user ID]")
+		return errors.New("usage: " + brand.Slug + " chat add discord|slack [NAME] [--user ID]")
 	}
 	n := &ipc.ChatNew{Kind: kind, User: *user}
 	if len(words) == 1 {
 		n.Name = words[0]
 	}
+	prompts := []string{"The bot's token"}
 	switch kind {
 	case config.ChatDiscord:
 		if isTerminal(stdin) {
 			fmt.Fprintln(stdout, "Discord takes a bot's token: Developer Portal (https://discord.com/developers/applications) › your application › Bot › Reset Token. Invite the bot to your server with View Channels, Send Messages, Send Messages in Threads, Create Public Threads and Read Message History.")
 		}
+	case config.ChatSlack:
+		if isTerminal(stdin) {
+			r, err := chatCall(ipc.ChatArgs{Do: ipc.ChatManifest}, 30*time.Second)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, r.Text)
+		}
+		prompts = []string{"The bot's token (xoxb-)", "The app-level token (xapp-), or Return for none yet"}
 	default:
-		return fmt.Errorf("%q is no kind of chat account here: discord", kind)
+		return fmt.Errorf("%q is no kind of chat account here: discord or slack", kind)
 	}
-	token, err := readHidden(stdin, stdout, "The bot's token")
+	tokens, err := readHiddenLines(stdin, stdout, prompts...)
 	if err != nil {
 		return err
 	}
-	n.Token = token
+	n.Token = tokens[0]
+	if len(tokens) > 1 {
+		n.App = tokens[1]
+	}
 	r, err := chatCall(ipc.ChatArgs{Do: ipc.ChatAdd, New: n}, 90*time.Second)
 	if err != nil {
 		return err

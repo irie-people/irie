@@ -56,6 +56,10 @@ type Me struct {
 type Page struct {
 	Before string // the messages before this one; "" = the newest
 	Limit  int
+	// Thread is a thread's to read instead of the channel's: on Slack the
+	// ts of its first message; on Discord a thread is a channel, and this
+	// its ID.
+	Thread string
 }
 
 // Post is a message to post.

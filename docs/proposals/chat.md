@@ -1,6 +1,6 @@
 # Proposal: Chat, a plugin that hooks Irie into team and community chat
 
-Date: 2026-11-21. Status: step 2 of §8 built: the plugin with Discord, the drafts and the agents' rules; Slack, the Mac app's tab and live mentions follow. The owner asked for "a discord irie pluggin", then for it to be "like a generic plugin that hooks into things like discord and slack etc". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-21. Status: steps 2 and 3 of §8 built: the plugin with Discord and Slack, the drafts and the agents' rules; the Mac app's tab and live mentions follow. The owner asked for "a discord irie pluggin", then for it to be "like a generic plugin that hooks into things like discord and slack etc". There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this file and the change it describes. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 ## Goal
 
@@ -114,7 +114,7 @@ What a service sends is shown without control characters or the marks that rever
   ```
   irie chat                         the accounts, the drafts waiting, the newest mentions
   irie chat channels [ACCOUNT]      each server's channels, and what agents may do in each
-  irie chat read CHANNEL            a channel's newest messages (--before ID for older)
+  irie chat read CHANNEL            a channel's newest messages (--before ID for older, --thread ID for a thread's)
   irie chat post CHANNEL [TEXT|-]   post (--reply ID, --thread TITLE); an agent's becomes a draft
   irie chat edit|delete CHANNEL ID  change or remove a message
   irie chat drafts                  the drafts waiting for you
