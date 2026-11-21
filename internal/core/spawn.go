@@ -517,6 +517,8 @@ func (c *Core) launch(j job) (*session, error) {
 			}
 			s.MCP[name] = srv
 		}
+		// Your plugins' tools, after Irie's own (DESIGN §4.17).
+		s.MCP = c.ownToolsMCP(x, s.MCP)
 	}
 	launch := h.Launch
 	if j.resume != "" {

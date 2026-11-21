@@ -77,6 +77,11 @@ type Part struct {
 	// Helper is the helper of yours it is, from a manifest's
 	// [helpers.<id>] table (helpers.go); nil = it is none.
 	Helper *Helper
+	// Skill and Tools are the skill of yours it is, and the tools of
+	// yours, from a manifest's [skills.<id>] or [tools.<id>] table
+	// (ownskills.go, owntools.go); nil = it is neither.
+	Skill *OwnSkill
+	Tools *OwnTools
 
 	own   func(config.Config) bool       // its own switch, as the file has it
 	check func(Env, bool) (bool, string) // whether it has what it needs, and its state in a sentence, given whether it is on
@@ -192,11 +197,8 @@ func (p Plugin) status(e Env) ipc.Plugin {
 		return w
 	}
 	w.On = p.on(e.Config)
-	if p.remote && !w.On {
-		w.Summary += " It shows a page off this computer, so it is off until you turn it on."
-	}
-	if p.runs && !w.On {
-		w.Summary += " It runs a program of yours, so it is off until you turn it on."
+	if why := p.waits(); why != "" && !w.On {
+		w.Summary += " It " + why + ", so it is off until you turn it on."
 	}
 	for _, x := range p.Parts {
 		s := x.status(e, w.On)
@@ -213,6 +215,37 @@ func (p Plugin) status(e Env) ipc.Plugin {
 		w.Parts = append(w.Parts, s)
 	}
 	return w
+}
+
+// waits says what a plugin of yours does that waits for your switch, as
+// "runs a program of yours", or "" when nothing does.
+func (p Plugin) waits() string {
+	var what []string
+	if p.remote {
+		what = append(what, "shows a page off this computer")
+	}
+	if p.runs {
+		what = append(what, "runs a program of yours")
+	}
+	var gives []string
+	for _, x := range p.Parts {
+		switch {
+		case x.Tools != nil && !slices.Contains(gives, "tools"):
+			gives = append(gives, "tools")
+		case x.Skill != nil && !slices.Contains(gives, "a skill"):
+			gives = append(gives, "a skill")
+		}
+	}
+	if len(gives) > 0 {
+		what = append(what, "gives agents' sessions "+strings.Join(gives, " and ")+" of yours")
+	}
+	switch len(what) {
+	case 0:
+		return ""
+	case 1:
+		return what[0]
+	}
+	return strings.Join(what[:len(what)-1], ", ") + " and " + what[len(what)-1]
 }
 
 func (x Part) status(e Env, pluginOn bool) ipc.PluginPart {
