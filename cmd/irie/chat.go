@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -54,11 +56,12 @@ const chatHelp = `usage:
                         whether agents may read an account's messages
   ` + brand.Slug + ` chat log [ACCOUNT] [--limit N]
                         what agents posted, edited and deleted, newest first
-  ` + brand.Slug + ` chat add discord|slack [NAME] [--user ID]
+  ` + brand.Slug + ` chat add discord|slack [NAME] [--user ID] [--keychain SERVICE]
                         add a Discord bot of yours, or a Slack app of yours,
                         once its token signs in: the token comes on standard
-                        input, or is asked for without showing; it goes to
-                        the Keychain, never config.toml. Slack's says first
+                        input, or is asked for without showing, or from the
+                        Keychain item of SERVICE that you keep already; it
+                        goes to the Keychain, never config.toml. Slack's says first
                         how to make the app, and takes its app-level token
                         after the bot's (a line of its own; none to skip).
                         --user is your own user ID there, so a mention of
@@ -261,6 +264,20 @@ func chatCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 	return fmt.Errorf("unknown chat command %q\n\n%s", sub, chatHelp)
 }
 
+// keychainToken is the password of the Keychain item whose service is
+// service, through security(1), as a terminal of the person's runs it: the
+// token goes from the Keychain to the core and is never shown.
+var keychainToken = func(service string) (string, error) {
+	if runtime.GOOS != "darwin" {
+		return "", errors.New("--keychain reads the macOS Keychain, which this computer hasn't")
+	}
+	out, err := exec.Command("/usr/bin/security", "find-generic-password", "-s", service, "-w").Output()
+	if err != nil {
+		return "", fmt.Errorf("the Keychain has no item for the service %q, or didn't let it be read", service)
+	}
+	return strings.TrimRight(string(out), "\r\n"), nil
+}
+
 // draftsText is the drafts agents wrote, those waiting first.
 func draftsText(drafts []ipc.ChatDraft) string {
 	if len(drafts) == 0 {
@@ -299,12 +316,13 @@ func chatAdd(args []string, stdin io.Reader, stdout io.Writer) error {
 	kind := args[0]
 	fs := flag.NewFlagSet("chat add", flag.ContinueOnError)
 	user := fs.String("user", "", "your own user ID there")
+	keychain := fs.String("keychain", "", "take the bot's token from the Keychain item of this service")
 	words, err := flags(fs, args[1:])
 	if err != nil {
 		return err
 	}
 	if len(words) > 1 {
-		return errors.New("usage: " + brand.Slug + " chat add discord|slack [NAME] [--user ID]")
+		return errors.New("usage: " + brand.Slug + " chat add discord|slack [NAME] [--user ID] [--keychain SERVICE]")
 	}
 	n := &ipc.ChatNew{Kind: kind, User: *user}
 	if len(words) == 1 {
@@ -328,13 +346,27 @@ func chatAdd(args []string, stdin io.Reader, stdout io.Writer) error {
 	default:
 		return fmt.Errorf("%q is no kind of chat account here: discord or slack", kind)
 	}
-	tokens, err := readHiddenLines(stdin, stdout, prompts...)
-	if err != nil {
-		return err
+	if *keychain != "" {
+		// The bot's token from a Keychain item the person keeps already;
+		// Slack's app-level token, when it has one, is asked for after.
+		t, err := keychainToken(*keychain)
+		if err != nil {
+			return err
+		}
+		n.Token = t
+		prompts = prompts[1:]
 	}
-	n.Token = tokens[0]
-	if len(tokens) > 1 {
-		n.App = tokens[1]
+	if len(prompts) > 0 {
+		tokens, err := readHiddenLines(stdin, stdout, prompts...)
+		if err != nil {
+			return err
+		}
+		if n.Token == "" {
+			n.Token, tokens = tokens[0], tokens[1:]
+		}
+		if len(tokens) > 0 {
+			n.App = tokens[0]
+		}
 	}
 	r, err := chatCall(ipc.ChatArgs{Do: ipc.ChatAdd, New: n}, 90*time.Second)
 	if err != nil {
