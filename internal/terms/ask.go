@@ -1,11 +1,11 @@
 package terms
 
 import (
-	"github.com/irie-people/irie/internal/brand"
-	"math"
 	"slices"
 	"strings"
-	"unicode"
+
+	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/search"
 )
 
 // Answer is what the terms say to a question.
@@ -94,24 +94,24 @@ func (d *Doc) Ask(question string) Answer {
 		a.Found = true
 		a.Says = strings.Join(says, " ")
 		// More passages on the words asked, after the points.
-		for _, h := range d.index.search(expand(q, topics), maxQuotes) {
+		for _, h := range d.index.Search(expand(q, topics), maxQuotes) {
 			if len(a.Quotes) >= maxQuotes {
 				break
 			}
-			if !slices.ContainsFunc(a.Quotes, func(x Quote) bool { return x.clause == h.i }) && h.score >= 0.5*d.index.top(expand(q, topics)) {
-				a.Quotes = append(a.Quotes, d.quoteOf(h.i, ""))
+			if !slices.ContainsFunc(a.Quotes, func(x Quote) bool { return x.clause == h.Doc }) && h.Score >= 0.5*d.index.Top(expand(q, topics)) {
+				a.Quotes = append(a.Quotes, d.quoteOf(h.Doc, ""))
 			}
 		}
 		return a
 	}
 
-	hits := d.index.search(expand(q, topics), maxQuotes)
+	hits := d.index.Search(expand(q, topics), maxQuotes)
 	if len(hits) > 0 {
 		for _, h := range hits {
-			if h.score < 0.45*hits[0].score {
+			if h.Score < 0.45*hits[0].Score {
 				break
 			}
-			a.Quotes = append(a.Quotes, d.quoteOf(h.i, ""))
+			a.Quotes = append(a.Quotes, d.quoteOf(h.Doc, ""))
 		}
 	}
 	switch {
@@ -204,9 +204,9 @@ func (d *Doc) Passages(question string, n int) []Quote {
 			}
 		}
 	}
-	for _, h := range d.index.search(expand(q, topics), n) {
-		if !has(h.i) && len(out) < n {
-			out = append(out, d.quoteOf(h.i, d.clauses[h.i].text))
+	for _, h := range d.index.Search(expand(q, topics), n) {
+		if !has(h.Doc) && len(out) < n {
+			out = append(out, d.quoteOf(h.Doc, d.clauses[h.Doc].text))
 		}
 	}
 	return out
@@ -294,145 +294,12 @@ func expand(q string, topics []*topic) []string {
 	return append(ws, more...)
 }
 
-// stopWords are words too common to search by.
-var stopWords = map[string]bool{
-	"a": true, "an": true, "the": true, "and": true, "or": true, "of": true, "to": true, "in": true,
-	"on": true, "for": true, "by": true, "with": true, "at": true, "from": true, "as": true, "is": true,
-	"are": true, "be": true, "been": true, "was": true, "were": true, "it": true, "its": true, "this": true,
-	"that": true, "these": true, "those": true, "i": true, "me": true, "my": true, "we": true, "us": true,
-	"our": true, "you": true, "your": true, "they": true, "them": true, "their": true, "he": true,
-	"she": true, "do": true, "does": true, "did": true, "can": true, "could": true, "will": true,
-	"would": true, "shall": true, "should": true, "may": true, "might": true, "must": true, "have": true,
-	"has": true, "had": true, "what": true, "which": true, "who": true, "whom": true, "how": true,
-	"when": true, "where": true, "why": true, "if": true, "then": true, "than": true, "so": true,
-	"not": true, "no": true, "any": true, "all": true, "such": true, "there": true, "here": true,
-	"about": true, "into": true, "out": true, "up": true, "get": true, "also": true, "other": true,
-	"terms": true, "service": true, "services": true, "agreement": true, "company": true,
-}
+// commonInTerms are words too common in terms to search them by.
+var commonInTerms = map[string]bool{"terms": true, "service": true, "services": true, "agreement": true, "company": true}
 
 // tokens are a text's words for search: lower case, stemmed, without the
 // common ones.
-func tokens(s string) []string {
-	var out []string
-	for _, f := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	}) {
-		if stopWords[f] || len(f) < 3 {
-			continue
-		}
-		out = append(out, stem(f))
-	}
-	return out
-}
-
-var stemRules = []struct{ suffix, with string }{
-	{"ational", "ate"}, {"ization", "ize"}, {"isation", "ize"}, {"fulness", "ful"},
-	{"iveness", "ive"}, {"ically", "ic"}, {"ations", "ate"}, {"ation", "ate"},
-	{"ments", ""}, {"ment", ""}, {"ities", "ity"}, {"ingly", ""}, {"edly", ""},
-	{"ies", "y"}, {"ied", "y"}, {"ing", ""}, {"ers", "er"}, {"ed", ""}, {"es", ""},
-	{"ly", ""}, {"s", ""},
-}
-
-// stem cuts a word to its stem, roughly, so refunds finds refund and
-// terminated finds terminate.
-func stem(w string) string {
-	for _, r := range stemRules {
-		if strings.HasSuffix(w, r.suffix) && len(w)-len(r.suffix)+len(r.with) >= 4 {
-			w = w[:len(w)-len(r.suffix)] + r.with
-			break
-		}
-	}
-	return strings.TrimSuffix(w, "e")
-}
-
-// index is a BM25 index of a document's clauses (Robertson and Zaragoza,
-// "The Probabilistic Relevance Framework: BM25 and Beyond", 2009).
-type index struct {
-	docs []map[string]int
-	lens []int
-	avg  float64
-	df   map[string]int
-}
-
-// BM25's usual constants.
-const (
-	bm25K1 = 1.2
-	bm25B  = 0.75
-)
-
-func newIndex(cs []clause) *index {
-	x := &index{df: map[string]int{}}
-	total := 0
-	for _, c := range cs {
-		tf := map[string]int{}
-		ts := tokens(c.text)
-		for _, t := range ts {
-			tf[t]++
-		}
-		for t := range tf {
-			x.df[t]++
-		}
-		x.docs = append(x.docs, tf)
-		x.lens = append(x.lens, len(ts))
-		total += len(ts)
-	}
-	if len(cs) > 0 {
-		x.avg = float64(total) / float64(len(cs))
-	}
-	return x
-}
-
-// search is the n clauses that score best for the query's words, best
-// first, each above nothing.
-func (x *index) search(query []string, n int) []scored {
-	var out []scored
-	for i := range x.docs {
-		if s := x.score(i, query); s > 0 {
-			out = append(out, scored{i, s})
-		}
-	}
-	slices.SortStableFunc(out, func(a, b scored) int {
-		switch {
-		case a.score > b.score:
-			return -1
-		case a.score < b.score:
-			return 1
-		}
-		return a.i - b.i
-	})
-	if len(out) > n {
-		out = out[:n]
-	}
-	return out
-}
-
-// top is the best score any clause has for the query.
-func (x *index) top(query []string) float64 {
-	if hits := x.search(query, 1); len(hits) > 0 {
-		return hits[0].score
-	}
-	return 0
-}
-
-func (x *index) score(i int, query []string) float64 {
-	n := float64(len(x.docs))
-	s := 0.0
-	seen := map[string]bool{}
-	for _, t := range query {
-		if seen[t] {
-			continue
-		}
-		seen[t] = true
-		tf := float64(x.docs[i][t])
-		if tf == 0 {
-			continue
-		}
-		df := float64(x.df[t])
-		idf := math.Log(1 + (n-df+0.5)/(df+0.5))
-		s += idf * tf * (bm25K1 + 1) / (tf + bm25K1*(1-bm25B+bm25B*float64(x.lens[i])/math.Max(x.avg, 1)))
-	}
-	return s
-}
+func tokens(s string) []string { return search.Tokens(s, commonInTerms) }
 
 func plainMinutes(n int) string {
 	if n == 1 {
