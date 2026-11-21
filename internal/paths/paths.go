@@ -126,6 +126,11 @@ func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
 // each version holds every text, and names the one before it.
 func (p Paths) FoundingChain() string { return filepath.Join(p.State, "chain", "founding") }
 
+// Keys holds the keys that open Irie's vaults where the system keeps no
+// keychain (internal/keyring): apart from the vaults, so that a copy of
+// your settings carries none.
+func (p Paths) Keys() string { return filepath.Join(p.State, "keys") }
+
 // ZenState is how far along zen's path you are, and what a restarted core
 // keeps of zen (internal/core/zen.go).
 func (p Paths) ZenState() string      { return filepath.Join(p.State, "zen.json") }
