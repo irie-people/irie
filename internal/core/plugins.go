@@ -50,6 +50,9 @@ func (c *Core) pluginsOp(a ipc.PluginsArgs) (ipc.PluginsResult, error) {
 	if c.cfg().ChatOn() {
 		live.Chat = c.chatLive()
 	}
+	if c.cfg().JamminOn() {
+		live.Jammin = c.jamminLive()
+	}
 	all, bundles := plugins.Here(plugins.Env{Config: *c.cfg(), Paths: c.paths, Live: live})
 	return ipc.PluginsResult{Plugins: all, Bundles: bundles, Text: plugins.AllText(all, bundles)}, nil
 }

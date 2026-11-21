@@ -90,7 +90,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          it on your OK; mine N tells him a startup
                                          item is yours; on and off turn him on or
                                          off (arch.raphael.on)
-  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
+` + councilUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
                                          agent it sends on, and what it did
@@ -226,6 +226,8 @@ func ctl(args []string) error {
 		return ctlGabriel(args[1:])
 	case "raphael", "raffi":
 		return ctlRaphael(args[1:])
+	case "council", "ragu", "raguel":
+		return ctlCouncil(args[1:])
 	case "arch":
 		return ctlArch(args[1:])
 	case "show":
