@@ -715,6 +715,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-16 | https://github.com/yt-dlp/yt-dlp/security/advisories/GHSA-79w7-vh3h-8g4j (CVE-2024-38519) | Why Yoink runs yt-dlp in a folder of its own with `--ignore-config`, and the list of extensions it writes since 2024.07.01 (DESIGN §4.17) |
 | 2026-11-16 | https://docs.astral.sh/uv/guides/tools/ | Running a pinned tool with uvx, its extras with a version as `--from 'yt-dlp[default]==VERSION'`: Yoink's engine (internal/yoink) |
 | 2026-11-16 | https://github.com/pablostanley/yoinks (README; MIT) | Idea only, no code: a link pasted, a resolution or an mp3 picked, the file in ~/Downloads, yt-dlp with ffmpeg doing the work; Irie's Yoink plugin pins yt-dlp rather than fetch its newest (DESIGN §4.17) |
+| 2026-11-21 | https://developer.apple.com/sf-symbols/ ; https://developer.apple.com/documentation/swiftui/view/onkeypress(keys:phases:action:) | The symbols `pin` and `pin.fill` for the task bar's Send to Top, its filled pin the mark that it is armed, and a Return handler that reads the press's modifiers for ⌘Return, which sends one task to the top ([docs/MAC.md](docs/MAC.md)) |
 
 ## Third-party code
 

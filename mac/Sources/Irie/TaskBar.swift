@@ -8,7 +8,9 @@ import SwiftUI
 /// in; an @repo word in the text wins over it, and +profile still picks the
 /// agent. ⌘N opens the full new-task sheet. It empties as a task starts,
 /// so the next can be typed at once; one that reads as more for the task
-/// just sent goes to that task's agent instead (DESIGN §4.2).
+/// just sent goes to that task's agent instead (DESIGN §4.2). The pin beside
+/// the start button is Send to Top: armed, the next task goes first in
+/// Pinned, boosted (DESIGN §4.1), and ⌘Return sends one there without it.
 @MainActor
 struct TaskBar: View {
     @Environment(Store.self) private var store
@@ -38,6 +40,12 @@ struct TaskBar: View {
                 .lineLimit(3, reservesSpace: true)
                 .focused($focused)
                 .onSubmit { submit() }
+                // ⌘Return sends this one to the top, armed or not.
+                .onKeyPress(keys: [.return], phases: .down) { press in
+                    guard store.canSendToTop, press.modifiers.contains(.command) else { return .ignored }
+                    submit(top: true)
+                    return .handled
+                }
                 .onKeyPress(.upArrow) { step(-1) }
                 .onKeyPress(.downArrow) { step(1) }
                 .onChange(of: text) {
@@ -47,11 +55,15 @@ struct TaskBar: View {
                 }
                 .onChange(of: store.focusTaskBar) { focused = true }
                 .accessibilityLabel("New task")
-                .accessibilityHint("Start with @repo or +profile to pick where and who. Return starts it.")
+                .accessibilityHint("Start with @repo or +profile to pick where and who. Return starts it"
+                    + (store.canSendToTop ? ", and Command-Return sends it to the top." : "."))
             VStack(alignment: .trailing, spacing: 0) {
                 RepoMenu(typed: TaskParser.target(text))
                 Spacer(minLength: 4)
-                startButton
+                HStack(spacing: 2) {
+                    if store.canSendToTop { topButton }
+                    startButton
+                }
             }
         }
         .padding(.leading, Theme.inset)
@@ -74,14 +86,37 @@ struct TaskBar: View {
 
     private var blank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    /// While a task starts, the hint says how to add to it.
+    /// Send to Top is armed, and the core takes it.
+    private var toTop: Bool { store.canSendToTop && store.sendToTop }
+
+    /// While a task starts, the hint says how to add to it; one sent to the
+    /// top never adds, so with Send to Top armed it says where it goes.
     private var placeholder: String {
+        if toTop { return focused ? "@repo +profile, then the task for the top" : "What goes to the top?" }
         if store.spawning { return "Starting… “also …” adds to it" }
         return focused ? "@repo +profile, then the task" : "What should we work on?"
     }
 
+    /// Send to Top, beside the start button: armed, the next task sent goes
+    /// first in Pinned, over every card, and boosted, and the pin empties.
+    /// Its pin, filled, is the one mark that it is armed.
+    private var topButton: some View {
+        let on = toTop
+        return Button { store.setSendToTop(!on) } label: {
+            Image(systemName: on ? "pin.fill" : "pin")
+                .font(.system(size: 11.5, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(on ? Theme.accentInk : Theme.muted)
+        .help(on ? "Send to Top is on: the next task you send goes first in Pinned, boosted. Click to turn it off"
+                 : "Send to Top: the next task you send goes first in Pinned, boosted. ⌘Return sends one there")
+        .accessibilityLabel(on ? "Stop sending to the top" : "Send to Top")
+    }
+
     private var startButton: some View {
-            Button(action: submit) {
+            Button { submit() } label: {
                 Group {
                     // A task still starting shows until the next is typed.
                     if store.spawning && blank {
@@ -122,7 +157,8 @@ struct TaskBar: View {
         history = TaskHistory.remember(input)
     }
 
-    private func submit() {
+    /// Sends what was typed; top sends it to the top, as ⌘Return does.
+    private func submit(top: Bool = false) {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return }
         store.dismissNotice()
@@ -133,7 +169,7 @@ struct TaskBar: View {
         text = ""
         Task {
             let shown = store.selection
-            if await store.input(input) {
+            if await store.jot(input, top: top) {
                 // A task starts behind the session on show and the bar keeps
                 // the keyboard for the next one; when nothing was on show, the
                 // store gives the new agent's terminal the keyboard.
