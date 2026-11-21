@@ -66,6 +66,7 @@ type Config struct {
 	Yoink     Yoink              `toml:"yoink"`
 	Chat      Chat               `toml:"chat"`
 	Obsidian  Obsidian           `toml:"obsidian"`
+	Jammin    Jammin             `toml:"jammin"`
 	Plugins   Plugins            `toml:"plugins"`
 
 	Materialize Materialize `toml:"materialize"`
@@ -119,9 +120,16 @@ type Plugins struct {
 	Obsidian bool `toml:"obsidian"`
 	// Founding is the founding documents: the Declaration of
 	// Independence, the Constitution and the Bill of Rights as the
-	// National Archives transcribes them, in the Mac app's Founding tab and
-	// the founding-documents skill. Off until asked.
+	// National Archives transcribes them, and the Freedom of Information
+	// Act as the United States Code sets it out, in the Mac app's Founding
+	// tab and the founding-documents skill, kept on a local chain. Off
+	// until asked.
 	Founding bool `toml:"founding"`
+	// Jammin is music beside the sessions, in the Mac app's Jammin tab:
+	// Spotify through an app of the person's own, and the Music app on
+	// this Mac, one source at a time (docs/proposals/jammin.md). It does
+	// nothing until a client asks.
+	Jammin bool `toml:"jammin"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -357,6 +365,7 @@ type Arch struct {
 	Mikael  Mikael  `toml:"mikael"`
 	Gabriel Gabriel `toml:"gabriel"`
 	Raphael Raphael `toml:"raphael"`
+	Raguel  Raguel  `toml:"raguel"`
 }
 
 // Mikael is the first arch agent: a helper who stands with you against evil
@@ -403,6 +412,21 @@ type Raphael struct {
 	Every time.Duration `toml:"every"` // how often he looks over the computer by himself; 0 = only when asked
 	Known []string      `toml:"known"` // startup items you know, by label, plist or program, which he no longer flags
 }
+
+// Raguel is the arch agent who holds the council. He tallies what the
+// agents did and what it cost, by the journal, with no tokens; every Every,
+// at a quiet time, or when you ask, he holds a council: one session that
+// runs as him (+raguel) reads the tally and brings you up to Plans plans,
+// each for you to say yes or no to. A yes starts the plan as a jot.
+type Raguel struct {
+	On     bool          `toml:"on"`     // the tally, the council and his row; off, he does nothing
+	Every  time.Duration `toml:"every"`  // how often he holds a council by himself; 0 = only when asked
+	Plans  int           `toml:"plans"`  // the most plans a council brings, from 1 to MaxRaguelPlans
+	Folder string        `toml:"folder"` // where the council works and the minutes go; "" = ~/Documents/<Irie> Council
+}
+
+// MaxRaguelPlans is the most plans a council may bring.
+const MaxRaguelPlans = 10
 
 // MinRaphaelCore is the shortest arch.raphael.core: a core may be busy for
 // a moment, on a busy machine for many.
@@ -1015,6 +1039,18 @@ func Default() Config {
 				Env:            map[string]string{},
 				Arch:           "mikael",
 			},
+			// Raguel's council: a session that runs as him reads the tally
+			// and drafts the plans (DESIGN §4.11).
+			"raguel": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Arch:           "raguel",
+			},
 			// The chaos monkey: it tries to break what the task names, in a
 			// copy of its own, and reports what broke (DESIGN §4.19).
 			"chaos": {
@@ -1058,6 +1094,7 @@ func Default() Config {
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
+			Raguel:  Raguel{On: true, Plans: 5},
 		},
 		Remote:   Remote{Port: DefaultRemotePort},
 		Place:    Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
@@ -1068,9 +1105,10 @@ func Default() Config {
 		Yoink:    defaultYoink(),
 		Chat:     defaultChat(),
 		Obsidian: defaultObsidian(),
+		Jammin:   defaultJammin(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Chat: true, Obsidian: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Chat: true, Obsidian: true, Jammin: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1197,10 +1235,11 @@ func Parse(data []byte, path string) (Config, error) {
 		Yoink     *Yoink                    `toml:"yoink"`
 		Chat      *Chat                     `toml:"chat"`
 		Obsidian  *Obsidian                 `toml:"obsidian"`
+		Jammin    *Jammin                   `toml:"jammin"`
 		Plugins   *Plugins                  `toml:"plugins"`
 
 		Materialize *Materialize `toml:"materialize"`
-	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Jammin: &c.Jammin, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1764,6 +1803,16 @@ func (c Config) Validate() error {
 		bad("arch.raphael.every = %v: must be 0s, for only when asked, or at least 10m", ra.Every)
 	}
 	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items Raphael no longer flags")
+	rg := c.Arch.Raguel
+	if rg.Every < 0 {
+		bad("arch.raguel.every = %v: must not be negative; 0s for only when asked", rg.Every)
+	}
+	if rg.Plans < 1 || rg.Plans > MaxRaguelPlans {
+		bad("arch.raguel.plans = %d: must be from 1 to %d", rg.Plans, MaxRaguelPlans)
+	}
+	if f := rg.Folder; f != "" && !filepath.IsAbs(f) && f != "~" && !strings.HasPrefix(f, "~/") {
+		bad("arch.raguel.folder = %q: must be an absolute path or start with ~/; \"\" for ~/Documents/%s Council", f, brand.Name)
+	}
 	switch c.Place.Mode {
 	case PlaceLocal, PlaceAuto:
 	default:
@@ -1885,13 +1934,14 @@ func (c Config) Validate() error {
 	checkYoink(c.Yoink, bad)
 	checkChat(c.Chat, bad)
 	checkObsidian(c.Obsidian, bad)
+	checkJammin(c.Jammin, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && FoundingBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && FoundingBuilt && JamminBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1959,6 +2009,10 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !FoundingBuilt {
 		delete(plugins, "founding")
+	}
+	if !JamminBuilt {
+		delete(m, "jammin")
+		delete(plugins, "jammin")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

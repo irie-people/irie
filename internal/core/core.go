@@ -75,6 +75,7 @@ type Core struct {
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
 	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
+	ragu        raguelState  // Raguel's councils (raguel.go); it has a lock of its own, taken after mu
 	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
 	pad         notepad      // the person's notes for later (notepad.go); it has a lock of its own, never held with mu
 	vault       vaultNotes   // the notepad kept in the Obsidian vault too (obsidian.go); its lock is taken before pad's, never after
@@ -170,6 +171,7 @@ type Core struct {
 	mail       mailState             // the mail plugin's accounts and connections (mail.go)
 	yoink      yoinkState            // the yoink plugin's downloads (yoink.go)
 	chat       chatState             // the chat plugin's accounts, drafts and log (chat.go)
+	jammin     jamminState           // the jammin plugin's music (jammin.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -390,8 +392,9 @@ func Run(o Options) error {
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
+	c.loadRaguel()
 	c.loadNotepad()
-	c.loadZen()
+	c.startZen()
 
 	// The freeze dog, Irie's one watchdog, runs first: the first tick
 	// waits for tmux, and a stopped server would hold it until the dog
@@ -448,6 +451,8 @@ func Run(o Options) error {
 	go c.watchVaultNotes()
 	// Terms in short's page, for the Mac app's Terms tab (terms.go).
 	go c.serveTerms(context.Background())
+	// The founding documents' texts, on their local chain (founding.go).
+	go c.recordFoundingAtStart()
 	// The chat plugin's mentions and DMs as they come (chat.go).
 	go c.chatListen(context.Background())
 	// Raphael's look at the core's own loop (watchCore) counts from here.
@@ -466,6 +471,9 @@ func Run(o Options) error {
 			c.beat()
 			if n%raphaelEvery == 0 {
 				go c.raphaelSweep()
+			}
+			if n%raguelEvery == 0 {
+				go c.raguelSweep()
 			}
 			if n%sampleEvery == 0 {
 				go c.sample()
@@ -508,6 +516,9 @@ func Run(o Options) error {
 			// is gone; the next one keeps it awake again if there is work.
 			c.lidLetGo()
 			c.mailClose()
+			// What the sidebar's chain still has to write, as an install
+			// restarts the core (chain.go).
+			c.stopChain(chainStop)
 			return nil
 		}
 	}
@@ -824,6 +835,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpCouncil:
+		var a ipc.CouncilArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.councilOp(peer, a)
 	case ipc.OpVariorum:
 		var a ipc.VariorumArgs
 		if err := decode(raw, &a); err != nil {
@@ -854,6 +871,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.foundingOp(peer, a)
+	case ipc.OpJammin:
+		var a ipc.JamminArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.jamminOp(peer, a)
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {
@@ -897,12 +920,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 			ipc.OpLock, ipc.OpMaterialize, ipc.OpZen,
 			ipc.OpWorktrees,
 			ipc.OpObsidian,
 			ipc.OpChain,
+			ipc.OpCouncil,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -1193,6 +1217,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.foundingOp(0, a)
+	case ipc.OpJammin:
+		// A call with no process to it, such as one from within the core.
+		var a ipc.JamminArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.jamminOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {
@@ -1235,6 +1266,17 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
 		}
 		return c.raphaelOp(0, a)
+	case ipc.OpCouncil:
+		// Not from a socket either: it reports and tallies, and takes no
+		// plan and no one's word.
+		var a ipc.CouncilArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.Do != ipc.CouncilReport && a.Do != ipc.CouncilTally {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "Ragu takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
+		}
+		return c.councilOp(0, a)
 	case ipc.OpGabriel:
 		var a ipc.GabrielArgs
 		if err := decode(raw, &a); err != nil {
