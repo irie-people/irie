@@ -57,11 +57,19 @@ Each change you keep makes a version of your zen. It's built like a git commit, 
 - **Canonical bytes:** the JSON Canonicalization Scheme (RFC 8785): keys sorted, no whitespace, minimal string escapes. Only integers are allowed, within ±2^53, so every JCS implementation writes the same bytes.
 - **The name:** SHA-512 of those bytes (FIPS 180-4), written as an OCI-style digest, `sha512:` and 128 hex digits. Any tool with a JCS library and SHA-512 can check a version without Irie.
 - **The state:** SHA-512 of the canonical `zen` object alone. Two versions with the same settings share a state, which is what the graph explorer draws (§5).
-- **On disk:** `$XDG_CONFIG_HOME/irie/zen/`, holding `objects/<hex>.json` (each checked against its name when read) and `HEAD`. It sits with your themes and layouts, since it's yours.
+- **On disk:** `$XDG_CONFIG_HOME/irie/zen/`, holding `objects/<hex>.sealed` (each checked against its name when read), `HEAD` and `key`. It sits with your themes and layouts, since it's yours.
+- **The vault.** Every version is sealed at rest with AES-256-GCM (local-chain.md, "The vault, at rest"):
+  - Each record has a fresh random 96-bit nonce and is bound to its name, so a file put in another's place doesn't open.
+  - The data key in `key` is sealed the same way under a key the system keeps: the login Keychain's item "Irie vault: zen" on macOS (made by `security`, so it reads without asking), else `$XDG_STATE_HOME/irie/keys/zen.key`, readable by you alone and apart from the vault, so a copy of your settings carries no key.
+  - Nothing in the folder reads without that key. A version's name is the hash of its plain bytes, so names don't change in the vault.
+  - The vault hides what each version says, not how many there are or when their files were written.
+  - Versions kept before the vault move in when it first opens, and their plain files go.
+  - The state file (`$XDG_STATE_HOME/irie/zen.json`) keeps your zen as it is now, with how far along the path you are, so zen looks as you left it while the keychain is locked. A change then keeps nothing, rather than a version in plain, and the vault is tried again at the next change, a minute apart at most.
+  - A vault its key doesn't open, as when the keychain lost the key, is set aside whole as `zen-unreadable-<time>`, where that key could still open it, and your zen as it was starts a new one.
 - **History is never rewritten.** Going back to an earlier zen makes a new version with that zen's settings ("Back to a2f9c4…"), so you can come back from going back.
 - **The package:** `internal/chain` holds the canonical bytes, the names and the object store. Zen is its first user; the sidebar's local chain (local-chain.md) is the next.
 
-`irie ctl zen` shows your zen; `irie ctl zen log` lists the versions; `set` and `restore` change it. `--json` gives each version's hash, parent and state for other tools.
+`irie ctl zen` shows your zen; `irie ctl zen log` lists the versions; `set` and `restore` change it. `--json` gives each version's hash, parent and state for other tools. `irie ctl zen export` prints every version, oldest first, one a line: its exact canonical bytes, so `shasum -a 512` of a line, without its line break, is the version's name.
 
 ## 5. The graph explorer
 
@@ -125,7 +133,7 @@ When zen ends, each session told gets "[Irie] The user left zen; carry on as usu
 Mycylic, the owner's graph product, keeps graph versions as SHA-512-named canonical JSON linked to their parents. That's the same shape as zen's versions, so Mycylic can track them. The direction matters:
 
 - **Irie defines its format here, in public,** from public standards (RFC 8785, FIPS 180-4, OCI digests), and never copies Mycylic's code. Mycylic is the owner's own and unpublished, and Irie builds from public sources only (AGENTS.md).
-- **Mycylic reads Irie's format.** An importer (planned there) can read `zen/objects`, turn the history into a Mycylic graph, and show it in Mycylic's explorer.
+- **Mycylic reads Irie's format.** An importer (planned there) reads `irie ctl zen export`, checks each line's SHA-512 against the parent the next names, turns the history into a Mycylic graph, and shows it in Mycylic's explorer. It never reads the vault: the export is the way out, and only at your command.
 - **Anchoring stays opt-in and hash-only,** as in local-chain.md: `irie ctl zen log --json` gives the head's hash, and `mycylic anchor` (planned there) can put that hash, and nothing else, on a chain. Irie never signs a transaction.
 
 ## 10. Steps
@@ -134,7 +142,7 @@ Mycylic, the owner's graph product, keeps graph versions as SHA-512-named canoni
    - `internal/chain` and `internal/zen`, the `zen` op and `irie ctl zen`.
    - The header's `zen`, the notes to the agent, rest, night and the path.
    - In the Mac app: zen read from the core and changed through it (the app's old zen settings become the first version), the offer and rest bubbles, the soft line, calm words in Keep Watch, Settings, and View › Your Zen… with the arc diagram.
-2. **The vault:** zen's objects encrypted at rest with the sidebar's chain (local-chain.md, step 2).
+2. **Built: the vault.** Zen's versions sealed at rest (§4): `internal/chain`'s vault and `internal/keyring`, the first part of local-chain.md's step 2, and `irie ctl zen export` for Mycylic.
 3. **Mycylic:** its importer and `mycylic anchor`, in Mycylic's own repo.
 4. **Other clients:** the terminal sidebar and the phone app draw zen's quiet from the header.
 

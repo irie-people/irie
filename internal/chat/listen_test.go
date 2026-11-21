@@ -103,7 +103,15 @@ func discordGateway(t *testing.T, f *fakeDiscord) (got chan map[string]any) {
 	var url string
 	gw := wsServer(t, func(s *srvConn) {
 		n := conns.Add(1)
-		s.send(map[string]any{"op": 10, "d": map[string]any{"heartbeat_interval": 40}})
+		// The first connection beats fast, so the heartbeat carrying the
+		// last sequence comes soon. The second beats far slower than it
+		// stays open: an early first beat that goes unanswered would close
+		// it as a zombie, and resume once more, before its 4004 came.
+		interval := 40
+		if n > 1 {
+			interval = 60_000
+		}
+		s.send(map[string]any{"op": 10, "d": map[string]any{"heartbeat_interval": interval}})
 		got <- s.read()
 		mention := map[string]any{"id": "701", "channel_id": "201", "guild_id": guildID, "type": 0, "author": user("1", "alice", "Alice"),
 			"content": "Hi <@900>", "timestamp": "2026-11-21T12:00:00Z", "mentions": []any{user(botID, "acme-bot", "Acme Bot")}}

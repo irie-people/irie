@@ -31,6 +31,9 @@ const zenUsage = `  ` + brand.Slug + ` ctl zen [--json]                  your ze
   ` + brand.Slug + ` ctl zen log [-n N] [--json]       its versions, newest first
   ` + brand.Slug + ` ctl zen restore VERSION           back to an earlier zen, by the start of its
                                          hash, as a new version
+  ` + brand.Slug + ` ctl zen export                    every version, oldest first, a line each:
+                                         its exact bytes, whose SHA-512 is its name,
+                                         for another tool to check and keep
 `
 
 // ctlZen is `irie ctl zen`.
@@ -43,7 +46,7 @@ func ctlZen(args []string) error {
 	asJSON := fs.Bool("json", false, "print the answer as JSON")
 	why := fs.String("why", "", "what the change is for, in plain words")
 	n := fs.Int("n", 20, "how many versions")
-	usage := errors.New("usage: " + brand.Slug + " ctl zen [--json], set KEY=VALUE... [--why WORDS], log [-n N] [--json], or restore VERSION")
+	usage := errors.New("usage: " + brand.Slug + " ctl zen [--json], set KEY=VALUE... [--why WORDS], log [-n N] [--json], restore VERSION, or export")
 	var rest []string
 	for len(args) > 0 {
 		if err := fs.Parse(args); err != nil {
@@ -75,6 +78,11 @@ func ctlZen(args []string) error {
 			return usage
 		}
 		a.Restore = rest[0]
+	case "export":
+		if len(rest) > 0 {
+			return usage
+		}
+		a.Export = true
 	default:
 		return usage
 	}
@@ -87,12 +95,21 @@ func ctlZen(args []string) error {
 		return err
 	}
 	if *asJSON {
-		if sub == "log" {
+		switch sub {
+		case "log":
 			return json.NewEncoder(os.Stdout).Encode(r.Versions)
+		case "export":
+			return json.NewEncoder(os.Stdout).Encode(r.Docs)
 		}
 		return json.NewEncoder(os.Stdout).Encode(r)
 	}
 	switch sub {
+	case "export":
+		// Canonical JSON holds no line break, so each line is one
+		// version's bytes, whole.
+		for _, d := range r.Docs {
+			fmt.Println(d)
+		}
 	case "log":
 		printZenLog(os.Stdout, r.Versions)
 	case "set", "restore":

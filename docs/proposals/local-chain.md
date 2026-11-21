@@ -47,6 +47,7 @@ The choices follow the strictest public suite, the NSA's CNSA 2.0, as of Novembe
 ## How it would work
 
 - **Where.** In `$XDG_STATE_HOME/irie/chain/`: `objects/` holds one encrypted record per version, named by its hash, next to `HEAD` and the wrapped key. `state.json` stays the core's fast snapshot (§5.4), and the chain is its history. Session contexts already live in git (§4.13). The chain sits beside them and holds the organisation only, never a conversation.
+- **Chains already kept.** Two chains already run on `internal/chain`, each in a folder of its own: your zen's versions (zen.md §4), and since 2026-11-21 the founding documents' texts ([founding-documents.md](founding-documents.md)), in `$XDG_STATE_HOME/irie/chain/founding`.
 - **When.** Each action that changes the organisation appends a version once it has applied: move, pin, park, group, space and rename, the actions §4.5 can undo. Undo and redo append versions too, so history is never rewritten.
 - **The canonical form.** JSON with sorted keys, no whitespace and integers only, so the same organisation always gives the same hash.
 - **Ops:**
@@ -60,7 +61,7 @@ The choices follow the strictest public suite, the NSA's CNSA 2.0, as of Novembe
 ## Steps
 
 1. **The chain on disk.** SHA-512 ids, `ctl chain log`, `show` and `restore`. Tests: one version per action, restore, and a tampered record caught.
-2. **The vault.** AES-256-GCM, with the key in the Keychain or the Secret Service, and an existing chain moved in. A test that nothing on disk reads without the key.
+2. **The vault.** AES-256-GCM, with the key in the Keychain or the Secret Service, and an existing chain moved in. A test that nothing on disk reads without the key. Built first for zen's versions (zen.md §4): `internal/chain`'s vault and `internal/keyring`, with the key in the Keychain on macOS and a file of the user's alone elsewhere. The Secret Service and a passphrase through Argon2id are still to come.
 3. **Peers.** Sealed versions (X25519 + ML-KEM-1024), ML-DSA-87 signatures, and heads compared and merged.
 4. **The anchoring hand-off,** off by default.
 
