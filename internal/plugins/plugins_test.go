@@ -135,7 +135,9 @@ func TestPrivacyOffTurnsEveryPartOff(t *testing.T) {
 		if c.Name == "dead-mans-switch" && (c.On || !strings.Contains(c.Why, "privacy plugin is off")) {
 			t.Errorf("the guide's skill = %+v", c)
 		}
-		if c.Name != "dead-mans-switch" && !c.On {
+		// Another plugin that is off, such as the founding documents by
+		// default, leaves out its own skills; privacy leaves out its own.
+		if c.Name != "dead-mans-switch" && !c.On && strings.Contains(c.Why, "privacy") {
 			t.Errorf("%s left out: %s", c.Name, c.Why)
 		}
 	}

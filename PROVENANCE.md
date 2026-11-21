@@ -735,6 +735,12 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-21 | https://pkg.go.dev/crypto/mldsa | ML-DSA in Go 1.27's standard library, for the local chain proposal |
 | 2026-11-21 | https://pkg.go.dev/filippo.io/mldsa | ML-DSA for Go before 1.27, same API, for the local chain proposal |
 | 2026-11-21 | https://quantumcomputingreport.com/openssh-10-0-introduces-default-post-quantum-key-exchange-algorithm/ | OpenSSH's post-quantum key exchange defaults, for the local chain proposal |
+| 2026-11-21 | National Archives, Declaration of Independence: A Transcription, https://www.archives.gov/founding-docs/declaration-transcript | The founding documents plugin: the Declaration's text, word for word (public domain) |
+| 2026-11-21 | National Archives, The Constitution of the United States: A Transcription, https://www.archives.gov/founding-docs/constitution-transcript | The founding documents plugin: the Constitution's text and its signers, word for word (public domain) |
+| 2026-11-21 | National Archives, The Bill of Rights: A Transcription, https://www.archives.gov/founding-docs/bill-of-rights-transcript | The founding documents plugin: the Bill of Rights, its preamble, the two articles not ratified in 1791 and the attestation, word for word (public domain) |
+| 2026-11-21 | National Archives, The Constitution: Amendments 11-27, https://www.archives.gov/founding-docs/amendments-11-27 | The founding documents plugin: Amendments XI-XXVII, with their dates and notes (public domain) |
+| 2026-11-21 | The Avalon Project, Yale Law School, The Declaration of Independence, https://avalon.law.yale.edu/18th_century/declare.asp | The founding documents plugin: a check of the Declaration's words against a second transcription |
+| 2026-11-21 | Copies of the Constitution and the Bill of Rights: the National Archives' handout (https://www.archives.gov/legislative), ConstitutionFacts.com (https://www.constitutionfacts.com), the National Constitution Center (https://constitutioncenter.org), a Library of Congress scan (http://lcweb2.loc.gov/ammem/amlaw/ac001/intro4.html), and a literal print and a government print of the Constitution | The founding documents plugin: checking the texts' words, commas and capitals (verification.md) |
 
 ## Third-party code
 
@@ -798,9 +804,12 @@ The website in `site/` has no third-party code: no scripts, fonts or stylesheets
 
 ## Third-party text
 
-One file holds text written elsewhere. It keeps its own license and says so at its end.
+Four files hold text written elsewhere. The Code of Conduct keeps its own license and says so at its end. The founding documents' texts are the National Archives' transcriptions, in the public domain.
 
 | File | Source | Version | License |
 |---|---|---|---|
 | `CODE_OF_CONDUCT.md` | Contributor Covenant, stewarded by the Organization for Ethical Source, https://www.contributor-covenant.org/version/3/0/ | 3.0, adapted | CC BY-SA 4.0 |
+| `internal/skills/bundled/founding-documents/declaration.md` | National Archives, https://www.archives.gov/founding-docs/declaration-transcript | As read on 2026-11-21 | Public domain |
+| `internal/skills/bundled/founding-documents/constitution.md` | National Archives, https://www.archives.gov/founding-docs/constitution-transcript, https://www.archives.gov/founding-docs/bill-of-rights-transcript and https://www.archives.gov/founding-docs/amendments-11-27 | As read on 2026-11-21 | Public domain |
+| `internal/skills/bundled/founding-documents/bill-of-rights.md` | National Archives, https://www.archives.gov/founding-docs/bill-of-rights-transcript | As read on 2026-11-21 | Public domain |
 

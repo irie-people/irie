@@ -1,4 +1,4 @@
-//go:build !noprivacy && !nowriting
+//go:build !noprivacy && !nowriting && !nofounding
 
 package skills
 

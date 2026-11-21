@@ -164,6 +164,8 @@ struct PluginPaneContent: View {
         // kind, as the Writing plugin's Variorum tab will.
         case "yoink":
             YoinkTab()
+        case "founding":
+            FoundingTab()
         default:
             SideNote(title: pane.title, text: "This app can't draw a \(pane.kind) pane yet: it comes with a newer build of \(Brand.name).")
         }

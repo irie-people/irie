@@ -106,6 +106,11 @@ type Plugins struct {
 	// run by the core into yoink.folder. Off until asked, so a new Irie
 	// downloads from no site of its own accord.
 	Yoink bool `toml:"yoink"`
+	// Founding is the founding documents: the Declaration of
+	// Independence, the Constitution and the Bill of Rights as the
+	// National Archives transcribes them, in the Mac app's Founding tab and
+	// the founding-documents skill. Off until asked.
+	Founding bool `toml:"founding"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -157,6 +162,10 @@ func (c Config) TermsOn() bool { return TermsBuilt && c.Plugins.Terms }
 // YoinkOn says whether the yoink plugin runs: plugins.yoink, with the
 // plugin built in.
 func (c Config) YoinkOn() bool { return YoinkBuilt && c.Plugins.Yoink }
+
+// FoundingOn says whether the founding plugin runs: plugins.founding, with
+// the plugin built in.
+func (c Config) FoundingOn() bool { return FoundingBuilt && c.Plugins.Founding }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -1857,7 +1866,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && FoundingBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1914,6 +1923,9 @@ func (c Config) Write(w io.Writer) error {
 	if !YoinkBuilt {
 		delete(m, "yoink")
 		delete(plugins, "yoink")
+	}
+	if !FoundingBuilt {
+		delete(plugins, "founding")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

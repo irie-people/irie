@@ -372,6 +372,8 @@ final class Store {
     let mail: MailModel
     /// The Yoink plugin's downloads, which its tab draws (Yoink.swift).
     let yoink: YoinkModel
+    /// The founding documents, which the Founding tab draws (Founding.swift).
+    let founding: FoundingModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
     /// Zen: the session on show alone, full screen (Zen.swift).
@@ -383,6 +385,7 @@ final class Store {
         settings = SettingsModel(client: client)
         mail = MailModel(client: client)
         yoink = YoinkModel(client: client)
+        founding = FoundingModel(client: client)
         notes.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
@@ -842,6 +845,7 @@ final class Store {
         knowsFeatures = true
         canMail = true
         mail.loadFixture()
+        founding.loadFixture()
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
