@@ -627,9 +627,12 @@ struct Notepad: Codable, Equatable {
     var readOnly: Bool?
     var path: String?
     var rev: UInt64?
+    /// The note the notepad is kept as in the Obsidian vault too, while it
+    /// is (Vault.swift).
+    var vault: NotepadVault?
 
     enum CodingKeys: String, CodingKey {
-        case notes, deleted, problem, path, rev
+        case notes, deleted, problem, path, rev, vault
         case readOnly = "read_only"
     }
 
@@ -643,6 +646,7 @@ struct Notepad: Codable, Equatable {
         readOnly = try c.decodeIfPresent(Bool.self, forKey: .readOnly)
         path = try c.decodeIfPresent(String.self, forKey: .path)
         rev = try c.decodeIfPresent(UInt64.self, forKey: .rev)
+        vault = try? c.decodeIfPresent(NotepadVault.self, forKey: .vault)
     }
 }
 
