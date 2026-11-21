@@ -200,6 +200,63 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // The Chat tab (ChatViews.swift): the drafts waiting and each
+            // account's channels in both modes, a channel open with the note
+            // of text Discord hides, and the tab before any account.
+            let chatPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.chatPlugin.utf8))
+            for (base, reading, empty, dark) in [("side-chat", false, false, false), ("side-chat-dark", false, false, true),
+                                                 ("side-chat-reading", true, false, false), ("side-chat-empty", false, true, false)] {
+                store.plugins = withPanes.plugins + [chatPlugin]
+                store.chat.loadFixture(reading: reading, empty: empty)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "chat.tab")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // The Founding tab (Founding.swift): a search's passage in the
+            // Constitution, found whatever its spelling, in both modes.
+            let foundingPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.foundingPlugin.utf8))
+            for (base, dark) in [("side-founding", false), ("side-founding-dark", true)] {
+                store.plugins = withPanes.plugins + [foundingPlugin]
+                store.founding.loadFixture()
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "founding.founding")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // Jammin's tab (JamminViews.swift): Spotify playing and Apple
+            // Music paused, then Spotify waiting to be linked, each in both
+            // modes; then the sheet that links Spotify, with a plain page
+            // for Spotify's. Every name is made up, the artwork a gradient.
+            let jamminPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.jamminPlugin.utf8))
+            for (base, scene, dark) in [("side-jammin", "spotify", false), ("side-jammin-dark", "spotify", true),
+                                        ("side-jammin-music", "music", false), ("side-jammin-music-dark", "music", true),
+                                        ("side-jammin-link", "spotify-link", false), ("side-jammin-link-dark", "spotify-link", true)] {
+                var plugin = jamminPlugin
+                if scene == "spotify-link" {
+                    plugin.parts[0].state = "needs"
+                    plugin.parts[0].detail = "No Spotify app yet: make one at Spotify's dashboard, then Link Spotify in the Jammin tab takes its Client ID."
+                }
+                store.plugins = withPanes.plugins + [plugin]
+                store.jammin.loadFixture(scene)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "jammin.tab")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 1000)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            for (base, step, dark) in [("jammin-link-app", 1, false), ("jammin-link-app-dark", 1, true), ("jammin-link-signin", 2, false)] {
+                let sheet = JamminSignInSheet(fixture: true, step: step, clientID: step == 1 ? "0123456789abcdef0123456789abcdef" : "")
+                let (rep, _) = window(sheet.environment(store), dark: dark, width: 840, height: 700)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -287,6 +344,44 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // A Markdown file made pretty (CodePane.swift): its editor and its
+            // pretty view side by side, in both modes.
+            for (base, dark) in [("panes-code-pretty", false), ("panes-code-pretty-dark", true)] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .code)
+                _ = CodeDocs.shared.fixture(Fixture.codeOther, text: Fixture.readme, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                store.rolodex.show(file: Fixture.codeOther, on: "fixturecode", in: Fixture.selected)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "codeTree": false,
+                                                         "codePretty": Fixture.codeOther],
+                                                        forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // A Vault card (VaultPane.swift): the notepad's note as the vault
+            // keeps it, with the vault's notes beside it, in both modes, the
+            // Notes panel marking it kept there; and the card with no vault.
+            CodeFiles.shared.fixture(Fixture.vaultFolder, files: Fixture.vaultFiles)
+            let kept = NotepadVault(path: Fixture.vaultNote, synced: Date(), problem: nil)
+            for (base, dark, ready) in [("panes-vault", false, true), ("panes-vault-dark", true, true), ("panes-vault-welcome", false, false)] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .vault)
+                store.notes.loadFixture(Fixture.notes, vault: ready ? kept : nil)
+                store.vault.loadFixture(ready ? ObsidianResult(state: "ready", text: "", vault: Fixture.vaultFolder, name: "Notes", opened: true, notes: kept)
+                    : ObsidianResult(state: "needs", text: "No vault yet."))
+                _ = CodeDocs.shared.fixture(Fixture.vaultNote, text: Fixture.vaultText, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "vaultTree": true],
+                                                        forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.notes.loadFixture(Fixture.notes)
+            store.vault.loadFixture(nil)
             // A file's link clicked in the terminal: the code card comes to
             // the front with the file open at its line, and the keyboard.
             do {
@@ -411,10 +506,70 @@ enum Snapshot {
             try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
             print("\(name): \(layout.title)")
         }
+        // What zen offers, one thing at a time (ZenCalm.swift): a step of
+        // its path, a change to try, and a rest with its breath, still.
+        let rest = ZenOffer(id: "rest", kind: "rest", text: "You’ve been at it a while. Rest your eyes and follow the dot: breathe in as it rises, out as it falls.",
+                            yes: "Back to It", no: "In 10 Minutes")
+        let offers: [(String, Bool, ZenOffer)] = [
+            ("zen-offer", false, ZenOffer(id: "eyes", kind: "learn", text: "While your agent works, rest your eyes: look at something about six metres away for twenty seconds.", yes: "Got It")),
+            ("zen-try-dark", true, ZenOffer(id: "breaks", kind: "try", text: "Would you like a gentle reminder to rest every 50 minutes?", yes: "Try It", no: "Not Now")),
+            ("zen-help", false, ZenOffer(id: "help", kind: "learn", text: "You matter more than the work. If things feel heavy, findahelpline.com lists free, confidential helplines near you.",
+                                         yes: "Got It", link: "https://findahelpline.com/")),
+            ("zen-rest", false, rest), ("zen-rest-dark", true, rest),
+        ]
+        store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+        for (base, dark, offer) in offers {
+            store.zen.showFixture(.centred)
+            store.zen.offer = offer
+            Theme.use(Palette.standard.id)
+            let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1512, height: 945, zen: true)
+            let name = base + ".png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print("\(name): zen offers \(offer.id)")
+        }
+        store.zen.offer = nil
+        // Your Zen, the graph explorer (ZenHistory.swift): a history that
+        // goes on, comes back once, and goes on again.
+        store.zen.fixtureVersions = zenVersionsFixture()
+        defer { store.zen.fixtureVersions = [] }
+        for dark in [false, true] {
+            let (rep, _) = window(ZenHistory(seed: store.zen.fixtureVersions).environment(store), dark: dark, width: 660, height: 560)
+            let name = dark ? "zen-history-dark.png" : "zen-history.png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print("\(name): your zen's versions")
+        }
         // Off, and the first layout again for Settings' pictures.
         store.zen.showFixture(nil)
         store.zen.layout = .centred
         store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+    }
+
+    /// Five versions of a zen, newest first, as the core lists them: the
+    /// app's own settings first, a rest every 50 minutes, Edge to Edge for
+    /// a day, back to the rests, then text a point larger.
+    private static func zenVersionsFixture() -> [ZenVersion] {
+        let start = Date().addingTimeInterval(-80 * 3600)
+        let day = DateFormatter()
+        day.dateFormat = "d MMM HH:mm"
+        func zen(_ layout: String, breaks: Int, text: Int) -> ZenProfile {
+            ZenProfile(layout: layout, columns: 100, textSize: text, fullScreen: true, gentle: true, breaks: breaks, night: true)
+        }
+        let steps: [(String, ZenProfile, TimeInterval)] = [
+            ("Your zen as it was", zen("centred", breaks: 0, text: 0), 0),
+            ("A rest every 50 minutes", zen("centred", breaks: 50, text: 0), 3 * 3600),
+            ("Edge to Edge", zen("edge", breaks: 50, text: 0), 5 * 3600),
+            ("Back to your zen of " + day.string(from: start.addingTimeInterval(3 * 3600)), zen("centred", breaks: 50, text: 0), 29 * 3600),
+            ("Text a point larger", zen("centred", breaks: 50, text: 14), 77 * 3600),
+        ]
+        var out: [ZenVersion] = []
+        var parent: String?
+        for (i, (why, p, at)) in steps.enumerated() {
+            let state = "sha512:" + String(repeating: String(p.layout.count + p.breaks + p.textSize, radix: 16), count: 64).prefix(128)
+            let name = "sha512:" + String(repeating: String(format: "%02x", i + 10), count: 64)
+            out.append(ZenVersion(name: name, parent: parent, created: start.addingTimeInterval(at), why: why, state: state, zen: p))
+            parent = name
+        }
+        return out.reversed()
     }
 
     /// The layout reversed (Store.reversed): the sidebar on the right, the
@@ -594,6 +749,23 @@ enum Fixture {
     }
 
     static let selected = "s02docsguide"
+
+    /// The selected session's card of where it stands, being made again
+    /// while the session works (docs/proposals/materialized-cards.md).
+    static var standsCard: MaterializeResult {
+        let made = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-180))
+        let json = """
+        {"id": "session/\(selected)/status", "state": "refreshing", "by": "bonsai-2:9b", "made": "\(made)",
+         "spec": {"title": "Writing the docs guide", "body": [
+           {"type": "Text", "text": "It checks the guide against DESIGN.md before it runs the tests again."},
+           {"type": "List", "items": [
+             {"title": "Wrote the guide's outline", "detail": "docs/guide.md", "status": "ok"},
+             {"title": "Linked each part to DESIGN", "status": "ok"},
+             {"title": "One test fails", "detail": "TestGuideLinks", "status": "warn"}]},
+           {"type": "Progress", "label": "Sections written", "value": 4, "total": 6}]}}
+        """
+        return try! Wire.decoder.decode(MaterializeResult.self, from: Data(json.utf8))
+    }
     /// The code card's file, in the selected session's folder, and another
     /// it has open.
     static var codeFolder: String { "/home/alice/code/\(Brand.slug)-docs-guide" }
@@ -603,6 +775,38 @@ enum Fixture {
     static let codeFiles = ["README.md", "go.mod", "main.go", "internal/session/store.go", "internal/session/store_test.go",
                             "internal/session/cookie.go", "internal/login/login.go", "internal/login/login_test.go",
                             "web/index.html", "web/app.js", "web/style.css", "docs/setup.md"]
+    /// The fixture folder's README.md, made pretty in the code card's
+    /// snapshots.
+    static let readme = """
+    # docs-guide
+
+    Keeps a team's docs next to the code they describe, and says which ones fell behind.
+
+    ## What it does
+
+    - Finds the docs that name a function you changed
+    - Opens each one beside the code, at the line
+      - in the session's own code card
+    - Marks the ones left behind, so **nothing goes stale**
+
+    ## Try it
+
+    ```sh
+    go run . check ./...
+    ```
+
+    | Command | What it does |
+    |---|---|
+    | `check` | Lists the docs out of step with the code |
+    | `open` | Shows a doc beside the code it names |
+
+    > A doc that drifts is worse than none.
+
+    ---
+
+    Written for the fixture, about a made-up tool.
+    """
+
     static let code = """
     package session
 
@@ -651,6 +855,29 @@ enum Fixture {
 
     /// The notepad's notes (NotesPanel.swift): two to do, one ticked off by
     /// hand, and one sent as a jot to the selected session.
+    /// A vault (VaultPane.swift): its folder, its notes, the notepad's note
+    /// in it as the core writes it, and the notes that link to that.
+    static var vaultFolder: String { "/home/alice/Notes" }
+    static var vaultNote: String { vaultFolder + "/\(Brand.name) Notes.md" }
+    static var vaultFiles: [String] {
+        ["\(Brand.name) Notes.md", "Inbox.md", "Reading list.md", "Projects/Launch.md", "Projects/Roadmap.md", "Daily/2026-11-20.md", "Daily/2026-11-21.md"]
+    }
+    static var vaultText: String {
+        """
+        %% \(Brand.name) keeps your notepad here, a task a note: tick, add or change one, and \(Brand.name)'s notepad follows within seconds, and back. %%
+
+        - [ ] Try the new parser on the big repo ^i3k2d9a
+        - [x] Ask for a review of the login fix ^ia7c2mx
+        - [ ] Write the release notes for 1.2, with the screenshots from the [[Projects/Launch|launch]] docs ^iq7z2bt
+        - [x] Rename the settings tab ^ip2m4kd
+
+        ## Later
+        Ideas that aren't tasks yet stay here, as written. #someday ==after 1.2==
+
+        """
+    }
+    static let vaultLinked = ["Daily/2026-11-21.md", "Projects/Launch.md"]
+
     static let notes: [Note] = {
         let now = Date()
         return [
@@ -727,6 +954,47 @@ enum Fixture {
        "detail": "Ready: yt-dlp 2026.10.26 through uvx, with ffmpeg; downloads land in ~/Downloads.",
        "summary": "Paste a link in the Yoink tab, or give it to :yoink in any task bar, and pick a size or the sound alone.",
        "pane": {"id": "yoink.yoink", "title": "Yoink", "icon": "arrow.down.circle", "kind": "yoink"}}
+     ]}
+    """#
+
+    /// The chat plugin, on, with its tab on its Discord part.
+    static let chatPlugin = #"""
+    {"name": "chat", "title": "Chat", "on": true,
+     "summary": "Your Discord servers and Slack workspaces beside your sessions, through bots of your own.",
+     "parts": [
+      {"name": "discord", "title": "Discord", "on": true, "state": "ready",
+       "detail": "Ready: 1 account (acme). :chat, or Chat in the right sidebar, reads them.",
+       "summary": "Your Discord servers, through a bot of yours.",
+       "pane": {"id": "chat.tab", "title": "Chat", "icon": "bubble.left.and.bubble.right", "kind": "chat"}},
+      {"name": "slack", "title": "Slack", "on": true, "state": "ready", "detail": "Ready: 1 account (team).", "summary": "Your Slack workspace, through an app of yours."},
+      {"name": "agents", "title": "Chat for agents", "on": true, "state": "ready", "switch": "chat.agents", "detail": "Ready: agents write drafts that wait for you to send.", "summary": "Agents write drafts that wait for you to send."}
+     ]}
+    """#
+
+    /// The founding plugin, on and ready, with its tab.
+    static let foundingPlugin = #"""
+    {"name": "founding", "title": "Founding documents", "on": true,
+     "summary": "The Declaration of Independence, the Constitution and the Bill of Rights, word for word as the National Archives transcribes them.",
+     "parts": [
+      {"name": "founding", "title": "The founding documents", "on": true, "state": "ready",
+       "detail": "Ready: 3 documents in the Founding tab, and the founding-documents skill in every session.",
+       "summary": "Read the three in the Founding tab and search them whatever the spelling.",
+       "pane": {"id": "founding.founding", "title": "Founding", "icon": "building.columns", "kind": "founding"}}
+     ]}
+    """#
+
+    /// The Jammin plugin, on, its Spotify part ready, with its tab.
+    static let jamminPlugin = #"""
+    {"name": "jammin", "title": "Jammin", "on": true,
+     "summary": "Your music beside your sessions: what plays on Spotify or in the Music app, its controls, your playlists and a search.",
+     "parts": [
+      {"name": "spotify", "title": "Spotify", "on": true, "state": "ready",
+       "detail": "Ready: signed in to Spotify as alice, through your Spotify app.",
+       "summary": "Spotify, through a Spotify app of yours.",
+       "pane": {"id": "jammin.tab", "title": "Jammin", "icon": "radio", "kind": "jammin"}},
+      {"name": "music", "title": "Apple Music", "on": true, "state": "ready",
+       "detail": "Ready: the Music app on this Mac.",
+       "summary": "The Music app on this Mac."}
      ]}
     """#
 

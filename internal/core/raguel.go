@@ -428,7 +428,7 @@ func (c *Core) convene(now time.Time) (ipc.Session, error) {
 // one it does, in words.
 func (c *Core) fromCouncil(peer int, what string) (council.Council, error) {
 	l, ok := c.latestCouncil(true)
-	sess, _ := c.peerAgent(peer)
+	sess, _ := c.agentOf(peer)
 	if !ok || sess == "" || sess != l.Session {
 		return council.Council{}, ipc.Errorf(ipc.CodeBadArgs, "Only the council's own session %s: Ragu holds the council, in a session Irie starts for it.", what)
 	}
@@ -567,7 +567,7 @@ func (c *Core) minutesFiles(l council.Council) []string {
 // council's plans: the user, outside any agent, or the council's own
 // session within arch.gabriel.word of a message the user typed there.
 func (c *Core) councilWord(peer int, l council.Council) error {
-	sess, inAgent := c.peerAgent(peer)
+	sess, inAgent := c.agentOf(peer)
 	if !inAgent {
 		return nil
 	}

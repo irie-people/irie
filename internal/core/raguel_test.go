@@ -34,6 +34,7 @@ func councilCore(t *testing.T) (*Core, string) {
 
 // inAgent has the test's own process run in the agent of pane, as a call
 // from that agent's tree does; "" for none, as from the user's terminal.
+// The pane names its session, as Irie's panes do.
 func inAgent(c *Core, pane string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -41,7 +42,13 @@ func inAgent(c *Core, pane string) {
 		c.snap = tmux.Snapshot{}
 		return
 	}
-	c.snap = tmux.Snapshot{Panes: []tmux.Pane{{ID: pane, Role: tmux.RoleAgent, PID: os.Getppid()}}}
+	var id string
+	for _, x := range c.sessions {
+		if x.pane == pane {
+			id = x.id
+		}
+	}
+	c.snap = tmux.Snapshot{Panes: []tmux.Pane{{ID: pane, Role: tmux.RoleAgent, PID: os.Getppid(), IrieSession: id}}}
 }
 
 func testPlan(where, title string) *council.Plan {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +18,35 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :yoink [audio|720p] LINK, :open FILE[:LINE]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :jammin [play|pause|next|previous], :open FILE[:LINE]"
+
+// commandName finds each command's name in Commands.
+var commandName = regexp.MustCompile(`(?:^|, ):([a-z]+)`)
+
+// IsCommand says whether name, without its colon, is one of Irie's own
+// commands, which no word of a plugin's may take.
+func IsCommand(name string) bool {
+	for _, m := range commandName.FindAllStringSubmatch(Commands, -1) {
+		if m[1] == name {
+			return true
+		}
+	}
+	return false
+}
+
+// A Word is a word of a plugin of yours (DESIGN §4.17): :NAME TASK starts a
+// session for the plugin's app, on its skill and in its folder when it has
+// them, and :NAME alone one with no task, when it has a skill.
+type Word struct {
+	Name   string // the word, without its colon
+	Plugin string // the plugin it comes with
+	Title  string // the name of a session it starts with no task
+	Skill  string // the skill its sessions start on; "" = none
+	Dir    string // the folder its sessions run in, in place; "" = where the task says
+	// Off says why typing it does nothing now, in a sentence, such as its
+	// plugin being off; "" = it starts a session.
+	Off string
+}
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, the folder that ~ means and the profiles.
@@ -36,6 +65,8 @@ type View struct {
 	// client that does not know them must, and leaves the core to say
 	// which it has.
 	Profiles []string
+	// Words are the words of your plugins, :NAME [TASK] (DESIGN §4.17).
+	Words []Word
 }
 
 // A Step is what an input comes to: one op to run with its args, or, for a
@@ -84,7 +115,7 @@ func Read(in InputArgs, v View) (Step, error) {
 	if a.Tutor == "" {
 		a.Tutor = in.Tutor
 	}
-	a.Model, a.Unattended, a.From = in.Model, in.Unattended, in.From
+	a.Model, a.Unattended, a.From, a.Top = in.Model, in.Unattended, in.From, in.Top
 	// A typed task is a jot: one that reads as more for the jot sent just
 	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
 	// one that went there on its own after all. An unattended task, such
@@ -185,6 +216,10 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		// :mail says how the mail accounts stand; the Mac app also opens
 		// its Mail (docs/proposals/mail.md).
 		return step(OpMail, MailArgs{}, nil)
+	case name == "chat" && arg == "":
+		// :chat says how the chat accounts stand and which drafts wait;
+		// the Mac app also opens its Chat tab (docs/proposals/chat.md).
+		return step(OpChat, ChatArgs{}, nil)
 	case name == "yoink":
 		// :yoink [audio|720p] LINK downloads a video, or its sound, from a
 		// link (DESIGN §4.17); :yoink alone says how the downloads stand,
@@ -194,6 +229,16 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, err
 		}
 		return step(OpYoink, a, nil)
+	case name == "jammin":
+		// :jammin says what plays on each source of the jam box; the Mac
+		// app opens its Jammin tab. :jammin play, pause, next or previous
+		// acts on the source playing, else the one on show, or on the
+		// source named first (docs/proposals/jammin.md).
+		a, err := jamminArgs(arg)
+		if err != nil {
+			return Step{}, err
+		}
+		return step(OpJammin, a, nil)
 	case name == "write":
 		// :write [TASK] starts a writing session in Variorum
 		// (docs/proposals/writers.md). The task may run on over more
@@ -354,7 +399,64 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		}
 		return Step{Op: OpMove, Args: MoveArgs{VendorID: o.VendorID}, Outside: o}, nil
 	}
-	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, Commands)
+	for _, w := range v.Words {
+		if w.Name == name {
+			return wordStep(w, arg, in, v)
+		}
+	}
+	all := Commands
+	for _, w := range v.Words {
+		if w.Off == "" {
+			all += ", :" + w.Name + " [TASK]"
+		}
+	}
+	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, all)
+}
+
+// wordStep reads :NAME [TASK] for a word of a plugin of yours (DESIGN
+// §4.17): a session on the word's skill, if it has one, for the task, which
+// may run on over more lines and takes +agent words as any task does, in
+// the word's folder in place when it has one, where it takes no @repo. The
+// task bar's own folder never applies: the word's session is for its
+// plugin's app. With no task, a word with a skill starts the skill alone,
+// named as the word is.
+func wordStep(w Word, arg string, in InputArgs, v View) (Step, error) {
+	if w.Off != "" {
+		return Step{}, Errorf(CodeBadArgs, "%s", w.Off)
+	}
+	task := arg
+	if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+		task = strings.TrimSpace(task + "\n" + more)
+	}
+	var a SpawnArgs
+	if task == "" {
+		if w.Skill == "" {
+			return Step{}, Errorf(CodeBadArgs, ":%s takes a task: say what its session should do, as :%s and then the task.", w.Name, w.Name)
+		}
+		a = SpawnArgs{Task: "/" + brand.Slug + ":" + w.Skill, Name: w.Title}
+	} else {
+		var err error
+		if a, err = v.parseTask(task); err != nil {
+			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
+		}
+		a.Task = Unpaste(a.Task, in.Pastes)
+	}
+	if w.Dir != "" {
+		if a.Repo != "" || a.Cwd != "" {
+			return Step{}, Errorf(CodeBadArgs, ":%s runs its task in %s, so it takes no @repo.", w.Name, w.Dir)
+		}
+		a.Repo, a.InPlace = w.Dir, true
+	}
+	a.Skill = w.Skill
+	if a.Profile == "" {
+		a.Profile = in.Profile
+	}
+	if a.Tutor == "" {
+		a.Tutor = in.Tutor
+	}
+	a.Model = in.Model
+	a.Space, a.After = in.Space, in.Session
+	return Step{Op: OpSpawn, Args: a}, nil
 }
 
 // vpnArgs reads the words after :vpn (DESIGN §4.18): nothing for the
@@ -535,6 +637,15 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Did, r.Text = InputAnswered, m.Text
 	case OpMail:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[MailResult](result).Text, "\n")
+	case OpChat:
+		r.Did, r.Text = InputAnswered, strings.TrimRight(as[ChatResult](result).Text, "\n")
+	case OpJammin:
+		// A look answers; a control ran. The Mac app shows its Jammin tab
+		// for either.
+		r.Text = strings.TrimRight(as[JamminResult](result).Text, "\n")
+		if as[JamminArgs](st.Args).Do == JamLook {
+			r.Did = InputAnswered
+		}
 	case OpYoink:
 		// A download started ran; the rest answer. The Mac app shows its
 		// Yoink tab for either.
@@ -600,6 +711,43 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	return r, nil
 }
 
+// jamminArgs reads :jammin's words: a control, play, pause, next or
+// previous, perhaps after the source it is for, spotify or music.
+func jamminArgs(arg string) (JamminArgs, error) {
+	var a JamminArgs
+	usage := ":jammin takes play, pause, next or previous, perhaps after spotify or music: :jammin pause, :jammin music next."
+	for _, w := range strings.Fields(strings.ToLower(arg)) {
+		src, do := "", ""
+		switch w {
+		case "spotify":
+			src = JamSpotify
+		case "music", "apple":
+			src = JamMusic
+		case "play", "resume":
+			do = JamPlay
+		case "pause", "stop":
+			do = JamPause
+		case "next", "skip":
+			do = JamNext
+		case "previous", "prev", "back":
+			do = JamPrevious
+		default:
+			return JamminArgs{}, Errorf(CodeBadArgs, "%s", usage)
+		}
+		switch {
+		case src != "" && (a.Do != "" || (a.Source != "" && a.Source != src)):
+			return JamminArgs{}, Errorf(CodeBadArgs, "%s", usage)
+		case src != "":
+			a.Source = src
+		case a.Do != "":
+			return JamminArgs{}, Errorf(CodeBadArgs, ":jammin takes one control at a time.")
+		default:
+			a.Do = do
+		}
+	}
+	return a, nil
+}
+
 // yoinkArgs reads :yoink's words: a link, and what to download of it,
 // best, audio or a height, in either order. A link may come without its
 // https://. The core checks both, as the yoink op takes them from any
@@ -643,6 +791,11 @@ func started(s Session) string {
 	// What did not go as asked comes first, while a short strip shows it.
 	for _, w := range s.Warnings {
 		out += " " + sentence(w)
+	}
+	// Only a task sent to the top starts pinned and boosted, and the row
+	// says so only where the core did it (SpawnArgs.Top).
+	if s.Pinned && s.Priority > 0 {
+		out += " It's at the top, first in Pinned, and boosted."
 	}
 	if len(s.Copied) > 0 {
 		out += " Copied " + strings.Join(s.Copied, ", ") + "."

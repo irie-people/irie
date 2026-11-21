@@ -99,6 +99,7 @@ func (p Paths) LocalFile() string             { return filepath.Join(p.State, "l
 func (p Paths) Benches() string               { return filepath.Join(p.State, "benches") }
 func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
+func (p Paths) Chain() string                 { return filepath.Join(p.State, "chain", "sidebar") } // the sidebar's chain (DESIGN §4.23), beside the other chains
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 func (p Paths) Cards() string                 { return filepath.Join(p.State, "cards.json") } // materialized cards (internal/materialize)
 
@@ -108,11 +109,36 @@ func (p Paths) Cards() string                 { return filepath.Join(p.State, "c
 func (p Paths) RouteLabels() string  { return filepath.Join(p.State, "route-labels.jsonl") }
 func (p Paths) RouteVectors() string { return filepath.Join(p.State, "route-vectors.json") }
 
+// FindVectors holds the embeddings of the sessions' tasks and of what their
+// agents said, which irie ctl find ranks them by (DESIGN §4.5).
+func (p Paths) FindVectors() string { return filepath.Join(p.State, "find-vectors.json") }
+
 // Notepad is the person's notes for later, and NotepadCopies the folder of
 // its copies, one a day (DESIGN §4.20). They are the person's own words, so
 // they go with the data, not the state.
-func (p Paths) Notepad() string       { return filepath.Join(p.Data, "notepad.json") }
+func (p Paths) Notepad() string { return filepath.Join(p.Data, "notepad.json") }
+
+// Zen is your zen's versions (docs/proposals/zen.md §4): yours, as your
+// themes and layouts are, so it sits with them.
+func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
+
+// FoundingChain is the founding documents' local chain (internal/founding):
+// each version holds every text, and names the one before it.
+func (p Paths) FoundingChain() string { return filepath.Join(p.State, "chain", "founding") }
+
+// Keys holds the keys that open Irie's vaults where the system keeps no
+// keychain (internal/keyring): apart from the vaults, so that a copy of
+// your settings carries none.
+func (p Paths) Keys() string { return filepath.Join(p.State, "keys") }
+
+// ZenState is how far along zen's path you are, and what a restarted core
+// keeps of zen (internal/core/zen.go).
+func (p Paths) ZenState() string      { return filepath.Join(p.State, "zen.json") }
 func (p Paths) NotepadCopies() string { return filepath.Join(p.Data, "backups", "notepad") }
+
+// VaultNotes is what the core knew of the notepad's note in the Obsidian
+// vault when it and the notepad last agreed (DESIGN §4.17).
+func (p Paths) VaultNotes() string { return filepath.Join(p.Data, "obsidian-notes.json") }
 
 // ContextStore is the git repository of agents' contexts (DESIGN §4.13).
 func (p Paths) ContextStore() string          { return filepath.Join(p.State, "context.git") }

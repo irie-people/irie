@@ -316,3 +316,27 @@ func checkDir(t *testing.T, dir string, want ...string) {
 		t.Errorf("%s holds %q, want %q", dir, got, want)
 	}
 }
+
+func TestCreateNeverReplaces(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keys", "a.key")
+	if err := Create(path, []byte("first\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Create(path, []byte("second\n"), 0o600); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("a second create: %v, want fs.ErrExist", err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || string(b) != "first\n" {
+		t.Fatalf("the file holds %q, %v", b, err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, %v", fi.Mode(), err)
+	}
+	if fi, err := os.Stat(filepath.Dir(path)); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("dir mode %v, %v", fi.Mode(), err)
+	}
+	files, _ := os.ReadDir(filepath.Dir(path))
+	if len(files) != 1 {
+		t.Errorf("left beside it: %v", files)
+	}
+}

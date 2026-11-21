@@ -23,7 +23,7 @@ import (
 const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
 
   ` + brand.Slug + ` ctl list [--json]                 the sessions and their states
-  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...
+  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--top] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
                                          starting ` + brand.Name + ` if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
@@ -36,26 +36,34 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          --group puts it in the group of that name
                                          or path, Work/Sidebar, made when none has it
                                          (else it goes in the group of the session
-                                         this runs in)
-  ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...
+                                         this runs in); --top sends it to the top,
+                                         first in Pinned, and boosts it
+  ` + brand.Slug + ` ctl input [--json] [--top] [--session SESSION] TEXT...
                                          type to ` + brand.Name + ` as into a task bar, and
                                          print what it says: a task with its @
                                          and + words, a question such as "hows
                                          the parser?", or a : command, which acts
                                          on SESSION, by id or name. TEXT - reads
-                                         stdin
+                                         stdin. --top sends a task to the top, as
+                                         the Mac app's Send to Top does
   ` + brand.Slug + ` ctl history [--json] [QUERY...]   the sessions that closed, newest first, whose
                                          name or id has every QUERY word. With
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
+  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...   the sessions, open or closed, most like
+                                         WORDS by their names, their tasks and what
+                                         their agents said last, by words and by
+                                         meaning (route.embed's model): each with
+                                         whether reopen can bring it back and the
+                                         start of what its agent said
   ` + brand.Slug + ` ctl dog [--json]                  the jots that are not through: those whose
                                          turn is over but whose work is not committed,
                                          or not yet in their repo's land branch
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
-` + rebuildsUsage + materializeUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -106,7 +114,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          parked or frozen as it was
 ` + worktreesUsage + `  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
   ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets,
-                                         mail or code) beside SESSION, the one this runs
+                                         mail, code or vault) beside SESSION, the one this runs
                                          in by default, in the Mac app's panes;
                                          the app alone reads what it shows
   ` + brand.Slug + ` ctl open FILE[:LINE[:COL]] [SESSION]
@@ -119,11 +127,13 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          when another session has it
   ` + brand.Slug + ` ctl flip                          flip the slot between the shown session's
                                          conversation and its raw terminal
-  ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
-                                         a person would; TEXT - reads stdin
-  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
-                                         "continue" and Enter, only while its
-                                         prompt shows with nothing typed in it
+  ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, by
+                                         id or name, as a person would; TEXT -
+                                         reads stdin
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on, by id or
+                                         name: type "continue" and Enter, only
+                                         while its prompt shows with nothing
+                                         typed in it
   ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -174,7 +184,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
                                          reports one window of them
-` + controlUsage + contextUsage + psUsage + raceUsage
+` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -190,6 +200,10 @@ func ctl(args []string) error {
 		return ctlInput(args[1:])
 	case "history":
 		return ctlHistory(args[1:])
+	case "find":
+		return ctlFind(args[1:])
+	case "chain":
+		return ctlChain(args[1:])
 	case "close":
 		return ctlClose(args[1:])
 	case "reopen":
@@ -202,6 +216,10 @@ func ctl(args []string) error {
 		return ctlRebuilds(args[1:])
 	case "materialize":
 		return ctlMaterialize(args[1:])
+	case "zen":
+		return ctlZen(args[1:])
+	case "founding":
+		return ctlFounding(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])
 	case "gabriel":
@@ -378,6 +396,7 @@ func ctlInput(args []string) error {
 	fs := flag.NewFlagSet("ctl input", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the core's reply as JSON")
 	session := fs.String("session", "", "the session a : command acts on, by id or name")
+	top := fs.Bool("top", false, "send a task to the top: first in Pinned, and boosted")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -390,13 +409,13 @@ func ctlInput(args []string) error {
 		text = string(b)
 	}
 	if strings.TrimSpace(text) == "" {
-		return errors.New("usage: " + brand.Slug + " ctl input [--json] [--session SESSION] TEXT...")
+		return errors.New("usage: " + brand.Slug + " ctl input [--json] [--top] [--session SESSION] TEXT...")
 	}
 	sock, err := socket()
 	if err != nil {
 		return err
 	}
-	in := ipc.InputArgs{Text: text, Session: *session}
+	in := ipc.InputArgs{Text: text, Session: *session, Top: *top}
 	if *session != "" {
 		var l ipc.ListResult
 		if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
@@ -550,6 +569,7 @@ func ctlSpawn(args []string) error {
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
 	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
 	group := fs.String("group", "", "put the session in the group of this name, made when none has it")
+	top := fs.Bool("top", false, "send the session to the top: first in Pinned, and boosted")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -569,7 +589,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--top] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -590,7 +610,7 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name, a.Force, a.Group = task, dir, *name, *force, strings.TrimSpace(*group)
+	a.Task, a.Cwd, a.Name, a.Force, a.Group, a.Top = task, dir, *name, *force, strings.TrimSpace(*group), *top
 	// An agent's spawn goes beside its own session when ui.new_tabs is
 	// next.
 	a.After = os.Getenv(brand.Env("SESSION"))
@@ -767,6 +787,8 @@ func conversationLine(it ipc.Item) string {
 	return line
 }
 
+// ctlSend types TEXT to the agent of SESSION, named by id or name, as close
+// and park take it: an agent that started another names it as it named it.
 func ctlSend(args []string) error {
 	if len(args) < 2 {
 		return errors.New("usage: " + brand.Slug + " ctl send SESSION TEXT...")
@@ -783,9 +805,14 @@ func ctlSend(args []string) error {
 	if err != nil {
 		return err
 	}
-	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+	ids, err := groupTargets(sock, "send", args[:1])
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: ids[0], Text: text}, nil)
 }
 
+// ctlContinue sends the agent of SESSION, by id or name, on.
 func ctlContinue(args []string) error {
 	if len(args) != 1 {
 		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
@@ -794,7 +821,11 @@ func ctlContinue(args []string) error {
 	if err != nil {
 		return err
 	}
-	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
+	ids, err := groupTargets(sock, "continue", args)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: ids[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of
@@ -1004,10 +1035,10 @@ func ctlClose(args []string) error {
 	return ipc.Call(sock, 10*time.Second, ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
 }
 
-// sessionTarget is the id of the session ctl close, park or unpark, the
-// command verb, acts on: the one args names, by id or name, or else own,
-// the session the command runs in. A name that fits no session goes to the
-// core as it is, which says so.
+// sessionTarget is the id of the session ctl close, park, unpark, send or
+// continue, the command verb, acts on: the one args names, by id or name,
+// or else own, the session the command runs in. A name that fits no
+// session goes to the core as it is, which says so.
 func sessionTarget(verb string, args []string, own string, sessions []ipc.Session) (string, error) {
 	if len(args) == 0 {
 		if own == "" {

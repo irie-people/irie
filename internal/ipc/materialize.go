@@ -28,8 +28,12 @@ const MaxMaterializeWait = 5 * time.Minute
 
 // MaterializeArgs are a recipe by its parts, and how to ask for it.
 type MaterializeArgs struct {
-	ID     string `json:"id"`               // the card's name, such as "session/abc/status"
-	Prompt string `json:"prompt,omitempty"` // what the card is to show; a new one leaves the kept card cold
+	// Session asks for a session's own card, where it stands, which the
+	// core makes from its row and its conversation: the core writes ID,
+	// Prompt, Context, Inputs and Gap. Off unless materialize.sessions.
+	Session string `json:"session,omitempty"`
+	ID      string `json:"id,omitempty"`     // the card's name, such as "repo/irie/recent"
+	Prompt  string `json:"prompt,omitempty"` // what the card is to show; a new one leaves the kept card cold
 	// Context is the text the model makes the card from. Its digest is
 	// the card's inputs unless Inputs is given, so new text puts the card
 	// out of date, and the old card stays on show while the next is made.

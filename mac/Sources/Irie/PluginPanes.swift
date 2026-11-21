@@ -164,6 +164,12 @@ struct PluginPaneContent: View {
         // kind, as the Writing plugin's Variorum tab will.
         case "yoink":
             YoinkTab()
+        case "chat":
+            ChatTab()
+        case "founding":
+            FoundingTab()
+        case "jammin":
+            JamminTab()
         default:
             SideNote(title: pane.title, text: "This app can't draw a \(pane.kind) pane yet: it comes with a newer build of \(Brand.name).")
         }
@@ -367,8 +373,8 @@ private struct PluginPaneDown: View {
 /// Hosts a pane's web view, which outlives this view: the pane keeps its
 /// page as other tabs show and it comes back. The web view sits in a
 /// container of this view's own, so a host that goes takes only its
-/// container.
-private struct PluginPaneWebHost: NSViewRepresentable {
+/// container. Jammin's sign-in sheet hosts its own the same way.
+struct PluginPaneWebHost: NSViewRepresentable {
     let web: WKWebView
 
     func makeNSView(context: Context) -> NSView {
@@ -531,8 +537,8 @@ final class PluginPaneHolder: NSObject, ObservableObject, BitwardenPage {
     }
 
     /// Takes WebRTC's constructors out of a frame before its own scripts
-    /// run, for good.
-    private static let noWebRTC = """
+    /// run, for good. Jammin's sign-in sheet takes it too.
+    static let noWebRTC = """
     (() => { for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCIceCandidate", "RTCSessionDescription", "RTCRtpSender", "RTCRtpReceiver", "RTCRtpTransceiver"]) {
       try { Object.defineProperty(window, k, { value: undefined, writable: false, configurable: false }); } catch (e) {} } })();
     """

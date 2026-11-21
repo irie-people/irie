@@ -101,6 +101,12 @@ func (c *Core) jot(a ipc.SpawnArgs) (ipc.SpawnResult, error) {
 // same place and for the same agent, still starting or with its agent
 // still there. The caller holds c.mu.
 func (c *Core) addable(a ipc.SpawnArgs, now time.Time) (*lastJot, string, bool) {
+	// A jot sent to the top is a task of its own, however it reads: the
+	// user asked for a card at the top (pin.go), not for more words to an
+	// agent. A jot after it may still add to it.
+	if a.Top {
+		return nil, "", false
+	}
 	last, window := c.last, c.cfg().Spawn.FollowUpWindow
 	if last == nil || window <= 0 || now.Sub(last.at) > window || !samePlace(last.args, a) {
 		return nil, "", false

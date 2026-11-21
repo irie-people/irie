@@ -67,22 +67,29 @@ func (c *Core) guideDir(g guideSpec) string { return filepath.Join(c.paths.Data,
 func (c *Core) writing(dir string) bool { return dir == c.guideDir(guideWrite) }
 
 // skillCheck says why a session of profile, a Claude Code profile, could
-// not run skill, one of Irie's own: no such skill, the skill is off, or the
-// profile's Claude Code loads no plugin. who is what wants the skill, as
-// the error names it, such as "The Variorum guide" or "+chaos". It probes
-// the CLI, so the caller does not hold c.mu.
+// not run skill, one of Irie's own or one of yours: no such skill, the
+// skill is off, or the profile's Claude Code loads no plugin. who is what
+// wants the skill, as the error names it, such as "The Variorum guide",
+// "+chaos" or "This task". It probes the CLI, so the caller does not hold
+// c.mu.
 func (c *Core) skillCheck(who string, profile config.Profile, skill string) error {
 	var choice *skills.Choice
-	for _, ch := range skills.Choose(skills.Bundled(), plugins.SkillSettings(*c.cfg(), profile.TakesSkills())) {
+	// Irie's own skills, then yours, as a session gets them.
+	all, settings := plugins.SessionSkills(plugins.Env{Config: *c.cfg(), Paths: c.paths}, profile.TakesSkills())
+	for _, ch := range skills.Choose(all, settings) {
 		if ch.Name == skill {
 			choice = &ch
 		}
+	}
+	whose := brand.Name + "'s"
+	if choice != nil && choice.Mine {
+		whose = "your"
 	}
 	switch {
 	case choice == nil:
 		return ipc.Errorf(ipc.CodeNotFound, "This "+brand.Name+" has no skill called %s.", skill)
 	case !choice.On:
-		return ipc.Errorf(ipc.CodeBadArgs, "%s runs "+brand.Name+"'s skill %s, which is off here: %s.", who, skill, choice.Why)
+		return ipc.Errorf(ipc.CodeBadArgs, "%s runs %s skill %s, which is off here: %s.", who, whose, skill, choice.Why)
 	}
 	// The CLI must load Irie's plugin, which its probe checks once per
 	// binary; the probe's warning says why not.
@@ -110,11 +117,16 @@ func (c *Core) skillCheck(who string, profile config.Profile, skill string) erro
 // skill's command, then the task, which Claude Code hands the skill. A task
 // that already runs the skill, as one carried on from such a session does,
 // is kept as it is.
-func onSkill(profile config.Profile, task string) string {
-	if profile.Skill == "" {
+func onSkill(profile config.Profile, task string) string { return skillTask(profile.Skill, task) }
+
+// skillTask is the task a session that starts on skill begins with: the
+// skill's command, then the task, kept as it is when it already runs the
+// skill; with no skill, the task.
+func skillTask(skill, task string) string {
+	if skill == "" {
 		return task
 	}
-	cmd := "/" + skills.Plugin + ":" + profile.Skill
+	cmd := "/" + skills.Plugin + ":" + skill
 	if t := strings.TrimSpace(task); t == cmd || strings.HasPrefix(t, cmd+" ") || strings.HasPrefix(t, cmd+"\n") {
 		return task
 	}

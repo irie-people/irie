@@ -13,58 +13,41 @@ import (
 // mullvad itself, which lockdown mode holds against. An unknown pid is not
 // an agent's.
 func (c *Core) fromAgent(pid int) bool {
-	_, ok := c.agentPane(pid)
+	_, ok := c.agentOf(pid)
 	return ok
 }
 
-// peerAgent is the session whose agent's process tree process pid runs
-// in, as fromAgent walks it, and whether pid runs inside an agent at all:
-// a pane that is no session's is an agent's all the same.
-func (c *Core) peerAgent(pid int) (session string, inAgent bool) {
-	p, ok := c.agentPane(pid)
-	if !ok {
+// agentOf is the session whose agent's pane the process pid runs in, by its
+// parents: ok says it runs in one, and session is its ID, "" for a pane
+// that names none.
+func (c *Core) agentOf(pid int) (session string, ok bool) {
+	if pid <= 0 {
 		return "", false
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, x := range c.sessions {
-		if x.pane == p.ID {
-			return x.id, true
-		}
-	}
-	return "", true
-}
-
-// agentPane is the agent pane whose host is among the parents of process
-// pid, and whether there is one.
-func (c *Core) agentPane(pid int) (tmux.Pane, bool) {
-	if pid <= 0 {
-		return tmux.Pane{}, false
-	}
-	c.mu.Lock()
-	hosts := map[int]tmux.Pane{}
+	hosts := map[int]string{}
 	for _, p := range c.snap.ByRole(tmux.RoleAgent) {
 		if p.PID > 0 {
-			hosts[p.PID] = p
+			hosts[p.PID] = p.IrieSession
 		}
 	}
 	c.mu.Unlock()
 	t, err := proc.Read()
 	if err != nil {
 		c.log.Warn("caller", "err", err)
-		return tmux.Pane{}, false
+		return "", false
 	}
 	for range 64 {
-		if p, ok := hosts[pid]; ok {
-			return p, true
+		if id, ok := hosts[pid]; ok {
+			return id, true
 		}
 		p, ok := t.Get(pid)
 		if !ok || p.PPID <= 1 || p.PPID == pid {
-			return tmux.Pane{}, false
+			return "", false
 		}
 		pid = p.PPID
 	}
-	return tmux.Pane{}, false
+	return "", false
 }
 
 // notBuilt is the refusal of a part that this build leaves out with its
@@ -76,7 +59,7 @@ func notBuilt(what string) error {
 // builtFeatures leaves out of hello's features the ops of a plugin this
 // build leaves out, so a client never offers them.
 func builtFeatures(all []string) []string {
-	if vpnBuilt && privacyBuilt && marketsBuilt && mailBuilt && yoinkBuilt && config.WritingBuilt {
+	if vpnBuilt && privacyBuilt && marketsBuilt && mailBuilt && yoinkBuilt && chatBuilt && obsidianBuilt && foundingBuilt && jamminBuilt && config.WritingBuilt {
 		return all
 	}
 	var out []string
@@ -87,6 +70,10 @@ func builtFeatures(all []string) []string {
 		case !marketsBuilt && f == ipc.OpMarkets:
 		case !mailBuilt && f == ipc.OpMail:
 		case !yoinkBuilt && f == ipc.OpYoink:
+		case !chatBuilt && f == ipc.OpChat:
+		case !obsidianBuilt && f == ipc.OpObsidian:
+		case !foundingBuilt && f == ipc.OpFounding:
+		case !jamminBuilt && f == ipc.OpJammin:
 		case !config.WritingBuilt && f == ipc.OpVariorum:
 		default:
 			out = append(out, f)
