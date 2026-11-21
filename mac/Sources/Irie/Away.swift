@@ -111,6 +111,7 @@ enum Away {
                 .flatMap { opened(by: Array(words[$0...])) }
         }
         guard first == "open" || first == "/usr/bin/open" else { return [] }
+        let command = spread(command)
         var apps: [String] = [], docs: [String] = []
         var i = 1
         while i < command.count {
@@ -142,6 +143,34 @@ enum Away {
                   let app = NSWorkspace.shared.urlForApplication(toOpen: url) else { return nil }
             return Bundle(url: app)?.bundleIdentifier ?? app.path
         }
+    }
+
+    /// open(1)'s short flags as getopt reads them: `-na X` is `-n -a X`, and a
+    /// flag that takes a value takes the rest of its word, or else the next
+    /// word, so `-aSafari` is `-a Safari`. Read one by one, `-gna "Google
+    /// Chrome"` named no app: Chrome's window went unwatched and stayed where
+    /// the user works (2026-11-21). Words after --args are the app's own.
+    nonisolated static func spread(_ command: [String]) -> [String] {
+        let valued: Set<Character> = ["a", "b", "i", "o", "s", "u"]
+        var out: [String] = []
+        var app = false
+        for w in command {
+            if w == "--args" { app = true }
+            guard !app, w.hasPrefix("-"), !w.hasPrefix("--"), w.count > 2 else {
+                out.append(w)
+                continue
+            }
+            let flags = Array(w.dropFirst())
+            for (j, c) in flags.enumerated() {
+                out.append("-" + String(c))
+                if valued.contains(c) {
+                    let rest = String(flags[(j + 1)...])
+                    if !rest.isEmpty { out.append(rest) }
+                    break
+                }
+            }
+        }
+        return out
     }
 
     /// Set once a signal asks the watch to end.
