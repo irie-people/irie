@@ -305,15 +305,16 @@ struct ContentView: View {
             // which the window wears meanwhile (Looks.swift).
             let _ = Theme.use(theme)
             // At its narrowest the sidebar still fits the title bar's row
-            // (sun, name and counts) beside the traffic lights; a row that
-            // doesn't fit goes into the toolbar's overflow menu.
+            // (sun, name and counts) beside the traffic lights: the counts
+            // draw tighter to fit the room the bar leaves them (Counts).
             // Red for done (ui.red_on_done) does the same: the cards draw
             // again only when their own row changes, and the colour is
             // Look's, which they don't watch.
             SidebarView()
                 .id("\(theme) \(LookBook.shared.revision) \(store.redOnDone)")
                 .environment(\.layoutDirection, .leftToRight)
-                .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 420)
+                .navigationSplitViewColumnWidth(min: WindowPanes.fixtureSidebar ?? 260, ideal: WindowPanes.fixtureSidebar ?? 290,
+                                                max: WindowPanes.fixtureSidebar ?? 420)
         } detail: {
             TerminalArea()
                 .environment(\.layoutDirection, .leftToRight)

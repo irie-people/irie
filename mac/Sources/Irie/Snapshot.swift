@@ -82,6 +82,30 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // The title bar at its fullest: a session paused and one frozen,
+            // the trod bot within its hours and the VPN on, beside the
+            // sidebar at its narrowest, at 319 points and at its widest, and
+            // reversed. Each draws the fullest look of the counts that fits,
+            // and nothing goes into the bar's overflow menu (Counts).
+            store.loadFixture(Fixture.sessions.map { s in
+                var s = s
+                if s.id == "s10patents00" { s.state = "paused" }
+                if s.id == "s08exited01" { s.state = "frozen" }
+                return s
+            }, selection: Fixture.selected)
+            store.loadTitleBarFixture()
+            for (base, sidebar, reversed) in [("titlebar-260", 260.0, false), ("titlebar-319", 319.0, false), ("titlebar-420", 420.0, false),
+                                              ("titlebar-reversed", 319.0, true)] {
+                store.reversed = reversed
+                WindowPanes.fixtureSidebar = CGFloat(sidebar)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false, NotesPanel.openKey: true, NotesPanel.draftKey: ""], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: false, width: 1100, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print("\(name): sidebar \(drawn.sidebar.map { fmt(CGFloat($0)) } ?? "?") pt, counts \(drawn.room.map { "\(fmt($0)) pt wide" } ?? "with no room read")")
+            }
+            WindowPanes.fixtureSidebar = nil
+            store.reversed = false
             store.loadFixture(Fixture.sessions, selection: Fixture.selected)
 
             // The right sidebar (RightSidebar.swift), inline after the
@@ -497,6 +521,9 @@ enum Snapshot {
         }
     }
 
+    /// The sidebar's width and the counts' room in the window drawn last.
+    private static var drawn: (sidebar: Double?, room: CGFloat?) = (nil, nil)
+
     /// The window as the app draws it, at 2x, and its title bar's height in
     /// points. It has to be ordered in for SwiftUI to lay it out, and macOS
     /// brings any titled window ordered in onto a screen, however far off
@@ -533,6 +560,18 @@ enum Snapshot {
         let frame = host.superview ?? host
         let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds)!
         frame.cacheDisplay(in: frame.bounds, to: rep)
+        // The sidebar's width and the counts' room as drawn, which the
+        // window answers for only while it is on screen.
+        drawn = (WindowPanes.sidebar?.width, TitleBarRoom.shared.room)
+        // What the title bar had no room for, as it was drawn, after the
+        // layout drawing it takes: a picture that loses an item to the
+        // overflow menu says which, by its label or its width.
+        let inBar = Set((w.toolbar?.visibleItems ?? []).map(\.itemIdentifier))
+        let over = (w.toolbar?.items ?? []).filter { $0.view != nil && !inBar.contains($0.itemIdentifier) }
+        if !over.isEmpty, w.toolbar?.isVisible == true {
+            let named = over.map { $0.label.isEmpty ? "\(Int($0.view?.fittingSize.width ?? 0)) pt wide" : $0.label }
+            print("  title bar: \(over.count) item\(over.count == 1 ? "" : "s") in its overflow menu: \(named.joined(separator: ", "))")
+        }
         let titlebar = w.frame.height - w.contentLayoutRect.height
         w.orderOut(nil)
         // Its views go, so they no longer act on what the next pictures set.

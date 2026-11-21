@@ -241,6 +241,12 @@ enum WindowPanes {
     /// Irie's own window, as ContentView finds it.
     static weak var window: NSWindow?
 
+    /// The sidebar's width a `--snapshot` picture asks for, held there;
+    /// nil in the app. setSidebar moves the divider from a block on the
+    /// main queue, which `--snapshot`'s run loop never drains while it
+    /// draws.
+    static var fixtureSidebar: CGFloat?
+
     private static func controller() -> NSSplitViewController? {
         guard let root = window?.contentView else { return nil }
         var found: [NSSplitViewController] = []
