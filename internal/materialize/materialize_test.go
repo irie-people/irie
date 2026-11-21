@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,7 +36,7 @@ func first(t *testing.T, s *Store, r Recipe, now time.Time) Card {
 	if err != nil || rm == nil {
 		t.Fatalf("want %s: remake %v, %v", r.ID, rm, err)
 	}
-	c, newest, err := s.Finish(*rm, json.RawMessage(spec), nil, now)
+	c, newest, err := s.Finish(*rm, json.RawMessage(spec), "qwen3:4b", nil, now)
 	if err != nil || !newest {
 		t.Fatalf("finish %s: newest %v, %v", r.ID, newest, err)
 	}
@@ -74,7 +75,7 @@ func TestACardIsMadeOnceThenDrawnFromWhatIsKept(t *testing.T) {
 		t.Fatalf("asked again while it is made: %s, remake %v; want cold, and none", st, again)
 	}
 	made := t0.Add(10 * time.Second)
-	c, newest, err := s.Finish(*rm, json.RawMessage(spec), nil, made)
+	c, newest, err := s.Finish(*rm, json.RawMessage(spec), "qwen3:4b", nil, made)
 	if err != nil || !newest || string(c.Spec) != spec || c.Recipe != r.Hash() || c.Inputs != r.Inputs || !c.Made.Equal(made) {
 		t.Fatalf("finish: %+v, newest %v, %v", c, newest, err)
 	}
@@ -122,7 +123,7 @@ func TestAnOutOfDateCardStaysOnShowWhileItIsMadeAgain(t *testing.T) {
 		t.Fatalf("asked again meanwhile: %s, remake %v; want refreshing, none, and the old card", st, again)
 	}
 	next := `{"id":"status","title":"Where it stands","body":[]}`
-	if c, newest, _ := s.Finish(*rm, json.RawMessage(next), nil, t0.Add(2*time.Minute)); !newest || string(c.Spec) != next || c.Inputs != "turns=4" {
+	if c, newest, _ := s.Finish(*rm, json.RawMessage(next), "qwen3:4b", nil, t0.Add(2*time.Minute)); !newest || string(c.Spec) != next || c.Inputs != "turns=4" {
 		t.Fatalf("finish: newest %v, spec %s, inputs %q", newest, c.Spec, c.Inputs)
 	}
 	if _, st, rm, _ := s.Want(r, t0.Add(3*time.Minute)); st != Fresh || rm != nil {
@@ -137,7 +138,7 @@ func TestAFailedRemakeKeepsTheOldCard(t *testing.T) {
 	r.Inputs = "turns=4"
 	_, _, rm, _ := s.Want(r, t0.Add(time.Minute))
 	failed := t0.Add(2 * time.Minute)
-	if c, _, _ := s.Finish(*rm, nil, errors.New("the model timed out"), failed); string(c.Spec) != spec || c.Inputs != "turns=3" {
+	if c, _, _ := s.Finish(*rm, nil, "qwen3:4b", errors.New("the model timed out"), failed); string(c.Spec) != spec || c.Inputs != "turns=3" {
 		t.Fatalf("a failure took the old card: spec %s, inputs %q", c.Spec, c.Inputs)
 	}
 	if c, st, rm, _ := s.Want(r, failed.Add(time.Second)); st != Stale || rm != nil || string(c.Spec) != spec {
@@ -171,10 +172,10 @@ func TestTheNewestRemakeWins(t *testing.T) {
 	if rm == nil {
 		t.Fatal("a changed recipe began no remake while the old one ran")
 	}
-	if _, newest, _ := s.Finish(*old, json.RawMessage(spec), nil, t0.Add(2*time.Second)); newest {
+	if _, newest, _ := s.Finish(*old, json.RawMessage(spec), "qwen3:4b", nil, t0.Add(2*time.Second)); newest {
 		t.Error("the outdated remake's card was kept")
 	}
-	c, newest, _ := s.Finish(*rm, json.RawMessage(`{"id":"status"}`), nil, t0.Add(3*time.Second))
+	c, newest, _ := s.Finish(*rm, json.RawMessage(`{"id":"status"}`), "qwen3:4b", nil, t0.Add(3*time.Second))
 	if !newest || c.Recipe != r.Hash() || string(c.Spec) != `{"id":"status"}` {
 		t.Errorf("the newest remake: newest %v, recipe %s, spec %s", newest, c.Recipe, c.Spec)
 	}
@@ -191,7 +192,7 @@ func TestAClaimThatRanOutLetsAnotherBegin(t *testing.T) {
 	if rm == nil {
 		t.Fatal("no remake began once the first one's claim ran out")
 	}
-	if _, newest, _ := s.Finish(*hung, json.RawMessage(spec), nil, t0.Add(claimTTL+time.Second)); newest {
+	if _, newest, _ := s.Finish(*hung, json.RawMessage(spec), "qwen3:4b", nil, t0.Add(claimTTL+time.Second)); newest {
 		t.Error("the hung remake's card was kept over the newer remake")
 	}
 }
@@ -201,7 +202,7 @@ func TestAFailedRemakeWaitsBeforeTheNext(t *testing.T) {
 	r := status()
 	_, _, rm, _ := s.Want(r, t0)
 	failed := t0.Add(time.Second)
-	c, newest, _ := s.Finish(*rm, nil, errors.New("the model timed out"), failed)
+	c, newest, _ := s.Finish(*rm, nil, "qwen3:4b", errors.New("the model timed out"), failed)
 	if !newest || c.Err != "the model timed out" || c.Spec != nil || !c.Failed.Equal(failed) {
 		t.Fatalf("finish: %+v, newest %v; want the error kept", c, newest)
 	}
@@ -212,7 +213,7 @@ func TestAFailedRemakeWaitsBeforeTheNext(t *testing.T) {
 	if rm == nil {
 		t.Fatal("no remake began after the wait")
 	}
-	if c, _, _ := s.Finish(*rm, json.RawMessage(spec), nil, failed.Add(retryAfter)); c.Err != "" || !c.Failed.IsZero() {
+	if c, _, _ := s.Finish(*rm, json.RawMessage(spec), "qwen3:4b", nil, failed.Add(retryAfter)); c.Err != "" || !c.Failed.IsZero() {
 		t.Errorf("a card made after a failure still carries it: %q at %v", c.Err, c.Failed)
 	}
 }
@@ -220,7 +221,7 @@ func TestAFailedRemakeWaitsBeforeTheNext(t *testing.T) {
 func TestFinishRefusesWhatIsNotJSON(t *testing.T) {
 	s, _ := open(t)
 	_, _, rm, _ := s.Want(status(), t0)
-	c, _, err := s.Finish(*rm, json.RawMessage(`{"id":`), nil, t0)
+	c, _, err := s.Finish(*rm, json.RawMessage(`{"id":`), "qwen3:4b", nil, t0)
 	if err != nil || c.Err == "" || c.Spec != nil {
 		t.Errorf("err %q, spec %s, %v; want the half card refused as a failure", c.Err, c.Spec, err)
 	}
@@ -229,7 +230,7 @@ func TestFinishRefusesWhatIsNotJSON(t *testing.T) {
 func TestASpecIsKeptCompacted(t *testing.T) {
 	s, _ := open(t)
 	_, _, rm, _ := s.Want(status(), t0)
-	c, _, _ := s.Finish(*rm, json.RawMessage("{ \"id\": \"status\",\n  \"body\": [] }"), nil, t0)
+	c, _, _ := s.Finish(*rm, json.RawMessage("{ \"id\": \"status\",\n  \"body\": [] }"), "qwen3:4b", nil, t0)
 	if string(c.Spec) != `{"id":"status","body":[]}` {
 		t.Errorf("kept %s; want it compacted", c.Spec)
 	}
@@ -246,7 +247,7 @@ func TestForgetDropsACardAndItsRemake(t *testing.T) {
 	if next == nil || next.Gen == rm.Gen {
 		t.Fatalf("the remake after Forget: %v; want a new one, numbered after %d", next, rm.Gen)
 	}
-	if _, newest, _ := s.Finish(*rm, json.RawMessage(spec), nil, t0.Add(2*time.Second)); newest {
+	if _, newest, _ := s.Finish(*rm, json.RawMessage(spec), "qwen3:4b", nil, t0.Add(2*time.Second)); newest {
 		t.Error("the remake of a forgotten card was kept")
 	}
 }
@@ -280,5 +281,69 @@ func TestCardsOutliveARestart(t *testing.T) {
 	}
 	if rm.Gen <= 2 {
 		t.Errorf("the remake after a restart has number %d, one the file had used", rm.Gen)
+	}
+}
+
+func TestPeekLooksWithoutBeginningARemake(t *testing.T) {
+	s, _ := open(t)
+	r := status()
+	if _, st := s.Peek(r, t0); st != Cold {
+		t.Fatalf("peek at nothing: %s, want cold", st)
+	}
+	if _, _, rm, _ := s.Want(r, t0); rm == nil {
+		t.Fatal("a peek claimed the first remake")
+	}
+}
+
+func TestNewestKnowsAnOvertakenRemake(t *testing.T) {
+	s, _ := open(t)
+	r := status()
+	_, _, old, _ := s.Want(r, t0)
+	if !s.Newest(*old) {
+		t.Fatal("the only remake is not the newest")
+	}
+	r.Prompt = "What is this session doing?"
+	s.Want(r, t0.Add(time.Second))
+	if s.Newest(*old) {
+		t.Error("a remake overtaken by a newer one is still the newest")
+	}
+}
+
+func TestTheContextIsNeitherKeptNorHashed(t *testing.T) {
+	s, path := open(t)
+	r := status()
+	r.Context = "secret-ish session text"
+	before := r.Hash()
+	c := first(t, s, r, t0)
+	r.Context = "other text"
+	if r.Hash() != before {
+		t.Error("the context changed the recipe's hash")
+	}
+	if c.By != "qwen3:4b" {
+		t.Errorf("made by %q, want the maker's name", c.By)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret-ish") {
+		t.Error("the file keeps the context a card was made from")
+	}
+}
+
+func TestAFileThatDoesNotReadGivesAnEmptyStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cards.json")
+	if err := os.WriteFile(path, []byte(`[{"id": "half`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err == nil || s == nil {
+		t.Fatalf("store %v, error %v; want an empty store and the error", s, err)
+	}
+	if _, st, rm, err := s.Want(status(), t0); st != Cold || rm == nil || err != nil {
+		t.Errorf("asked of the empty store: %s, remake %v, %v; want cold, with a remake, and the file written over", st, rm, err)
+	}
+	if again, err := Open(path); err != nil || again == nil {
+		t.Errorf("the file written over does not read: %v", err)
 	}
 }

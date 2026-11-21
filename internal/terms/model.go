@@ -39,6 +39,10 @@ type Model struct {
 	think bool   // it thinks before it answers, which answers turn off
 }
 
+// Thinks reports whether the model thinks before it answers, which a
+// caller that wants only the answer turns off (localmodel.ChatOptions.Think).
+func (m Model) Thinks() bool { return m.think }
+
 // ErrNoModel says no local model is here to word answers.
 var ErrNoModel = errors.New("no local model here to word answers")
 
@@ -193,7 +197,7 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 		}
 	}
 	text, err := o.Chat(ctx, m.Name, []localmodel.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: b.String()}}, opt, clean)
-	text = strings.TrimSpace(Clean(stripThinking(text)))
+	text = strings.TrimSpace(Clean(StripThinking(text)))
 	if err != nil || text == "" {
 		if err == nil {
 			err = errors.New(m.Name + " said nothing")
@@ -213,9 +217,9 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 	return a, nil
 }
 
-// stripThinking takes out a model's thinking, which some write between
+// StripThinking takes out a model's thinking, which some write between
 // <think> tags in the answer itself.
-func stripThinking(s string) string {
+func StripThinking(s string) string {
 	for {
 		i := strings.Index(s, "<think>")
 		if i < 0 {
