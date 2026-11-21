@@ -116,6 +116,10 @@ struct IrieApp: App {
 final class KeyRouter {
     private var monitor: Any?
     private var middle: Any?
+    /// Modifiers going down and up, and clicks, for the look-ahead at keys
+    /// (KeyPeek.swift).
+    private var flags: Any?
+    private var clicks: Any?
     /// A double ↓ on an agent's empty prompt (ContinueKey.swift).
     private let continueKey = ContinueKey()
     /// Irie's own window, where the sessions are (WindowReader).
@@ -134,12 +138,43 @@ final class KeyRouter {
                 return nil
             }
         }
+        // A modifier held alone shows what it does (KeyPeek.swift); a click
+        // or leaving the app puts that away.
+        flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self, weak store] event in
+            guard let self, let store else { return event }
+            MainActor.assumeIsolated {
+                if event.window != nil, event.window === self.window {
+                    KeyPeek.shared.flags(event, window: event.window, store: store)
+                } else {
+                    KeyPeek.shared.drop()
+                }
+            }
+            return event
+        }
+        clicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { event in
+            MainActor.assumeIsolated { KeyPeek.shared.drop() }
+            return event
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { KeyPeek.shared.drop() }
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             let irie = MainActor.assumeIsolated { event.window != nil && event.window === self.window }
+            // The look-ahead sees every key first and takes none: a key ends
+            // what a held modifier showed, and Ctrl+X in Claude Code's
+            // terminal shows the keys of its chords (KeyPeek.swift).
+            if irie { MainActor.assumeIsolated { KeyPeek.shared.key(event, window: event.window, store: store) } }
             // First, so a ↓ it holds back goes ahead of any other key.
             if irie, MainActor.assumeIsolated({ self.continueKey.route(event, store: store) }) == nil {
+                return nil
+            }
+            // The tree of keys with fn (KeyTree.swift): Fn+X, then each key
+            // after with fn held, as Emacs's C-x C-s. A chord under way
+            // takes its keys before anything else in the window sees them;
+            // a key typed without fn drops it and goes on as it would have.
+            if irie, MainActor.assumeIsolated({ KeyChord.shared.route(event, store: store) }) {
                 return nil
             }
             // A code card's editor has its own keys while it has the
@@ -156,6 +191,15 @@ final class KeyRouter {
             // app's own menu keys. With ⌃ or ⌥ as well, fn changes nothing.
             if event.keyCode == 48, mods.isEmpty || mods == .shift, irie, event.modifierFlags.contains(.function) {
                 MainActor.assumeIsolated { store.stepSpace(mods.contains(.shift) ? -1 : 1) }
+                return nil
+            }
+            // Fn+Z starts zen, the session on show alone, full screen, and
+            // ends it (Zen.swift), from anywhere in the window, the terminal
+            // too, which never gets the z. As with Fn+Tab, only the fn flag
+            // tells it from z, and only here. The letter, not the key's
+            // place, so it is Z on every keyboard layout.
+            if irie, mods.isEmpty, event.modifierFlags.contains(.function), event.charactersIgnoringModifiers?.lowercased() == "z" {
+                MainActor.assumeIsolated { store.toggleZen() }
                 return nil
             }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
@@ -233,6 +277,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !WindowPlace.background && !WindowPlace.away {
             NSApp.activate(ignoringOtherApps: true)
         }
+        // Zen as it was when the app last ran (Zen.swift).
+        ZenResume.launch()
         FreezeDog.start(socketPath: CorePaths.socket())
     }
 
@@ -266,9 +312,11 @@ struct ContentView: View {
             // Look's, which they don't watch.
             SidebarView()
                 .id("\(theme) \(LookBook.shared.revision) \(store.redOnDone)")
+                .environment(\.layoutDirection, .leftToRight)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
+                .environment(\.layoutDirection, .leftToRight)
                 .toolbar {
                     // Room between the sidebar's edge and the title, which
                     // the title bar would otherwise set almost against it.
@@ -277,6 +325,14 @@ struct ContentView: View {
                     }
                 }
         }
+        // Reversed, the split view puts the sidebar on the right (Store.
+        // reversed): right to left for the columns alone, each of which
+        // reads left to right again inside. Zen folds the sidebar away and
+        // lays out its own side, so the split view keeps to the layout's.
+        .environment(\.layoutDirection, store.reversed ? .rightToLeft : .leftToRight)
+        // The look-ahead at keys, over everything, like an alert
+        // (KeyPeek.swift).
+        .overlay { KeyPeekView(peek: KeyPeek.shared) }
         // The lines from the selected card to the terminal draw over both
         // columns, from views in the card and the frame (TabLink.swift).
         .tint(Theme.accent)
@@ -293,12 +349,20 @@ struct ContentView: View {
             WindowPlace.shared.adopt(window)
             // A preview takes over the window of the build before (Preview.swift).
             PreviewState.shared.adopt(window, store: store)
+            // The sidebar on its side, once the split view is there.
+            DispatchQueue.main.async { WindowPanes.setReversed(store.reversed) }
+            // Zen follows the window into full screen and out, and comes
+            // back after a relaunch as it was (Zen.swift).
+            store.watchZen(window)
+            ZenResume.once { [weak window] in if let window { store.resumeZen(in: window) } }
         })
         .onAppear {
             keys.install(store)
             LookBook.shared.start(store)
         }
         .onChange(of: theme) { store.sendTheme(theme) }
+        // Reversed, the sidebar goes to the right, and back (Store.reversed).
+        .onChange(of: store.reversed) { _, on in WindowPanes.setReversed(on) }
         // :markets in a task bar opens the Markets window (Markets.swift).
         .onReceive(NotificationCenter.default.publisher(for: .irieMarkets)) { _ in openWindow(id: MarketsWindow.id) }
     }

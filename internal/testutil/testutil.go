@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -63,8 +64,14 @@ const (
 	buildPrefix = "irie-bin-"
 )
 
+// BinsEnv names the folder of binaries the test runner built before the
+// tests (tools/test.sh, DESIGN §2.6): one build of each helper serves every
+// test process of a run, which otherwise builds its own.
+const BinsEnv = "IRIE_TEST_BINS"
+
 // buildOnce builds the Go package pkg once per test binary, into a temp dir
-// shared by every build, and returns the binary's path.
+// shared by every build, and returns the binary's path. When the test
+// runner built pkg already, the binary is a link to that build.
 func buildOnce(t testing.TB, pkg, name string) string {
 	t.Helper()
 	buildMu.Lock()
@@ -75,11 +82,6 @@ func buildOnce(t testing.TB, pkg, name string) string {
 	}
 	buildMu.Unlock()
 	b.once.Do(func() {
-		goBin, err := exec.LookPath("go")
-		if err != nil {
-			b.err = err
-			return
-		}
 		buildMu.Lock()
 		if buildDir == "" {
 			buildDir, b.err = os.MkdirTemp("", buildPrefix)
@@ -93,6 +95,14 @@ func buildOnce(t testing.TB, pkg, name string) string {
 			return
 		}
 		b.bin = filepath.Join(dir, name)
+		if prebuilt(pkg, b.bin) {
+			return
+		}
+		goBin, err := exec.LookPath("go")
+		if err != nil {
+			b.err = err
+			return
+		}
 		cmd := exec.Command(goBin, "build", "-o", b.bin, pkg)
 		cmd.Env = buildEnv
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -103,6 +113,22 @@ func buildOnce(t testing.TB, pkg, name string) string {
 		t.Fatal(b.err)
 	}
 	return b.bin
+}
+
+// prebuilt links bin to the test runner's build of pkg, which go build
+// named after pkg's last element, and reports whether there was one. A
+// link of the process's own keeps the name the tests look for, such as
+// llama-server, and leaves the build itself to the other processes.
+func prebuilt(pkg, bin string) bool {
+	dir := os.Getenv(BinsEnv)
+	if dir == "" {
+		return false
+	}
+	src := filepath.Join(dir, path.Base(pkg))
+	if fi, err := os.Stat(src); err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+	return os.Link(src, bin) == nil || os.Symlink(src, bin) == nil
 }
 
 // BuildIrie builds ./cmd/irie once per test binary and returns its path.
@@ -148,6 +174,35 @@ func FreePort(t testing.TB) int {
 	}
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port
+}
+
+// FreePorts returns the first of n consecutive TCP ports on 127.0.0.1
+// that nothing listens on now, for a test whose code takes a port and the
+// ones after it, as the core's tunnels do (llama_port + 1, + 2, ...). With
+// tests running side by side (tools/test.sh), the port after a free one is
+// often another test's.
+func FreePorts(t testing.TB, n int) int {
+	t.Helper()
+	for range 100 {
+		first := FreePort(t)
+		var held []net.Listener
+		for i := 1; i < n; i++ {
+			l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", first+i))
+			if err != nil {
+				break
+			}
+			held = append(held, l)
+		}
+		ok := len(held) == n-1
+		for _, l := range held {
+			l.Close()
+		}
+		if ok {
+			return first
+		}
+	}
+	t.Fatalf("no %d free ports in a row on 127.0.0.1", n)
+	return 0
 }
 
 // ShortDir returns a new directory under /tmp. Its path stays short enough for

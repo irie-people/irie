@@ -7,3 +7,4 @@ dist/
 .clean-room/
 .claude/settings.local.json
 .claude/worktrees/
+/tools/testrunner/target/

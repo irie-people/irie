@@ -66,6 +66,9 @@ type Options struct {
 	// Panes are the web panes phones reach (remote.panes, §2.2 of
 	// docs/PHONE.md): a pane's id, such as invoices.invoices, and its port.
 	Panes map[string]int
+	// Web is the app's files; nil serves the ones built in. A preview
+	// (tools/phonepreview) serves a checkout's, read afresh on each load.
+	Web fs.FS
 }
 
 // Server is the gateway.
@@ -99,10 +102,14 @@ func New(opt Options) (*Server, error) {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	files := opt.Web
+	if files == nil {
+		files = Web()
+	}
 	return &Server{
 		opt: opt, id: id, store: &Store{Dir: opt.Dir}, ca: ca,
 		leaves: &Leaves{CA: ca, Names: LocalNames, Addrs: Addrs},
-		web:    Web(), log: log, pusher: newPusher(),
+		web:    files, log: log, pusher: newPusher(),
 		panes: &paneBook{ask: func() (ipc.PluginsResult, error) {
 			var res ipc.PluginsResult
 			err := ipc.Call(opt.Socket, 3*time.Second, ipc.OpPlugins, ipc.PluginsArgs{}, &res)

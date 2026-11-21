@@ -1,0 +1,241 @@
+/* Irie's browser extension's side panel. Its colours are the design
+   library's, Roots, in Evergreen (DESIGN §2.11): tools/design.sh keeps the
+   blocks below the library's, and the tests fail while one isn't. */
+:root {
+  /* design: evergreen light */
+  --sidebar: #F4F4EC; --ground: #E9EBDF; --card: #FBFBF6; --panel: #F1F2E8; --field: #FDFDF9;
+  --edge: #D8DCC9; --hover: #F6F7EF; --selection: #DDE5D3; --needs-tint: #FBE5DC;
+  --ink: #1E2B22; --muted: #56635A; --accent: #2F5D46; --accent-ink: #264D3A; --accent-fill: #9DB8A3; --on-accent: #1E2B22;
+  --needs: #892319; --done: #2C7043; --paused: #8C5500; --frozen: #00566B; --sun: #D9A93F; --waves: #5E8A6E;
+  /* design: end */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+  --r: 12px;
+  --r-control: 8px;
+  --ease: cubic-bezier(.2, .85, .25, 1);
+  --lift: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent), 0 6px 18px color-mix(in srgb, var(--ink) 8%, transparent);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* design: evergreen dark */
+    --sidebar: #141C17; --ground: #0E1410; --card: #1C2620; --panel: #18221C; --field: #202B24;
+    --edge: #34443A; --hover: #25322A; --selection: #2A3D31; --needs-tint: #4A251C;
+    --ink: #ECF0E6; --muted: #B3BFB5; --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
+    --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD; --waves: #9CC5A1;
+    /* design: end */
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; flex-direction: column;
+  background: var(--sidebar); color: var(--ink);
+  font: 13px/1.42 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button, input, textarea { font: inherit; color: inherit; }
+a { color: var(--accent-ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+
+/* ---- The header: the sun mark, the tool, and how Irie stands ---------- */
+
+.top {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--edge);
+}
+.sun { width: 26px; height: 26px; flex: none; }
+.sun-ground { fill: var(--accent); }
+.sun-rays { stroke: var(--sun); stroke-width: 3; stroke-linecap: round; fill: none; }
+.sun-disc { fill: var(--sun); }
+.sun-wave { stroke: var(--waves); stroke-width: 3.2; stroke-linecap: round; fill: none; }
+.sun-foam { stroke: var(--card); stroke-width: 3.2; stroke-linecap: round; fill: none; }
+@media (prefers-color-scheme: dark) {
+  .sun-ground { fill: var(--panel); }
+}
+.top-names { flex: 1; min-width: 0; }
+.top-name { font: 650 14px/1.2 var(--round); }
+.top-tool { color: var(--muted); font-size: 12px; }
+.top-state { flex: none; max-width: 45%; color: var(--muted); font-size: 12px; text-align: right; }
+
+/* ---- The body ----------------------------------------------------------- */
+
+main { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 18px; outline: 0; }
+.stack { display: grid; gap: 10px; }
+
+.card {
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--card); box-shadow: 0 0 0 1px color-mix(in srgb, var(--edge) 70%, transparent);
+}
+.card h2, .card h3 { margin: 0; }
+.lead { font: 650 15px/1.3 var(--round); margin: 0 0 4px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.steps { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+.steps li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmd {
+  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  padding: 6px 6px 6px 10px; border-radius: var(--r-control);
+  background: var(--panel); box-shadow: inset 0 0 0 1px var(--edge);
+  font: 12px var(--mono);
+}
+.cmd code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 28px; padding: 4px 12px; border: 0; border-radius: var(--r-control);
+  background: var(--card); box-shadow: inset 0 0 0 1px var(--edge);
+  cursor: pointer; font-weight: 550;
+}
+.button:hover { background: var(--hover); }
+.button.is-prominent { background: var(--accent-fill); color: var(--on-accent); box-shadow: none; }
+.button.is-small { min-height: 24px; padding: 2px 9px; font-size: 12px; }
+.button:disabled { opacity: .55; cursor: default; }
+.link-button { border: 0; padding: 0; background: none; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+.link-button:hover { text-decoration: underline; }
+
+.field {
+  width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: var(--r-control);
+  background: var(--field); box-shadow: inset 0 0 0 1px var(--edge);
+}
+.field::placeholder { color: var(--muted); }
+.field:focus { outline: 0; box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.row { display: flex; gap: 6px; align-items: center; }
+.row .field { flex: 1; min-width: 0; }
+
+/* ---- The document's head ----------------------------------------------- */
+
+.doc-site { font: 650 16px/1.25 var(--round); overflow-wrap: anywhere; }
+.doc-title { margin-top: 2px; overflow-wrap: anywhere; }
+.doc-title a { color: inherit; text-decoration-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+.doc-facts { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.doc-other { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.warn {
+  margin-top: 8px; padding: 8px 10px; border-radius: var(--r-control);
+  background: var(--needs-tint); color: var(--ink); font-size: 12px;
+}
+
+/* The tally: a count of each verdict, which jumps to its points. Each has
+   its own glyph, so colour never carries it alone. */
+.tally { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.count {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px;
+  border: 0; border-radius: 13px; background: var(--panel); color: var(--ink);
+  font-variant-numeric: tabular-nums; cursor: pointer; font-size: 12px;
+}
+.count:hover { background: var(--hover); }
+.count b { font-weight: 700; }
+
+/* ---- Verdicts ------------------------------------------------------------ */
+
+.mark { display: inline-grid; place-items: center; flex: none; width: 1.2em; font-weight: 800; line-height: 1; }
+.v-against { --v: var(--needs); }
+.v-watch { --v: var(--paused); }
+.v-know { --v: var(--frozen); }
+.v-for { --v: var(--done); }
+.mark, .count .mark { color: var(--v); }
+
+.group-head {
+  display: flex; align-items: center; gap: 6px; margin: 14px 2px 6px;
+  color: var(--muted); font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+}
+.group-head .n { font-variant-numeric: tabular-nums; }
+.group-head.flush { margin-top: 0; }
+
+.point {
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 8px;
+  padding: 10px 12px; border-radius: var(--r);
+  background: var(--card); box-shadow: 0 0 0 1px color-mix(in srgb, var(--edge) 70%, transparent);
+}
+.point + .point { margin-top: 6px; }
+.point.v-against { background: color-mix(in srgb, var(--needs-tint) 55%, var(--card)); }
+.point .mark { margin-top: 2px; font-size: 13px; }
+.point-title { font-weight: 650; }
+.point-says { grid-column: 2; }
+.point-more { grid-column: 2; margin-top: 4px; }
+.point-more summary {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer; list-style: none;
+  color: var(--accent-ink); font-size: 12px; font-weight: 600;
+}
+.point-more summary::-webkit-details-marker { display: none; }
+.point-more summary::before { content: "›"; display: inline-block; transition: transform .15s var(--ease); }
+.point-more[open] summary::before { transform: rotate(90deg); }
+.quote {
+  margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--v, var(--accent)) 55%, transparent);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  background: var(--panel); color: var(--ink); font-size: 12.5px; overflow-wrap: anywhere;
+}
+.quote-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 5px; color: var(--muted); font-size: 11.5px; }
+.quote-meta a, .quote-meta button { font-size: 11.5px; }
+
+.missing { margin-top: 6px; display: grid; gap: 4px; }
+.missing div { display: flex; gap: 8px; }
+.missing .mark { color: var(--muted); }
+
+.fine { margin: 16px 4px 0; color: var(--muted); font-size: 11.5px; }
+
+/* ---- Reading --------------------------------------------------------------- */
+
+.reading { display: flex; align-items: center; gap: 10px; }
+.spinner {
+  width: 16px; height: 16px; flex: none; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent);
+  animation: spin .9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.links { margin-top: 8px; display: grid; gap: 4px; }
+.links button { text-align: left; }
+
+/* ---- The chat ---------------------------------------------------------------- */
+
+.thread { display: grid; gap: 8px; margin-top: 14px; }
+.msg-q {
+  justify-self: end; max-width: 85%; padding: 7px 11px; border-radius: 14px 14px 4px 14px;
+  background: var(--selection); overflow-wrap: anywhere;
+}
+.msg-a {
+  max-width: 100%; padding: 10px 12px; border-radius: 14px 14px 14px 4px;
+  background: var(--card); box-shadow: 0 0 0 1px color-mix(in srgb, var(--edge) 70%, transparent);
+  overflow-wrap: anywhere;
+}
+.msg-a .quote { --v: var(--accent); }
+.msg-by { margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+.msg-a.is-writing .msg-says::after { content: "▍"; color: var(--muted); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.chat {
+  flex: none; padding: 8px 12px 10px;
+  border-top: 1px solid var(--edge); background: var(--sidebar);
+}
+.suggest { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+.suggest::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; height: 26px; padding: 0 10px; border: 0; border-radius: 13px;
+  background: var(--card); box-shadow: inset 0 0 0 1px var(--edge);
+  font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.chip:hover { background: var(--hover); }
+.ask {
+  display: flex; align-items: flex-end; gap: 6px; padding: 4px 4px 4px 10px;
+  border-radius: 12px; background: var(--field); box-shadow: inset 0 0 0 1px var(--edge);
+}
+.ask:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.ask textarea {
+  flex: 1; min-width: 0; max-height: 120px; padding: 5px 0; border: 0; outline: 0; resize: none;
+  background: transparent; line-height: 1.4;
+}
+.ask textarea::placeholder { color: var(--muted); }
+.send {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px;
+  background: var(--accent-fill); color: var(--on-accent); cursor: pointer;
+}
+.send:disabled { opacity: .45; cursor: default; }
+.send svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.model { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--muted); font-size: 11.5px; cursor: pointer; }
+.model input { margin: 0; accent-color: var(--accent); }

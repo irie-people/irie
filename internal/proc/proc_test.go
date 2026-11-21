@@ -78,7 +78,14 @@ func TestArgsReadsAChildsArgumentsAndEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	// Start returns once the child's exec is past its point of no return,
+	// and Linux sets out the new program's arguments a moment later: until
+	// then /proc/<pid>/cmdline reads empty, as it did on a busy runner.
 	argv, env, err := Args(cmd.Process.Pid)
+	for deadline := time.Now().Add(5 * time.Second); err == nil && len(argv) == 0 && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+		argv, env, err = Args(cmd.Process.Pid)
+	}
 	if errors.Is(err, errors.ErrUnsupported) {
 		t.Skip("no process arguments on", runtime.GOOS)
 	}

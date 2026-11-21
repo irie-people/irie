@@ -170,7 +170,12 @@ struct CoreConfig: Decodable, Equatable {
         var newTabs: String
         /// What the strip under the terminal shows: cheer or tips.
         var bar: String
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar }
+        /// Where a link clicked in a terminal opens: rolodex or browser.
+        var terminalLinks: String
+        enum CodingKeys: String, CodingKey {
+            case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar
+            case terminalLinks = "terminal_links"
+        }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -181,6 +186,8 @@ struct CoreConfig: Decodable, Equatable {
             newTabs = try c.decodeIfPresent(String.self, forKey: .newTabs) ?? "last"
             // A core from before ui.bar shows the phrases.
             bar = try c.decodeIfPresent(String.self, forKey: .bar) ?? "cheer"
+            // A core from before terminal links leaves them to the Mac.
+            terminalLinks = try c.decodeIfPresent(String.self, forKey: .terminalLinks) ?? "browser"
         }
     }
 
@@ -865,7 +872,36 @@ private struct AppearanceSettings: View {
             } header: {
                 Text("Layouts")
             } footer: {
-                footnote("A layout keeps how the window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. View › Layout puts one back, and ⌃⌘1 to ⌃⌘9 your first nine.")
+                footnote("A layout keeps how the window is arranged: what the right side shows, the sidebar and which side it is on, the details panel, the right sidebar and the text size. View › Layout puts one back, and ⌃⌘1 to ⌃⌘9 your first nine; Fn+X Fn+L Fn+R reverses the window.")
+            }
+            // Zen's own layout, apart from the window's (Zen.swift).
+            Section {
+                ZenPicker(selection: Bindable(store.zen).layout)
+                    .padding(.vertical, 4)
+                // Centred's alone, but always there, so nothing below it
+                // moves as the layout changes.
+                Picker("Centred column", selection: Bindable(store.zen).columns) {
+                    ForEach(ZenModel.widths, id: \.self) { n in Text("\(n) columns").tag(n) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(store.zen.layout != .centred)
+                LabeledContent("Text size") {
+                    HStack(spacing: 10) {
+                        Stepper(value: Binding(get: { Int(store.zen.textSize ?? Double(store.windowFontSize)) },
+                                               set: { store.setZenText(Double($0)) }), in: 9...28) {
+                            Text(store.zen.textSize.map { "\(Int($0)) pt" } ?? "\(Int(store.windowFontSize)) pt, as the window")
+                                .monospacedDigit()
+                        }
+                        // Always there, so the stepper never moves.
+                        Button("Same as the Window") { store.setZenText(nil) }
+                            .disabled(store.zen.textSize == nil)
+                    }
+                }
+                Toggle("Fill the screen", isOn: Binding(get: { store.zen.fullScreen }, set: { store.setZenFullScreen($0) }))
+            } header: {
+                Text("Zen")
+            } footer: {
+                footnote("Fn+Z, or View › Enter Zen Mode, shows the session on show with only its own panes, its card a bubble over the terminal: no other sessions, toolbar or right sidebar, full screen unless you turn that off. Fn+Z again gives the window back as it was. Zen keeps this layout and its own text size, apart from the window’s: ⌘+ and ⌘- in zen change zen’s. ⌃Tab and ⌘1 to ⌘9 still go to another session; asking for something zen hides, such as the right sidebar or the session list, ends zen.")
             }
             Section {
                 Picker("On the right", selection: Bindable(store).showTerminal) {
@@ -874,8 +910,8 @@ private struct AppearanceSettings: View {
                 }
                 .pickerStyle(.segmented)
                 LabeledContent("Terminal text") {
-                    Stepper(value: Binding(get: { Int(store.fontSize) }, set: { store.setFontSize(CGFloat($0)) }), in: 9...28) {
-                        Text("\(Int(store.fontSize)) pt").monospacedDigit()
+                    Stepper(value: Binding(get: { Int(store.windowFontSize) }, set: { store.setWindowFontSize(CGFloat($0)) }), in: 9...28) {
+                        Text("\(Int(store.windowFontSize)) pt").monospacedDigit()
                     }
                 }
                 if TerminalEngine.built.count > 1 {
@@ -892,6 +928,27 @@ private struct AppearanceSettings: View {
                     ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
                     : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
+            }
+            Section {
+                switch (store.link, model.config) {
+                case let (.online, c?):
+                    Picker("Open links in", selection: model.bind(c, \.ui.terminalLinks, "ui.terminal_links")) {
+                        Text("Panes").tag("rolodex")
+                        Text("Your Browser").tag("browser")
+                    }
+                    .pickerStyle(.segmented)
+                default:
+                    Picker("Open links in", selection: .constant(store.terminalLinks)) {
+                        Text("Panes").tag("rolodex")
+                        Text("Your Browser").tag("browser")
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(true)
+                }
+            } header: {
+                Text("Links in the Terminal")
+            } footer: {
+                footnote("⌘-click a link in a terminal to open it. In the panes, a page opens on a Browser card beside its session, or on the one that shows it already, and a file on the Code card at its line. ⇧⌘-click opens a link in the other place. A mail address, a folder or a picture opens in its own app either way; an app or a script is shown in Finder, never run.")
             }
             Section {
                 Picker("Code colours", selection: $codeTheme) {
@@ -2020,6 +2077,10 @@ private struct PluginPartRow: View {
                 Button("Set Up…") { run(setup) }
                     .help("Starts \(setup)")
             }
+            // Bitwarden unlocks here too, as in a pane's key.
+            if plugin.name == "bitwarden", part.name == "autofill", plugin.on, part.state == "ready" {
+                BitwardenLockButton()
+            }
             if part.switch != nil {
                 Toggle(part.title, isOn: Binding(get: { part.on }, set: { model.setPlugin(plugin.name, part: part.name, on: $0) }))
                     .labelsHidden()
@@ -2051,13 +2112,15 @@ private struct PluginPartRow: View {
     }
 }
 
-/// Settings › Tabs: where new sessions go, and closing and moving the cards
-/// your way (Tabs.swift).
+/// Settings › Tabs: where new sessions go, closing and moving the cards
+/// your way (Tabs.swift), and whether ⌘Z asks first (Undo.swift).
 @MainActor
 private struct TabsSettings: View {
     @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @AppStorage(CloseFromPointer.defaultsKey) private var closeFromPointer = true
+    @AppStorage(UndoConfirm.defaultsKey) private var confirmUndo = true
+    @AppStorage(KeyPeek.holdKey) private var peekHold = true
 
     var body: some View {
         SettingsForm(model: model) {
@@ -2100,12 +2163,27 @@ private struct TabsSettings: View {
                 footnote("The card under the pointer shows a × in place of its mark, and a middle click closes it. ⌘W closes the selected card, or every card you picked with ⌘-click or ⇧-click. A card’s menu closes the others, those below it, or all finished, and a group’s header closes its group: ⌘Z brings back all that one close took. Pinned cards stay through all of these, and through close when done.")
             }
             Section {
+                Toggle("Ask before ⌘Z undoes or ⇧⌘Z redoes", isOn: $confirmUndo)
+            } header: {
+                Text("Undo")
+            } footer: {
+                footnote("The question names the step, as Undo Close “api-fix”?, and says when it was taken. Return or the same key again goes ahead, and Esc leaves everything as it is. Edit › Undo, clicked, and a notice’s Undo name their step already, so they take it at once.")
+            }
+            Section {
                 LabeledContent("Move up or down", value: "⌥⌘↑  ⌥⌘↓")
                 LabeledContent("To the top or bottom of its group", value: "⇧⌥⌘↑  ⇧⌥⌘↓")
             } header: {
                 Text("Moving")
             } footer: {
                 footnote("Or drag a card. Dropped across Pinned’s edge it is pinned, and across Parked’s it is parked. Pin to the Top is in a card’s menu and in File; Boost gives a card the machine first and leaves it where it is.")
+            }
+            Section {
+                Toggle("Show what a key held alone does", isOn: $peekHold)
+                LabeledContent("The key tree", value: "Fn+X, then keys with fn")
+            } header: {
+                Text("Keys")
+            } footer: {
+                footnote("Hold fn, ⌘, ⌃ or ⌥ by itself a moment and the keys that go with it show, those of where you type first: Claude Code’s in its terminal, a code card’s in the card. A chord shows its next keys a moment in: Fn+X for \(Brand.name)’s tree, and Ctrl+X in Claude Code, whose S then sends at once. Fn+, opens these settings and Fn+S a new task. Your own chords go in keys.json, beside your layouts.")
             }
         }
     }

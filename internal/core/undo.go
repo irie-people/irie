@@ -53,6 +53,9 @@ type action struct {
 	Label   string         `json:"label"`   // what the header shows, as `close "api-fix"`
 	At      time.Time      `json:"at"`
 	Data    map[string]any `json:"data,omitempty"` // what the kind needs to undo it, such as when it closed
+	// Moved is when undo or redo last took the step, or settled it: zero
+	// until one has. A confirmation says it (confirmChoice).
+	Moved time.Time `json:"moved,omitzero"`
 	// Batch names the steps taken together, as one close of several
 	// sessions: undo and redo take them together (undo).
 	Batch string `json:"batch,omitempty"`
@@ -382,6 +385,10 @@ type effect struct {
 	// do takes the effect, without c.mu, and returns the step as it then
 	// stands, such as the session's new name. On an error nothing changed.
 	do func(c *Core, a action) (action, error)
+	// note, when set, is what a confirmation adds about taking the
+	// effect, such as what waking a cold conversation costs; "" for
+	// nothing. The caller holds c.mu.
+	note func(c *Core, a action) string
 }
 
 // problem is one reason an effect is uncertain, and what the user may do
@@ -415,7 +422,7 @@ const (
 
 func init() {
 	closeEff := effect{check: checkClose, do: doClose}
-	reopenEff := effect{check: checkReopen, do: doReopen}
+	reopenEff := effect{check: checkReopen, do: doReopen, note: reopenPrice}
 	registerAction(actSpawn, actionKind{verb: "start", undo: closeEff, redo: reopenEff})
 	registerAction(actClose, actionKind{verb: "close", undo: reopenEff, redo: closeEff})
 	registerAction(actReopen, actionKind{verb: "reopen", undo: closeEff, redo: reopenEff})
@@ -604,6 +611,70 @@ func offers(p *problem, key string) bool {
 	return slices.ContainsFunc(p.options, func(o ipc.ChoiceOption) bool { return o.Key == key })
 }
 
+// confirmCode names the question UndoArgs.Confirm asks, which is about no
+// problem: only whether to take the step.
+const confirmCode = "confirm"
+
+// confirmChoice asks whether dir should take step a, next under label,
+// which for the first step of a batch is the batch's: when the step was
+// taken, or last undone or redone, what the other way does, and what eff's
+// note adds. Apply, recommended, takes it; cancel changes nothing. The
+// caller holds c.mu.
+func (c *Core) confirmChoice(a action, dir, label string, eff effect, now time.Time) *ipc.Choice {
+	verb, then := "Undo", "Redo does it again."
+	when, at := "Done", a.At
+	if !a.Moved.IsZero() {
+		when, at = "Redone", a.Moved
+	}
+	if dir == dirRedo {
+		verb, then = "Redo", "Undo takes it back again."
+		when, at = "Undone", a.Moved
+	}
+	detail := then
+	if !at.IsZero() {
+		detail = when + " " + ago(now.Sub(at)) + ". " + then
+	}
+	if eff.note != nil {
+		if n := eff.note(c, a); n != "" {
+			detail += " " + n
+		}
+	}
+	return &ipc.Choice{
+		ID:       choiceID(a, dir, []string{confirmCode}),
+		Question: verb + " " + label + "?",
+		Options: []ipc.ChoiceOption{
+			{Key: ipc.ChoiceApply, Label: verb, Detail: detail, Recommended: true},
+			{Key: ipc.ChoiceCancel, Label: "Cancel", Detail: "Leaves everything as it is, the history too."},
+		},
+		Confirm: true,
+	}
+}
+
+// ago says roughly how long ago d was: just now, 12 minutes ago, 3 hours
+// ago, 2 days ago.
+func ago(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return counted(int(d/time.Minute), "minute") + " ago"
+	case d < 48*time.Hour:
+		return counted(int(d/time.Hour), "hour") + " ago"
+	}
+	return counted(int(d/(24*time.Hour)), "day") + " ago"
+}
+
+// reopenPrice is what a confirmation of a reopen adds: what the session's
+// next turn costs once its prompt cache has run out, or "". The caller
+// holds c.mu.
+func reopenPrice(c *Core, a action) string {
+	r, ok := c.closedRecord(a.Session)
+	if !ok || c.sessions[a.Session] != nil {
+		return ""
+	}
+	return strings.TrimSpace(c.reopenNote(r, time.Now()))
+}
+
 // undo undoes or redoes, by dir, the next step of the history (DESIGN
 // §4.5), and with it the rest of its batch: steps taken together, as one
 // close of several sessions, go back together, under the batch's label.
@@ -721,7 +792,9 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 			unlock()
 			return res, ipc.Errorf(ipc.CodeStale, "things changed since "+brand.Name+" asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
 		}
-		c.steps.hist.finish(dir, top.ID, top)
+		settled := top
+		settled.Moved = time.Now().UTC().Truncate(time.Millisecond)
+		c.steps.hist.finish(dir, top.ID, settled)
 		c.saveState()
 		c.journalStep(dir, top, before, before, ipc.ChoiceSettle)
 		unlock()
@@ -741,6 +814,13 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 		return res, ipc.Errorf(ipc.CodeBadArgs, "unknown choice %q", a.Choice)
 	case p != nil:
 		return ask(p, nil)
+	case a.Confirm:
+		// Certain, but asked to confirm first: the question names the step
+		// as the header does, a batch by its own label.
+		res.Label = c.steps.hist.label(dir)
+		res.Did, res.Choice = ipc.DidAsk, c.confirmChoice(top, dir, res.Label, eff, time.Now())
+		unlock()
+		return res, nil
 	}
 	unlock()
 
@@ -751,6 +831,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 	}
 	c.mu.Lock()
 	done.Label = kind.labelOf(done)
+	done.Moved = time.Now().UTC().Truncate(time.Millisecond)
 	c.steps.hist.finish(dir, top.ID, done)
 	c.saveState()
 	c.journalStep(dir, done, before, c.whereIs(top.Session), a.Choice)

@@ -2,10 +2,13 @@ package core
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 
 	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -45,7 +48,7 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 	if p != nil {
 		why = c.hooksDiffer(p)
 	}
-	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home, Exists: fileExists}
+	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home, Exists: fileExists, Profiles: c.plusNames()}
 	c.mu.Unlock()
 	if p != nil {
 		if why != "" {
@@ -68,6 +71,10 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 		res, err := c.mailOp(peer, st.Args.(ipc.MailArgs))
 		return irie.Said(st, res, err)
 	}
+	if st.Op == ipc.OpYoink {
+		res, err := c.yoinkOp(peer, st.Args.(ipc.YoinkArgs))
+		return irie.Said(st, res, err)
+	}
 	// With place.mode = auto, a new task may go to a peer with more room.
 	if sa, ok := st.Args.(ipc.SpawnArgs); ok && st.Op == ipc.OpSpawn {
 		if r, placed, err := c.placeTask(a, sa); placed {
@@ -80,6 +87,21 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 	}
 	res, err := c.Call(st.Op, raw)
 	return irie.Said(st, res, err)
+}
+
+// plusNames are the names a typed + word picks a profile by (core.View):
+// this machine's profiles and its peers', as a task placed on a peer may
+// run on one of theirs (place.go), auto, and the local models' prefixes.
+// The caller holds c.mu.
+func (c *Core) plusNames() []string {
+	names := slices.Collect(maps.Keys(c.cfg().Profiles))
+	for _, p := range c.peers {
+		if p.header != nil && p.header.Machine != nil {
+			names = append(names, p.header.Machine.Profiles...)
+		}
+	}
+	slices.Sort(names)
+	return append(slices.Compact(names), config.Auto, localPrefix, llamaPrefix)
 }
 
 // fileExists says whether there is anything at a path, as :open asks.

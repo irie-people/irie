@@ -45,6 +45,8 @@ type (
 	PeerCaller       = ipc.PeerCaller
 	Hearer           = ipc.Hearer
 	Client           = ipc.Client
+	LinkArgs         = ipc.LinkArgs
+	LinkResult       = ipc.LinkResult
 	Lock             = ipc.Lock
 	LockPart         = ipc.LockPart
 	LockPackage      = ipc.LockPackage
@@ -72,6 +74,8 @@ type (
 	CardArgs         = ipc.CardArgs
 	PaneArgs         = ipc.PaneArgs
 	PaneResult       = ipc.PaneResult
+	SizesArgs        = ipc.SizesArgs
+	Size             = ipc.Size
 	PeersArgs        = ipc.PeersArgs
 	PeersResult      = ipc.PeersResult
 	PeerFetch        = ipc.PeerFetch
@@ -211,6 +215,11 @@ type (
 	WorktreesArgs    = ipc.WorktreesArgs
 	WorktreesResult  = ipc.WorktreesResult
 	ClosedTree       = ipc.ClosedTree
+	YoinkArgs        = ipc.YoinkArgs
+	YoinkResult      = ipc.YoinkResult
+	YoinkInfo        = ipc.YoinkInfo
+	YoinkChoice      = ipc.YoinkChoice
+	YoinkDownload    = ipc.YoinkDownload
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -276,6 +285,11 @@ const (
 	InputRan           = ipc.InputRan
 	InputAsked         = ipc.InputAsked
 	MaxMessage         = ipc.MaxMessage
+	OpLink             = ipc.OpLink
+	LinkMax            = ipc.LinkMax
+	LinkInCard         = ipc.LinkInCard
+	LinkInSystem       = ipc.LinkInSystem
+	LinkInReveal       = ipc.LinkInReveal
 	OpLock             = ipc.OpLock
 	LockSpawn          = ipc.LockSpawn
 	LockResume         = ipc.LockResume
@@ -329,6 +343,8 @@ const (
 	OpPane             = ipc.OpPane
 	OpCard             = ipc.OpCard
 	CardFileMax        = ipc.CardFileMax
+	OpSizes            = ipc.OpSizes
+	SizeMax            = ipc.SizeMax
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
 	OpPerf             = ipc.OpPerf
@@ -375,6 +391,7 @@ const (
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
 	FeatureBoostAlways = ipc.FeatureBoostAlways
 	FeatureWatch       = ipc.FeatureWatch
+	FeatureUndoConfirm = ipc.FeatureUndoConfirm
 	ViewApp            = ipc.ViewApp
 	ViewWatch          = ipc.ViewWatch
 	CodeBadRequest     = ipc.CodeBadRequest
@@ -436,6 +453,7 @@ const (
 	ToolPrivacy        = ipc.ToolPrivacy
 	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
+	ToolExtension      = ipc.ToolExtension
 	HelperItemsMax     = ipc.HelperItemsMax
 	PaneWeb            = ipc.PaneWeb
 	BundleOn           = ipc.BundleOn
@@ -490,4 +508,18 @@ const (
 	VariorumNeeds      = ipc.VariorumNeeds
 	VariorumOff        = ipc.VariorumOff
 	OpWorktrees        = ipc.OpWorktrees
+	OpYoink            = ipc.OpYoink
+	YoinkList          = ipc.YoinkList
+	YoinkFormats       = ipc.YoinkFormats
+	YoinkStart         = ipc.YoinkStart
+	YoinkCancel        = ipc.YoinkCancel
+	YoinkClear         = ipc.YoinkClear
+	YoinkBest          = ipc.YoinkBest
+	YoinkAudio         = ipc.YoinkAudio
+	YoinkStarting      = ipc.YoinkStarting
+	YoinkDownloading   = ipc.YoinkDownloading
+	YoinkProcessing    = ipc.YoinkProcessing
+	YoinkDone          = ipc.YoinkDone
+	YoinkFailed        = ipc.YoinkFailed
+	YoinkCanceled      = ipc.YoinkCanceled
 )

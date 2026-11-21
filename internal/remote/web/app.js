@@ -8,6 +8,7 @@ import * as L from './js/look.js';
 import { esc } from './js/md.js';
 import { loadMachines, saveMachines, call, pair, info, forget, normalize, host, Stream } from './js/net.js';
 import { SessionView, grow, looseWords } from './js/conv.js';
+import * as List from './js/list.js';
 import * as Push from './js/push.js';
 
 const params = new URLSearchParams(location.search);
@@ -82,6 +83,8 @@ const S = {
   filter: false,
   parkedOpen: read('irie.parkedOpen', {}),
   closedOpen: {},
+  outsideOpen: {},
+  folded: read('irie.folded', {}), // machine id|pinned or g:<group id> → folded
   task: read('irie.task', { mid: '', by: {} }),
   welcome: !STANDALONE && MOBILE && !localStorage.getItem('irie.browser'),
   screen: '',
@@ -98,6 +101,10 @@ class Conn {
     this.header = {};
     this.history = { undo: '', redo: '' };
     this.closed = [];
+    this.outside = [];
+    this.pick = null; // the space picked on the phone, while its screen stays where it was then (pickAt)
+    this.pickAt = null;
+    this.lastScreen = null;
     this.loaded = false;
     this.features = null;
     this.info = null;
@@ -151,6 +158,9 @@ class Conn {
       case 'closed':
         this.closed = f.closed || [];
         break;
+      case 'outside':
+        this.outside = f.outside || [];
+        break;
       default:
         return;
     }
@@ -196,6 +206,21 @@ class Conn {
 
   get redOnDone() {
     return !!(this.header && this.header.red_on_done);
+  }
+
+  /** Its spaces, as the Mac's chips under its list: [{id, name}], the first first. */
+  spaceList() {
+    return this.header && Array.isArray(this.header.spaces) ? this.header.spaces : [];
+  }
+
+  /** The space its own screen shows: that of the session shown there; null while none shows. */
+  screenSpace() {
+    return List.screenSpace(this.sessions.values());
+  }
+
+  /** The space the phone shows: the one its screen shows, unless the phone picked another since. */
+  spaceShown() {
+    return List.shownSpace(this, this.spaceList(), this.screenSpace());
   }
 }
 
@@ -644,6 +669,8 @@ function buildSection(c) {
   sec._conn = c;
   sec._head = h('h2', { class: 'msec-head' });
   sec._note = h('div', { class: 'msec-note', hidden: true });
+  sec._spaces = h('div', { class: 'space-chips', role: 'tablist', 'aria-label': 'Spaces', hidden: true });
+  sec._spaceNote = h('div', { class: 'space-note', hidden: true });
   sec._live = h('div', { class: 'cards' });
   sec._parkedHead = h('button', { class: 'divider', 'aria-expanded': 'false', onclick: () => {
     S.parkedOpen[c.m.id] = !S.parkedOpen[c.m.id];
@@ -651,14 +678,82 @@ function buildSection(c) {
     invalidate();
   } });
   sec._parked = h('div', { class: 'cards parked' });
+  sec._outsideHead = h('button', { class: 'divider', 'aria-expanded': 'false', onclick: () => {
+    S.outsideOpen[c.m.id] = !S.outsideOpen[c.m.id];
+    invalidate();
+  } });
+  sec._outside = h('div', { class: 'closed-list' });
   sec._closedHead = h('button', { class: 'divider', 'aria-expanded': 'false', onclick: () => {
     S.closedOpen[c.m.id] = !S.closedOpen[c.m.id];
     invalidate();
   } });
   sec._closed = h('div', { class: 'closed-list' });
-  sec.append(sec._head, sec._note, sec._live, sec._parkedHead, sec._parked, sec._closedHead, sec._closed);
+  sec.append(sec._head, sec._note, sec._spaces, sec._spaceNote, sec._live, sec._parkedHead, sec._parked, sec._outsideHead, sec._outside, sec._closedHead, sec._closed);
   sec._rows = new Map();
+  sec._heads = new Map();
   return sec;
+}
+
+// ---- Spaces and groups, as the Mac's sidebar draws them --------------------
+// One space at a time, the one the machine's own screen shows unless the
+// person picked another on the phone; in it Pinned, your groups and the
+// cards of none, then Parked (js/list.js).
+
+function pickSpace(c, key) {
+  List.pickSpace(c, key, c.screenSpace());
+  if (refs.homeScroll) refs.homeScroll.scrollTop = 0;
+  invalidate();
+}
+
+function renderSpaces(sec, c, list, key) {
+  const screen = c.screenSpace() ?? c.lastScreen;
+  const k = JSON.stringify([list, key, screen]);
+  if (sec._spacesKey === k) return;
+  sec._spacesKey = k;
+  sec._spaces.hidden = list.length < 2;
+  sec._spaces.replaceChildren(...list.map((sp, i) => {
+    const sk = List.spaceKey(list, i);
+    const here = screen != null && sk === screen;
+    return h('button', {
+      class: 'schip', role: 'tab', 'aria-selected': String(sk === key),
+      'aria-label': sp.name + (here ? `, the space ${c.m.name}’s own screen shows` : ''),
+      onclick: () => pickSpace(c, sk),
+    }, h('span', { class: 'schip-name', text: sp.name }), here ? h('span', { class: 'schip-here', 'aria-hidden': 'true', html: ICON.machine }) : null);
+  }));
+}
+
+/** Whether a group of this machine's, or Pinned, is folded on this phone. */
+const folded = (c, key) => !!S.folded[c.m.id + '|' + key];
+
+function toggleFold(c, key) {
+  const k = c.m.id + '|' + key;
+  if (S.folded[k]) delete S.folded[k];
+  else S.folded[k] = true;
+  try {
+    localStorage.setItem('irie.folded', JSON.stringify(S.folded));
+  } catch {
+    // Private mode: the fold lasts while the app is open.
+  }
+  invalidate();
+}
+
+/** The space's rows as the Mac's List view draws them (js/list.js). */
+const arrange = (c, rows) => List.arrange(rows, c.header && c.header.groups, (key) => folded(c, key));
+
+function groupHead(c, key) {
+  const el = h('button', { class: 'ghead', 'aria-expanded': 'true', onclick: () => toggleFold(c, key) });
+  el.dataset.head = key;
+  return el;
+}
+
+function fillHead(el, e) {
+  const sig = JSON.stringify([e.title, e.n, e.loud, e.open]);
+  if (el._sig === sig) return;
+  el._sig = sig;
+  el.setAttribute('aria-expanded', String(e.open));
+  el.replaceChildren(...[h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'gh-title', text: e.title }),
+    e.loud && !e.open ? h('span', { class: 'dv-loud', text: `· ${e.loud} need${e.loud === 1 ? 's' : ''} you` }) : null,
+    h('span', { class: 'cnt', text: String(e.n) })].filter(Boolean));
 }
 
 /** Draws one machine's section; says whether it shows any card. */
@@ -689,22 +784,36 @@ function renderSection(sec, c, multi, now) {
   }
   sec.classList.toggle('stale', c.status !== 'connected');
   const { live, parked } = c.rows();
-  const pick = (list) => (S.filter ? list.filter((s) => L.loud(L.look(s))) : list);
-  const liveShown = c.status === 'unpaired' ? [] : pick(live);
-  const parkedShown = c.status === 'unpaired' ? [] : pick(parked);
+  const unpaired = c.status === 'unpaired';
+  // The space shown, as the Mac shows one; the filter shows what needs you in every space.
+  const spaces = S.filter || unpaired ? [] : c.spaceList();
+  const key = c.spaceShown();
+  renderSpaces(sec, c, spaces, key);
+  const inSpace = (s) => spaces.length < 2 || (s.space || '') === key;
+  const pick = (list) => (S.filter ? list.filter((s) => L.loud(L.look(s))) : list.filter(inSpace));
+  const liveShown = unpaired ? [] : pick(live);
+  const parkedShown = unpaired ? [] : pick(parked);
   const open = S.filter || !!S.parkedOpen[c.m.id];
-  placeRows(sec, sec._live, c, liveShown, now);
+  placeEntries(sec, sec._live, c, S.filter ? liveShown.map((s) => ({ s, depth: 0 })) : arrange(c, liveShown), now);
   placeRows(sec, sec._parked, c, open ? parkedShown : [], now);
+  // A space with nothing in it says so, where its cards would be.
+  const spaceName = spaces.length > 1 ? (spaces.find((sp, i) => List.spaceKey(spaces, i) === key) || spaces[0]).name : '';
+  const bare = spaces.length > 1 && !liveShown.length && !parkedShown.length;
+  sec._spaceNote.hidden = !bare;
+  if (bare && sec._spaceNote.textContent !== `Nothing in ${spaceName} now. A task you start here goes in it.`) {
+    sec._spaceNote.textContent = `Nothing in ${spaceName} now. A task you start here goes in it.`;
+  }
   // The Parked divider: its size, and in red how many of it need you.
-  const parkedLoud = parked.filter((s) => L.loud(L.look(s))).length;
+  const parkedLoud = parkedShown.filter((s) => L.loud(L.look(s))).length;
   sec._parkedHead.hidden = !parkedShown.length;
   const pk = `${parkedShown.length}|${parkedLoud}|${open}`;
   if (sec._pk !== pk) {
     sec._pk = pk;
     sec._parkedHead.setAttribute('aria-expanded', String(open));
-    sec._parkedHead.replaceChildren(h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'dv-title' + (parkedLoud ? ' loud' : ''), text: 'Parked' }),
+    // replaceChildren would write a null as the word "null": left out instead.
+    sec._parkedHead.replaceChildren(...[h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'dv-title' + (parkedLoud ? ' loud' : ''), text: 'Parked' }),
       parkedLoud && !open ? h('span', { class: 'dv-loud', text: `· ${parkedLoud} need${parkedLoud === 1 ? 's' : ''} you` }) : null,
-      h('span', { class: 'cnt', text: String(parkedShown.length) }));
+      h('span', { class: 'cnt', text: String(parkedShown.length) })].filter(Boolean));
   }
   // Closed: what reopen can bring back.
   const closed = S.filter || c.status === 'unpaired' ? [] : c.closed;
@@ -720,29 +829,67 @@ function renderSection(sec, c, multi, now) {
         h('div', { class: 'ci-when', text: (x.auto ? 'Closed itself ' : 'Closed ') + L.ageSpoken(x.closed, now) + (x.cold ? ' · ' + x.cold.words : '') })),
       h('button', { class: 'btn small', text: 'Reopen', onclick: () => reopen(c, x.id) }))) : []));
   }
+  // Outside Irie: Claude Code sessions it doesn't run, which the Mac lists in every space.
+  const outside = S.filter || unpaired ? [] : c.outside;
+  const oOpen = !!S.outsideOpen[c.m.id];
+  sec._outsideHead.hidden = !outside.length;
+  const ok = JSON.stringify([outside.map((x) => [x.vendor_id || x.id, x.name, x.status, x.waiting_for, x.state, x.cwd]), oOpen]);
+  if (sec._ok !== ok) {
+    sec._ok = ok;
+    sec._outsideHead.setAttribute('aria-expanded', String(oOpen));
+    sec._outsideHead.replaceChildren(h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'dv-title', text: 'Outside Irie' }), h('span', { class: 'cnt', text: String(outside.length) }));
+    sec._outside.replaceChildren(...(oOpen ? outside.map((x) => h('div', { class: 'closed-item' },
+      h('div', { class: 'ci-body' }, h('div', { class: 'ci-name', text: x.name || (x.cwd ? L.base(x.cwd) : 'Claude Code') }),
+        h('div', { class: 'ci-when', text: outsideWords(x) }))))
+      : []));
+  }
   sec.hidden = S.filter && !liveShown.length && !parkedShown.length;
-  return liveShown.length + parkedShown.length > 0 || (!!closed.length && !S.filter);
+  return liveShown.length + parkedShown.length > 0 || (!!closed.length && !S.filter) || (spaces.length > 1 && c.sessions.size > 0) || !!outside.length;
+}
+
+/** How a session outside Irie is: what it waits for, or its state, and where. */
+function outsideWords(x) {
+  const how = x.status === 'waiting' && x.waiting_for ? `Waiting: ${x.waiting_for}` : x.state || x.status || 'Not running';
+  return [how.charAt(0).toUpperCase() + how.slice(1), x.kind === 'background' ? 'in the background' : '', x.cwd ? L.base(x.cwd) : ''].filter(Boolean).join(' · ');
 }
 
 /** Puts these rows in this list, in this order, drawing only what changed. */
 function placeRows(sec, list, c, rows, now) {
+  placeEntries(sec, list, c, rows.map((s) => ({ s, depth: 0 })), now);
+}
+
+/** Puts these cards and heads in this list, in this order, each at its depth, drawing only what changed. */
+function placeEntries(sec, list, c, entries, now) {
   let cursor = list.firstElementChild;
-  const want = new Set(rows.map((s) => s.id));
-  for (const s of rows) {
-    let row = sec._rows.get(s.id);
-    if (!row) {
-      row = cardRow(c, s.id);
-      sec._rows.set(s.id, row);
+  const want = new Set();
+  for (const e of entries) {
+    let el;
+    if (e.s) {
+      el = sec._rows.get(e.s.id);
+      if (!el) {
+        el = cardRow(c, e.s.id);
+        sec._rows.set(e.s.id, el);
+      }
+      fillCard(el, c, e.s, now);
+    } else {
+      el = sec._heads.get(e.key);
+      if (!el) {
+        el = groupHead(c, e.key);
+        sec._heads.set(e.key, el);
+      }
+      fillHead(el, e);
     }
-    fillCard(row, c, s, now);
-    if (row === cursor) cursor = cursor.nextElementSibling;
-    else list.insertBefore(row, cursor);
+    want.add(el);
+    const depth = String(e.depth || 0);
+    if (el.style.getPropertyValue('--depth') !== depth) el.style.setProperty('--depth', depth);
+    if (el === cursor) cursor = cursor.nextElementSibling;
+    else list.insertBefore(el, cursor);
   }
-  for (const row of [...list.children]) {
-    if (!want.has(row.dataset.id)) {
-      row.remove();
-      if (!sec._live.contains(row) && !sec._parked.contains(row) && !c.sessions.has(row.dataset.id)) sec._rows.delete(row.dataset.id);
-    }
+  for (const el of [...list.children]) {
+    if (want.has(el)) continue;
+    el.remove();
+    const id = el.dataset.id;
+    if (id && !sec._live.contains(el) && !sec._parked.contains(el) && !c.sessions.has(id)) sec._rows.delete(id);
   }
 }
 
@@ -1104,6 +1251,9 @@ async function submitTask() {
   const args = { text };
   if (prefs.repo) args.repo = prefs.repo;
   if (prefs.profile) args.profile = prefs.profile;
+  // It starts in the space the phone shows, as the Mac's task bar starts one in its own.
+  const space = c.spaceShown();
+  if (space) args.space = space;
   t.busy = true;
   t.send.disabled = true;
   t.send.classList.add('busy');

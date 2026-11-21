@@ -953,9 +953,11 @@ struct SoftButton: ButtonStyle {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .foregroundStyle(prominent ? Theme.onAccent : Theme.ink)
-            .background(Capsule().fill(prominent ? Theme.accentFill : Theme.card))
-            .overlay(Capsule().strokeBorder(prominent ? Color.clear : Theme.edge, lineWidth: 1))
+            // Circular ends: the default capsule's hairline draws a flat
+            // tick at each end, past its fill (seen 2026-11-16).
+            .background(Capsule(style: .circular).fill(prominent ? Theme.accentFill : Theme.card))
+            .overlay(Capsule(style: .circular).strokeBorder(prominent ? Color.clear : Theme.edge, lineWidth: 1))
             .opacity(configuration.isPressed ? 0.75 : 1)
-            .contentShape(Capsule())
+            .contentShape(Capsule(style: .circular))
     }
 }

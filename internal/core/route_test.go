@@ -14,6 +14,7 @@ import (
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -300,6 +301,15 @@ func TestToolSessions(t *testing.T) {
 	}
 	if err := c.call("tool", ipc.ToolArgs{Name: "bogus"}, &r); err == nil {
 		t.Error("a tool that is not there")
+	}
+	// The browser extension plugin's setup, as :setup extension starts it.
+	if _, ok := plugins.Find("extension"); ok {
+		if err := c.call("tool", ipc.ToolArgs{Name: ipc.ToolExtension}, &r); err != nil {
+			t.Fatal(err)
+		}
+		if spec, err := host.ReadSpec(c.paths.SpecFile(r.Session.ID)); err != nil || !slices.Equal(spec.Argv, []string{c.bin, "setup", "extension"}) || r.Session.Name != "setup-extension" {
+			t.Errorf("extension tool: spec %+v (%v), session %+v", spec, err, r.Session)
+		}
 	}
 }
 

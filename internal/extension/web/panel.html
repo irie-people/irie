@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Irie</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<header class="top">
+  <svg class="sun" viewBox="0 0 64 64" aria-hidden="true">
+    <rect width="64" height="64" rx="14" class="sun-ground"/>
+    <path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" class="sun-rays"/>
+    <path d="M20 38a12 12 0 0 1 24 0z" class="sun-disc"/>
+    <path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" class="sun-wave"/>
+    <path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" class="sun-foam"/>
+  </svg>
+  <div class="top-names">
+    <div class="top-name" id="brand">Irie</div>
+    <div class="top-tool" id="tool">Terms in short</div>
+  </div>
+  <div class="top-state" id="state" role="status" aria-live="polite"></div>
+</header>
+<main id="main" tabindex="-1"></main>
+<footer class="chat" id="chat" hidden>
+  <div class="suggest" id="suggest"></div>
+  <form class="ask" id="ask">
+    <label class="sr" for="question">Ask about these terms</label>
+    <textarea id="question" rows="1" placeholder="Ask about these terms" autocomplete="off"></textarea>
+    <button type="submit" class="send" id="send" aria-label="Ask">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg>
+    </button>
+  </form>
+  <label class="model" id="model-row" hidden>
+    <input type="checkbox" id="model">
+    <span id="model-label">Word answers with a local model</span>
+  </label>
+</footer>
+<script src="brand.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>

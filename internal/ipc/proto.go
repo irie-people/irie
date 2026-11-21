@@ -139,6 +139,10 @@ const FeatureBoostAlways = "boost-always"
 // freeze dog watches the window that asks (DESIGN §2.4).
 const FeatureWatch = "watch"
 
+// FeatureUndoConfirm is in hello's features when undo and redo take
+// UndoArgs.Confirm.
+const FeatureUndoConfirm = "undo-confirm"
+
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
 const ViewApp = "app"
@@ -751,10 +755,15 @@ type Header struct {
 	CloseWhenDone bool `json:"close_when_done,omitempty"`
 	// HelperStyle is ui.helper_style: how a view draws a helper beside its
 	// session, as cards ("browser") or as a terminal ("terminal").
-	HelperStyle string  `json:"helper_style,omitempty"`
-	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
-	Load        *Load   `json:"load,omitempty"`   // how busy the machine is
+	HelperStyle string `json:"helper_style,omitempty"`
+	// TerminalLinks is ui.terminal_links: where a link clicked in a
+	// terminal opens, "rolodex" (the session's panes) or "browser" (the
+	// computer's own apps). The link op applies it; a settings window
+	// shows it while it can't read the config.
+	TerminalLinks string  `json:"terminal_links,omitempty"`
+	Plan          *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory        *Memory `json:"memory,omitempty"` // the machine's memory
+	Load          *Load   `json:"load,omitempty"`   // how busy the machine is
 	// Machine is what another core needs to know of this machine before
 	// it starts a task here.
 	Machine *Machine `json:"machine,omitempty"`
@@ -894,9 +903,16 @@ type ReopenResult struct {
 // own they undo it, unless that is uncertain: then nothing changes and the
 // result asks a Choice. ChoiceID and Choice answer it: the question's id,
 // which the core checks against the history's head, and the key picked.
+//
+// Confirm asks first even when the step is certain: a Choice with Confirm
+// set that names the step and says when it was taken, so that a key that
+// shows nothing of what it would take, as the Mac app's ⌘Z, takes only the
+// step the person saw. An uncertain step asks its own question instead,
+// which asks as much.
 type UndoArgs struct {
 	ChoiceID string `json:"choice_id,omitempty"`
 	Choice   string `json:"choice,omitempty"`
+	Confirm  bool   `json:"confirm,omitempty"`
 }
 
 // What an undo or redo did (UndoResult.Did).
@@ -926,11 +942,14 @@ type UndoResult struct {
 
 // Choice is a question the core asks before an uncertain undo or redo:
 // two to four options in plain words, the recommended one first, and always
-// skip and cancel among them.
+// skip and cancel among them. With Confirm it is the question
+// UndoArgs.Confirm asks of a certain step: apply, which takes it and is
+// recommended, and cancel.
 type Choice struct {
 	ID       string         `json:"id"`
 	Question string         `json:"question"`
 	Options  []ChoiceOption `json:"options"`
+	Confirm  bool           `json:"confirm,omitempty"`
 }
 
 // ChoiceOption is one answer to a Choice: its key, what it says, and what
@@ -1230,18 +1249,20 @@ type ToolArgs struct {
 }
 
 // Tools. Anon, browser and privacy run `irie setup NAME`, which sets up
-// that part of the privacy plugin, or each part of it in turn, and vpn
-// `irie setup vpn`, which sets up the VPN plugin (DESIGN §4.17).
+// that part of the privacy plugin, or each part of it in turn, vpn
+// `irie setup vpn`, which sets up the VPN plugin, and extension `irie setup
+// extension`, which sets up the browser extension plugin (DESIGN §4.17).
 const (
-	ToolSetup   = "setup"
-	ToolModels  = "models"
-	ToolReady   = "ready"
-	ToolSwitch  = "switch"
-	ToolAnon    = "anon"
-	ToolBrowser = "browser"
-	ToolPrivacy = "privacy"
-	ToolVPN     = "vpn"
-	ToolWrite   = "write"
+	ToolSetup     = "setup"
+	ToolModels    = "models"
+	ToolReady     = "ready"
+	ToolSwitch    = "switch"
+	ToolAnon      = "anon"
+	ToolBrowser   = "browser"
+	ToolPrivacy   = "privacy"
+	ToolVPN       = "vpn"
+	ToolWrite     = "write"
+	ToolExtension = "extension"
 )
 
 // PluginsArgs ask the plugins op for Irie's plugins, after turning a

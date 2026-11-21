@@ -24,7 +24,7 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar, TerminalLinks: "rolodex"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second, Preferences: Preferences()}); !reflect.DeepEqual(c.Spawn, want) {
@@ -185,6 +185,7 @@ theme = "lilac"
 freeze_dog = "20s"
 new_tabs = "next"
 bar = "tips"
+terminal_links = "browser"
 
 [spawn]
 default_profile = "fast"
@@ -288,7 +289,7 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second, NewTabs: "next", Bar: "tips"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second, NewTabs: "next", Bar: "tips", TerminalLinks: "browser"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second, Preferences: []string{"Text me in one line."}}); !reflect.DeepEqual(c.Spawn, want) {
@@ -503,6 +504,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[ui]\nghostty = \"sometimes\"\n", "ghostty"},
 		{"[spawn]\nteammates = \"tabs\"\n", "spawn.teammates"},
 		{"[ui]\nhelper_style = \"tabs\"\n", "ui.helper_style"},
+		{"[ui]\nterminal_links = \"tab\"\n", "ui.terminal_links = \"tab\": must be rolodex or browser"},
 		{"[ui]\ntheme = \"\"\n", "ui.theme"},
 		{"[ui]\nsidebar_width = 2\n", "sidebar_width"},
 		{"[ui]\nfocus_key = \"C-] x\"\n", "focus_key"},

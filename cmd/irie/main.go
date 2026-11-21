@@ -57,7 +57,7 @@ const usage = `usage: ` + brand.Slug + ` [command]
 ` + privacyUsage + writingUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
                           ` + brand.Name + `'s plugins in this build, and how far
                           each part is set up; turn a plugin or a part on or off
-` + mailUsage + vpnSetupUsage + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
+` + mailUsage + termsUsage + extensionUsage + yoinkUsage + vpnSetupUsage + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
                           started on with ^NAME (` + brand.Slug + ` peer for help)
 ` + lockUsage + `  ` + brand.Slug + ` version            print the version
   ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect
@@ -82,7 +82,7 @@ Used by ` + brand.Name + ` itself:
   ` + brand.Slug + ` statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
-` + privacyServerUsage + writingServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
+` + privacyServerUsage + writingServerUsage + extensionServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
                             with it` + privacyRuntimeUsage + `
   ` + brand.Slug + ` placeholder          what the slot shows when no session is shown
   ` + brand.Slug + ` team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS

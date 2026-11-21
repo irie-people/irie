@@ -17,10 +17,10 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :open FILE[:LINE]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :yoink [audio|720p] LINK, :open FILE[:LINE]"
 
 // View is what the words are read against: the rows in the list's order,
-// the sessions outside Irie, and the folder that ~ means.
+// the sessions outside Irie, the folder that ~ means and the profiles.
 type View struct {
 	Sessions []Session
 	Outside  []OutsideSession
@@ -28,6 +28,14 @@ type View struct {
 	// Exists says whether a file is there, so that :open takes a name with
 	// a colon in it as it is; nil reads every name as not there.
 	Exists func(path string) bool
+	// Profiles are the names a + word picks a profile by: the profiles,
+	// auto, and, ending in a colon, the prefixes such as ollama: that take
+	// a model's name after them. A + word that names none of them, nor
+	// +explain, +teach, +anon or +tor, is the task's own text (DESIGN
+	// §4.2, "Plus words"). Nil takes every + name for a profile's, as a
+	// client that does not know them must, and leaves the core to say
+	// which it has.
+	Profiles []string
 }
 
 // A Step is what an input comes to: one op to run with its args, or, for a
@@ -62,7 +70,7 @@ func Read(in InputArgs, v View) (Step, error) {
 			return Step{Answer: Hows(*s), Session: s}, nil
 		}
 	}
-	a, err := ParseTask(in.Text, v.Home)
+	a, err := v.parseTask(in.Text)
 	if err != nil {
 		return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
 	}
@@ -152,7 +160,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: ToolSetup}, nil)
 	case name == "setup" && arg == "switch":
 		return step(OpTool, ToolArgs{Name: ToolSwitch}, nil)
-	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy || arg == ToolVPN):
+	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy || arg == ToolVPN || arg == ToolExtension):
 		return step(OpTool, ToolArgs{Name: arg}, nil)
 	case name == "plugins" && arg == "":
 		return step(OpPlugins, PluginsArgs{}, nil)
@@ -177,6 +185,15 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		// :mail says how the mail accounts stand; the Mac app also opens
 		// its Mail (docs/proposals/mail.md).
 		return step(OpMail, MailArgs{}, nil)
+	case name == "yoink":
+		// :yoink [audio|720p] LINK downloads a video, or its sound, from a
+		// link (DESIGN §4.17); :yoink alone says how the downloads stand,
+		// and the Mac app shows its Yoink tab.
+		a, err := yoinkArgs(arg)
+		if err != nil {
+			return Step{}, err
+		}
+		return step(OpYoink, a, nil)
 	case name == "write":
 		// :write [TASK] starts a writing session in Variorum
 		// (docs/proposals/writers.md). The task may run on over more
@@ -198,7 +215,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		if task == "" {
 			return step(OpMarkets, MarketsArgs{}, nil)
 		}
-		a, err := ParseTask(task, v.Home)
+		a, err := v.parseTask(task)
 		if err != nil {
 			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
 		}
@@ -225,7 +242,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		// :bench [^HOST] [+PROFILE] [@REPO] TASK runs the task on several
 		// sessions of one profile, then judges them (DESIGN §6.6). The
 		// task may run on over more lines.
-		a, err := BenchTask(arg, in.Text, v.Home)
+		a, err := v.benchTask(arg, in.Text)
 		if err != nil {
 			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
 		}
@@ -518,6 +535,13 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Did, r.Text = InputAnswered, m.Text
 	case OpMail:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[MailResult](result).Text, "\n")
+	case OpYoink:
+		// A download started ran; the rest answer. The Mac app shows its
+		// Yoink tab for either.
+		r.Text = strings.TrimRight(as[YoinkResult](result).Text, "\n")
+		if as[YoinkArgs](st.Args).Do != YoinkStart {
+			r.Did = InputAnswered
+		}
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)
@@ -574,6 +598,39 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text = "Done."
 	}
 	return r, nil
+}
+
+// yoinkArgs reads :yoink's words: a link, and what to download of it,
+// best, audio or a height, in either order. A link may come without its
+// https://. The core checks both, as the yoink op takes them from any
+// client.
+func yoinkArgs(arg string) (YoinkArgs, error) {
+	words := strings.Fields(arg)
+	if len(words) == 0 {
+		return YoinkArgs{}, nil
+	}
+	usage := ":yoink takes a link, and best, audio or a height such as 720p: :yoink audio https://example.com/video."
+	a := YoinkArgs{Do: YoinkStart}
+	for _, w := range words {
+		switch {
+		case strings.Contains(w, "://") || strings.Contains(w, "."):
+			if a.URL != "" {
+				return YoinkArgs{}, Errorf(CodeBadArgs, ":yoink takes one link at a time.")
+			}
+			a.URL = w
+			if !strings.Contains(w, "://") {
+				a.URL = "https://" + w
+			}
+		case a.Get == "":
+			a.Get = w
+		default:
+			return YoinkArgs{}, Errorf(CodeBadArgs, "%s", usage)
+		}
+	}
+	if a.URL == "" {
+		return YoinkArgs{}, Errorf(CodeBadArgs, "%s", usage)
+	}
+	return a, nil
 }
 
 // started says that s started, where, and what it could not carry over.

@@ -588,3 +588,172 @@ func TestHistoryFrames(t *testing.T) {
 		t.Errorf("an empty history frame is %s", b)
 	}
 }
+
+// Confirm asks first even of a certain step, as the Mac app's ⌘Z does: a
+// question tied to the step, that names it as the header does and says
+// when it was taken, and that changes nothing until it is answered. Going
+// ahead takes it, and an answer after another step came in is stale, so
+// only the step the person saw is taken.
+func TestConfirmAsksBeforeACertainStep(t *testing.T) {
+	resetFake(nil, nil)
+	c := historyCore(t)
+	c.recordAction("test", "s0000000000s1", nil)
+	c.recordAction("test", "s0000000000s2", nil)
+	before, _ := c.stacks()
+	c.mu.Lock()
+	c.steps.hist.Undo[1].At = time.Now().Add(-12*time.Minute - 5*time.Second)
+	c.mu.Unlock()
+
+	r, err := c.undo(dirUndo, ipc.UndoArgs{Confirm: true})
+	if err != nil || r.Did != ipc.DidAsk || r.Choice == nil || !r.Choice.Confirm || r.Label != `test "s0000000000s2"` {
+		t.Fatalf("undo = %+v, %v", r, err)
+	}
+	ch := *r.Choice
+	if ch.Question != `Undo test "s0000000000s2"?` || !reflect.DeepEqual(keysOf(ch), []string{ipc.ChoiceApply, ipc.ChoiceCancel}) ||
+		!ch.Options[0].Recommended || ch.Options[1].Recommended || ch.Options[0].Label != "Undo" || ch.Options[1].Label != "Cancel" {
+		t.Errorf("choice %+v", ch)
+	}
+	if want := "Done 12 minutes ago. Redo does it again."; ch.Options[0].Detail != want {
+		t.Errorf("going ahead says %q, want %q", ch.Options[0].Detail, want)
+	}
+	if u, rd := c.stacks(); !reflect.DeepEqual(u, before) || len(rd) != 0 || len(fakeKind.done) != 0 {
+		t.Errorf("asking changed things: %v %v %v", u, rd, fakeKind.done)
+	}
+	// Cancel changes nothing.
+	if r, err := c.undo(dirUndo, ipc.UndoArgs{ChoiceID: ch.ID, Choice: ipc.ChoiceCancel}); err != nil || r.Did != ipc.DidCancel || len(fakeKind.done) != 0 {
+		t.Errorf("cancel = %+v, %v, effects %v", r, err, fakeKind.done)
+	}
+
+	// A step taken meanwhile: the answer confirmed the step it named, so
+	// it is refused rather than taking the new one.
+	c.recordAction("test", "s0000000000s3", nil)
+	if _, err := c.undo(dirUndo, ipc.UndoArgs{ChoiceID: ch.ID, Choice: ipc.ChoiceApply}); code(err) != ipc.CodeStale || len(fakeKind.done) != 0 {
+		t.Errorf("an answer after a new step: %v, effects %v", err, fakeKind.done)
+	}
+	u, _ := c.stacks()
+	r, _ = c.undo(dirUndo, ipc.UndoArgs{Confirm: true})
+	if r.Choice == nil || r.Choice.Options[0].Detail != "Done just now. Redo does it again." {
+		t.Fatalf("the new step's question %+v", r.Choice)
+	}
+	r, err = c.undo(dirUndo, ipc.UndoArgs{ChoiceID: r.Choice.ID, Choice: ipc.ChoiceApply, Confirm: true})
+	if err != nil || r.Did != ipc.DidUndo || !reflect.DeepEqual(fakeKind.done, []string{"undo:" + u[2]}) {
+		t.Fatalf("apply = %+v, %v; effects %v", r, err, fakeKind.done)
+	}
+
+	// Redo asks the same, saying when the step was undone, which state.json
+	// keeps for a restarted core.
+	c.mu.Lock()
+	c.loadState()
+	moved := c.steps.hist.Redo[0].Moved
+	c.steps.hist.Redo[0].Moved = moved.Add(-3 * time.Hour)
+	c.mu.Unlock()
+	if moved.IsZero() || time.Since(moved) > time.Minute {
+		t.Errorf("state.json says the undone step moved at %v", moved)
+	}
+	r, err = c.undo(dirRedo, ipc.UndoArgs{Confirm: true})
+	if err != nil || r.Choice == nil || r.Choice.Question != `Redo test "s0000000000s3"?` || r.Choice.Options[0].Label != "Redo" ||
+		r.Choice.Options[0].Detail != "Undone 3 hours ago. Undo takes it back again." {
+		t.Fatalf("redo = %+v, %v", r.Choice, err)
+	}
+	if r, err = c.undo(dirRedo, ipc.UndoArgs{ChoiceID: r.Choice.ID, Choice: ipc.ChoiceApply}); err != nil || r.Did != ipc.DidRedo {
+		t.Fatalf("redo apply = %+v, %v", r, err)
+	}
+	if r, _ = c.undo(dirUndo, ipc.UndoArgs{Confirm: true}); r.Choice == nil || r.Choice.Options[0].Detail != "Redone just now. Redo does it again." {
+		t.Errorf("undo after a redo %+v", r.Choice)
+	}
+}
+
+// An uncertain step asks its own question, as without Confirm, and not the
+// confirmation as well; a problem that comes up while the confirmation
+// waits for its answer is asked then.
+func TestConfirmGivesWayToAnUncertainStepsQuestion(t *testing.T) {
+	resetFake([]problem{busyProblem()}, nil)
+	c := historyCore(t)
+	c.recordAction("test", "s1", nil)
+	r, err := c.undo(dirUndo, ipc.UndoArgs{Confirm: true})
+	if err != nil || r.Did != ipc.DidAsk || r.Choice == nil || r.Choice.Confirm || !strings.HasSuffix(r.Choice.ID, ":busy") {
+		t.Fatalf("an uncertain step with Confirm = %+v, %v", r.Choice, err)
+	}
+	r, err = c.undo(dirUndo, ipc.UndoArgs{ChoiceID: r.Choice.ID, Choice: ipc.ChoiceApply, Confirm: true})
+	if err != nil || r.Did != ipc.DidUndo || len(fakeKind.done) != 1 {
+		t.Fatalf("its answer = %+v, %v, effects %v", r, err, fakeKind.done)
+	}
+
+	resetFake(nil, nil)
+	c.recordAction("test", "s2", nil)
+	r, _ = c.undo(dirUndo, ipc.UndoArgs{Confirm: true})
+	if r.Choice == nil || !r.Choice.Confirm {
+		t.Fatalf("a certain step %+v", r.Choice)
+	}
+	resetFake([]problem{busyProblem()}, nil)
+	r, err = c.undo(dirUndo, ipc.UndoArgs{ChoiceID: r.Choice.ID, Choice: ipc.ChoiceApply})
+	if err != nil || r.Did != ipc.DidAsk || r.Choice == nil || r.Choice.Confirm || !strings.HasSuffix(r.Choice.ID, ":busy") || len(fakeKind.done) != 0 {
+		t.Errorf("a problem after the confirmation = %+v, %v, effects %v", r, err, fakeKind.done)
+	}
+	// Nor does a forged confirmation skip a problem that offers no going
+	// ahead.
+	gone := problem{code: "gone", question: "gone", recommend: ipc.ChoiceSkip}
+	resetFake([]problem{gone}, nil)
+	u, _ := c.stacks()
+	if r, err := c.undo(dirUndo, ipc.UndoArgs{ChoiceID: u[len(u)-1] + ":undo:gone+" + confirmCode, Choice: ipc.ChoiceApply}); err != nil || r.Did != ipc.DidAsk || len(fakeKind.done) != 0 {
+		t.Errorf("forged id = %+v, %v, effects %v", r, err, fakeKind.done)
+	}
+}
+
+// A batch's confirmation names the batch, as the header does, and going
+// ahead takes all of it.
+func TestConfirmOfABatchNamesItAndTakesItAll(t *testing.T) {
+	resetFake(nil, nil)
+	c := historyCore(t)
+	c.recordAction("test", "s0", nil)
+	c.recordSteps("test", []string{"s1", "s2", "s3"}, nil)
+	r, err := c.undo(dirUndo, ipc.UndoArgs{Confirm: true})
+	if err != nil || r.Label != "test 3 sessions" || r.Choice == nil || r.Choice.Question != "Undo test 3 sessions?" {
+		t.Fatalf("a batch's question = %+v, %v", r, err)
+	}
+	r, err = c.undo(dirUndo, ipc.UndoArgs{ChoiceID: r.Choice.ID, Choice: ipc.ChoiceApply})
+	if err != nil || r.Did != ipc.DidUndo || r.Label != "test 3 sessions" || len(fakeKind.done) != 3 {
+		t.Errorf("apply = %+v, %v, effects %v", r, err, fakeKind.done)
+	}
+	if u, rd := c.stacks(); len(u) != 1 || len(rd) != 3 {
+		t.Errorf("after the batch: %v %v", u, rd)
+	}
+}
+
+// What an effect's note says ends its confirmation, as what waking a cold
+// conversation costs ends a reopen's.
+func TestConfirmSaysWhatTheEffectsNoteAdds(t *testing.T) {
+	c := historyCore(t)
+	now := time.Now()
+	a := action{ID: "a1", Kind: actClose, Session: "s1", Name: "x", Label: `close "x"`, At: now.Add(-2 * time.Hour)}
+	eff := effect{note: func(*Core, action) string { return "Its prompt cache has run out." }}
+	c.mu.Lock()
+	ch := c.confirmChoice(a, dirUndo, a.Label, eff, now)
+	c.mu.Unlock()
+	if want := "Done 2 hours ago. Redo does it again. Its prompt cache has run out."; ch.Options[0].Detail != want {
+		t.Errorf("detail %q, want %q", ch.Options[0].Detail, want)
+	}
+	// A step from before undo kept when it moved says only what redo does.
+	c.mu.Lock()
+	ch = c.confirmChoice(a, dirRedo, a.Label, effect{}, now)
+	c.mu.Unlock()
+	if ch.Options[0].Detail != "Undo takes it back again." || ch.ID != "a1:redo:"+confirmCode {
+		t.Errorf("redo with no time: %+v", ch)
+	}
+}
+
+func TestAgo(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		-time.Second:                   "just now",
+		59 * time.Second:               "just now",
+		time.Minute:                    "1 minute ago",
+		12*time.Minute + 5*time.Second: "12 minutes ago",
+		time.Hour:                      "1 hour ago",
+		47 * time.Hour:                 "47 hours ago",
+		48 * time.Hour:                 "2 days ago",
+	} {
+		if got := ago(d); got != want {
+			t.Errorf("ago(%v) = %q, want %q", d, got, want)
+		}
+	}
+}

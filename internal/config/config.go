@@ -32,37 +32,39 @@ import (
 )
 
 type Config struct {
-	UI       UI                 `toml:"ui"`
-	Spawn    Spawn              `toml:"spawn"`
-	Profiles map[string]Profile `toml:"profiles"`
-	Local    Local              `toml:"local"`
-	Route    Route              `toml:"route"`
-	Bench    Bench              `toml:"bench"`
-	Repos    Repos              `toml:"repos"`
-	Worktree Worktree           `toml:"worktree"`
-	Tmux     Tmux               `toml:"tmux"`
-	Journal  Journal            `toml:"journal"`
-	Context  Context            `toml:"context"`
-	Hold     Hold               `toml:"hold"`
-	Usage    Usage              `toml:"usage"`
-	Lock     Lock               `toml:"lock"`
-	Skills   Skills             `toml:"skills"`
-	Dog      Dog                `toml:"dog"`
-	Trod     Trod               `toml:"trod"`
-	Lid      Lid                `toml:"lid"`
-	Arch     Arch               `toml:"arch"`
-	Remote   Remote             `toml:"remote"`
-	Place    Place              `toml:"place"`
-	Peers    map[string]Peer    `toml:"peers"`
-	Env      Env                `toml:"env"`
-	Learn    Learn              `toml:"learn"`
-	VPN      VPN                `toml:"vpn"`
-	Browser  Browser            `toml:"browser"`
-	Anon     Anon               `toml:"anon"`
-	Markets  Markets            `toml:"markets"`
-	Variorum Variorum           `toml:"variorum"`
-	Mail     Mail               `toml:"mail"`
-	Plugins  Plugins            `toml:"plugins"`
+	UI        UI                 `toml:"ui"`
+	Spawn     Spawn              `toml:"spawn"`
+	Profiles  map[string]Profile `toml:"profiles"`
+	Local     Local              `toml:"local"`
+	Route     Route              `toml:"route"`
+	Bench     Bench              `toml:"bench"`
+	Repos     Repos              `toml:"repos"`
+	Worktree  Worktree           `toml:"worktree"`
+	Tmux      Tmux               `toml:"tmux"`
+	Journal   Journal            `toml:"journal"`
+	Context   Context            `toml:"context"`
+	Hold      Hold               `toml:"hold"`
+	Usage     Usage              `toml:"usage"`
+	Lock      Lock               `toml:"lock"`
+	Skills    Skills             `toml:"skills"`
+	Dog       Dog                `toml:"dog"`
+	Trod      Trod               `toml:"trod"`
+	Lid       Lid                `toml:"lid"`
+	Arch      Arch               `toml:"arch"`
+	Remote    Remote             `toml:"remote"`
+	Place     Place              `toml:"place"`
+	Peers     map[string]Peer    `toml:"peers"`
+	Env       Env                `toml:"env"`
+	Learn     Learn              `toml:"learn"`
+	VPN       VPN                `toml:"vpn"`
+	Browser   Browser            `toml:"browser"`
+	Anon      Anon               `toml:"anon"`
+	Markets   Markets            `toml:"markets"`
+	Variorum  Variorum           `toml:"variorum"`
+	Mail      Mail               `toml:"mail"`
+	Extension Extension          `toml:"extension"`
+	Yoink     Yoink              `toml:"yoink"`
+	Plugins   Plugins            `toml:"plugins"`
 }
 
 // Plugins are Irie's plugins (DESIGN §4.17, internal/plugins): sets of
@@ -86,6 +88,22 @@ type Plugins struct {
 	// accounts in one list, each in a colour of its own
 	// (docs/proposals/mail.md).
 	Mail bool `toml:"mail"`
+	// Bitwarden fills sign-in pages in the Mac app's plugin panes from the
+	// person's Bitwarden vault. The Mac app unlocks it with their master
+	// password and keeps the panes' logins in its own memory: the core
+	// never sees one.
+	Bitwarden bool `toml:"bitwarden"`
+	// Terms is Terms in short: what a site's terms of service mean for
+	// you, read by Irie's own code, in the Mac app's Terms tab, irie terms
+	// and the browser extension (docs/proposals/browser-extension.md).
+	Terms bool `toml:"terms"`
+	// Extension is Irie in your own browser: a browser extension with the
+	// tools of Irie's plugins, the first of them Terms in short.
+	Extension bool `toml:"extension"`
+	// Yoink downloads a video, or its sound, from a link: yt-dlp, pinned,
+	// run by the core into yoink.folder. Off until asked, so a new Irie
+	// downloads from no site of its own accord.
+	Yoink bool `toml:"yoink"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -121,6 +139,22 @@ func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 // MailOn says whether the mail plugin runs: plugins.mail, with the plugin
 // built in.
 func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
+
+// BitwardenOn says whether the Bitwarden plugin runs: plugins.bitwarden,
+// with the plugin built in.
+func (c Config) BitwardenOn() bool { return BitwardenBuilt && c.Plugins.Bitwarden }
+
+// ExtensionOn says whether the browser extension plugin runs:
+// plugins.extension, with the plugin built in.
+func (c Config) ExtensionOn() bool { return ExtensionBuilt && c.Plugins.Extension }
+
+// TermsOn says whether Terms in short runs: plugins.terms, with the
+// plugin built in.
+func (c Config) TermsOn() bool { return TermsBuilt && c.Plugins.Terms }
+
+// YoinkOn says whether the yoink plugin runs: plugins.yoink, with the
+// plugin built in.
+func (c Config) YoinkOn() bool { return YoinkBuilt && c.Plugins.Yoink }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -484,6 +518,12 @@ type UI struct {
 	// time. Its default is the brand's (internal/brand), which a company's
 	// copy may set to tips.
 	Bar string `toml:"bar"`
+	// TerminalLinks is where a link ⌘-clicked in one of the Mac app's
+	// terminals opens (docs/MAC.md, Links in the terminal): rolodex, the
+	// session's own panes, a page on a Browser card and a file of text on
+	// its Code card; or browser, the Mac's default browser, and a file's
+	// own app. ⇧⌘-click opens it in the other.
+	TerminalLinks string `toml:"terminal_links"`
 }
 
 // NewTabs are the places ui.new_tabs puts a new session.
@@ -491,6 +531,10 @@ var NewTabs = []string{"last", "first", "next"}
 
 // Bars are what ui.bar may show.
 var Bars = []string{"cheer", "tips"}
+
+// TerminalLinks are the places ui.terminal_links opens a link in, the
+// default first.
+var TerminalLinks = []string{"rolodex", "browser"}
 
 // MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
 // as when the machine pages, is not frozen.
@@ -879,7 +923,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar, TerminalLinks: "rolodex"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -991,9 +1035,10 @@ func Default() Config {
 		Browser:  Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:     defaultMail(),
+		Yoink:    defaultYoink(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1086,38 +1131,40 @@ func Parse(data []byte, path string) (Config, error) {
 	// Sections decode over the defaults. Profiles decode one by one, so a file
 	// that sets only profiles.claude.model keeps that profile's other defaults.
 	file := struct {
-		UI       *UI                       `toml:"ui"`
-		Spawn    *Spawn                    `toml:"spawn"`
-		Profiles map[string]toml.Primitive `toml:"profiles"`
-		Local    *Local                    `toml:"local"`
-		Route    *Route                    `toml:"route"`
-		Bench    *Bench                    `toml:"bench"`
-		Repos    *Repos                    `toml:"repos"`
-		Worktree *Worktree                 `toml:"worktree"`
-		Tmux     *Tmux                     `toml:"tmux"`
-		Journal  *Journal                  `toml:"journal"`
-		Context  *Context                  `toml:"context"`
-		Hold     *Hold                     `toml:"hold"`
-		Usage    *Usage                    `toml:"usage"`
-		Lock     *Lock                     `toml:"lock"`
-		Skills   *Skills                   `toml:"skills"`
-		Dog      *Dog                      `toml:"dog"`
-		Trod     *Trod                     `toml:"trod"`
-		Lid      *Lid                      `toml:"lid"`
-		Arch     *Arch                     `toml:"arch"`
-		Remote   *Remote                   `toml:"remote"`
-		Place    *Place                    `toml:"place"`
-		Peers    map[string]Peer           `toml:"peers"`
-		Env      *Env                      `toml:"env"`
-		Learn    *Learn                    `toml:"learn"`
-		VPN      *VPN                      `toml:"vpn"`
-		Browser  *Browser                  `toml:"browser"`
-		Anon     *Anon                     `toml:"anon"`
-		Markets  *Markets                  `toml:"markets"`
-		Variorum *Variorum                 `toml:"variorum"`
-		Mail     *Mail                     `toml:"mail"`
-		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+		UI        *UI                       `toml:"ui"`
+		Spawn     *Spawn                    `toml:"spawn"`
+		Profiles  map[string]toml.Primitive `toml:"profiles"`
+		Local     *Local                    `toml:"local"`
+		Route     *Route                    `toml:"route"`
+		Bench     *Bench                    `toml:"bench"`
+		Repos     *Repos                    `toml:"repos"`
+		Worktree  *Worktree                 `toml:"worktree"`
+		Tmux      *Tmux                     `toml:"tmux"`
+		Journal   *Journal                  `toml:"journal"`
+		Context   *Context                  `toml:"context"`
+		Hold      *Hold                     `toml:"hold"`
+		Usage     *Usage                    `toml:"usage"`
+		Lock      *Lock                     `toml:"lock"`
+		Skills    *Skills                   `toml:"skills"`
+		Dog       *Dog                      `toml:"dog"`
+		Trod      *Trod                     `toml:"trod"`
+		Lid       *Lid                      `toml:"lid"`
+		Arch      *Arch                     `toml:"arch"`
+		Remote    *Remote                   `toml:"remote"`
+		Place     *Place                    `toml:"place"`
+		Peers     map[string]Peer           `toml:"peers"`
+		Env       *Env                      `toml:"env"`
+		Learn     *Learn                    `toml:"learn"`
+		VPN       *VPN                      `toml:"vpn"`
+		Browser   *Browser                  `toml:"browser"`
+		Anon      *Anon                     `toml:"anon"`
+		Markets   *Markets                  `toml:"markets"`
+		Variorum  *Variorum                 `toml:"variorum"`
+		Mail      *Mail                     `toml:"mail"`
+		Extension *Extension                `toml:"extension"`
+		Yoink     *Yoink                    `toml:"yoink"`
+		Plugins   *Plugins                  `toml:"plugins"`
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1304,6 +1351,9 @@ func (c Config) Validate() error {
 	}
 	if !slices.Contains(HelperStyles, c.UI.HelperStyle) {
 		bad("ui.helper_style = %q: must be browser or terminal", c.UI.HelperStyle)
+	}
+	if !slices.Contains(TerminalLinks, c.UI.TerminalLinks) {
+		bad("ui.terminal_links = %q: must be rolodex or browser", c.UI.TerminalLinks)
 	}
 	if !slices.Contains(Themes, c.UI.Theme) {
 		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
@@ -1794,13 +1844,15 @@ func (c Config) Validate() error {
 		bad("anon.tor = %q: must be an absolute or ~ path, or empty for the usual places", an.Tor)
 	}
 	checkMail(c.Mail, bad)
+	checkExtension(c.Extension, bad)
+	checkYoink(c.Yoink, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1843,6 +1895,20 @@ func (c Config) Write(w io.Writer) error {
 	if !MailBuilt {
 		delete(m, "mail")
 		delete(plugins, "mail")
+	}
+	if !BitwardenBuilt {
+		delete(plugins, "bitwarden")
+	}
+	if !TermsBuilt {
+		delete(plugins, "terms")
+	}
+	if !ExtensionBuilt {
+		delete(m, "extension")
+		delete(plugins, "extension")
+	}
+	if !YoinkBuilt {
+		delete(m, "yoink")
+		delete(plugins, "yoink")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

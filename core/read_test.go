@@ -91,6 +91,11 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":setup privacy", "", "", OpTool, ToolArgs{Name: ToolPrivacy}},
 		{":plugins", "", "", OpPlugins, PluginsArgs{}},
 		{":mail", "", "", OpMail, MailArgs{}},
+		{":yoink", "", "", OpYoink, YoinkArgs{}},
+		{":yoink https://commons.wikimedia.org/wiki/File:Example.webm", "s1", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://commons.wikimedia.org/wiki/File:Example.webm"}},
+		{":yoink audio https://www.example.com/watch?v=abc", "", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://www.example.com/watch?v=abc", Get: "audio"}},
+		{":yoink https://www.example.com/watch?v=abc 720p", "", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://www.example.com/watch?v=abc", Get: "720p"}},
+		{":yoink   mp3   www.example.com/v/1  ", "", "", OpYoink, YoinkArgs{Do: YoinkStart, URL: "https://www.example.com/v/1", Get: "mp3"}},
 		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
 		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
 		{":markets", "s1", "", OpMarkets, MarketsArgs{}},
@@ -169,6 +174,9 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":bench @web! fix it", "", "", CodeBadArgs, "each need a worktree of their own"},
 		{":bench +anon fix it", "", "", CodeBadArgs, "no anonymous research"},
 		{":markets @web add the cloud market", "", "", CodeBadArgs, "takes no @repo"},
+		{":yoink audio", "", "", CodeBadArgs, ":yoink takes a link, and best, audio or a height"},
+		{":yoink audio 720p https://example.com/v", "", "", CodeBadArgs, ":yoink takes a link, and best, audio or a height"},
+		{":yoink https://example.com/a https://example.com/b", "", "", CodeBadArgs, ":yoink takes one link at a time."},
 		{":markets +a +b add it", "", "", CodeBadArgs, "Only one +profile per task."},
 	} {
 		_, err := Read(InputArgs{Text: c.text, Session: c.session, Outside: c.outside}, view())
@@ -329,6 +337,10 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 		{"markets task", Step{Op: OpMarkets, Args: MarketsArgs{Task: &SpawnArgs{Task: "add it"}}}, MarketsResult{State: PartReady, Session: &started, Text: "Started flaky test in your market map's folder."}, nil,
 			InputResult{Did: InputSpawned, Op: OpMarkets, Session: &started,
 				Text: "Started flaky test on irie/flaky-test. Memory is low: 2.1 GB free of 16 GB. Copied .env."}},
+		{"yoink", Step{Op: OpYoink, Args: YoinkArgs{}}, YoinkResult{Text: "No downloads yet.\n"}, nil,
+			InputResult{Did: InputAnswered, Op: OpYoink, Text: "No downloads yet."}},
+		{"yoink a link", Step{Op: OpYoink, Args: YoinkArgs{Do: YoinkStart, URL: "https://example.com/v"}}, YoinkResult{Text: "Yoinking “A clip” into ~/Downloads."}, nil,
+			InputResult{Did: InputRan, Op: OpYoink, Text: "Yoinking “A clip” into ~/Downloads."}},
 		{"hows", Step{Answer: "fix login: working", Session: login}, nil, nil,
 			InputResult{Did: InputAnswered, Session: login, Text: "fix login: working"}},
 	} {

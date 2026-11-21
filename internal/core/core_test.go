@@ -76,6 +76,11 @@ func (a agentConfig) toml(fake string) string {
 		local = "ollama = \"/nonexistent/ollama\"\nllama_server = \"/nonexistent/llama-server\"\n"
 	}
 	fmt.Fprintf(&b, "\n[local]\n%s\n[usage]\nstatus_line = %v\n", local, a.statusLine)
+	// A phone gateway a test turns on listens on this machine alone. On
+	// every address, as remote.listen's default has it, each new test
+	// build of irie had macOS's firewall ask the user whether it may
+	// accept incoming connections.
+	b.WriteString("\n[remote]\nlisten = \"127.0.0.1\"\n")
 	return b.String()
 }
 
@@ -499,6 +504,10 @@ func (c *coreEnv) supervised(target string) int {
 
 func kill(t *testing.T, pid int) {
 	t.Helper()
+	// kill(0) would reach the test's own process group: the whole run.
+	if pid <= 1 {
+		t.Fatalf("kill: no process to kill (pid %d)", pid)
+	}
 	if p, err := os.FindProcess(pid); err == nil {
 		p.Kill()
 	}
@@ -509,16 +518,19 @@ func kill(t *testing.T, pid int) {
 
 func TestSidebarComesBackWithin2s(t *testing.T) {
 	c := setup(t)
-	old := c.supervised(tmux.Sidebar)
-	if old == 0 {
-		t.Fatal("no sidebar process under its supervisor")
-	}
 	// On a busy machine the scheduler, not the supervisor, sets how soon a
 	// new sidebar draws: the bound holds only while there is room.
 	bound := 2 * time.Second
 	if slow(t) {
 		bound = 20 * time.Second
 	}
+	// The core answers before its supervisor has started the first
+	// sidebar, so the test waits for that one: the bound is on the restart.
+	var old int
+	testutil.Eventually(t, 20*time.Second, "no sidebar process under its supervisor", func() bool {
+		old = c.supervised(tmux.Sidebar)
+		return old != 0
+	})
 	kill(t, old)
 	testutil.Eventually(t, bound, "the supervisor did not restart the sidebar", func() bool {
 		pid := c.supervised(tmux.Sidebar)

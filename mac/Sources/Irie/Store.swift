@@ -107,6 +107,12 @@ final class Store {
     /// Your helpers as the core last said they stand; empty from a core
     /// from before them.
     var ownHelpers: [HelperInfo] = []
+    /// The core serves the sizes op: it keeps each agent's window at the
+    /// size its session's terminal shows at (PaneSizes.swift); what it last
+    /// heard, and the send on its way.
+    @ObservationIgnored var canSizes = false
+    @ObservationIgnored var sizesSent: SizesArgs?
+    @ObservationIgnored var sizing: Task<Void, Never>?
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
@@ -142,6 +148,11 @@ final class Store {
     private(set) var canUndo = false
     private(set) var undoLabel: String?
     private(set) var redoLabel: String?
+    /// The core asks before an undo or redo when told to (undo-confirm), so
+    /// ⌘Z takes only the step its question named; and that question is on
+    /// its way or on show, so another key waits for it.
+    private(set) var canConfirmUndo = false
+    @ObservationIgnored var undoAsking = false
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
@@ -151,6 +162,13 @@ final class Store {
     /// ui.helper_style, from the core: a helper beside its session is drawn
     /// as cards ("browser") or as a terminal ("terminal").
     private(set) var helperStyle = "browser"
+    /// ui.terminal_links, from the core: where a link clicked in a terminal
+    /// opens, "rolodex" (the session's panes) or "browser" (the Mac's own
+    /// apps). The core applies it (the link op); Settings shows it while it
+    /// can't read the config.
+    private(set) var terminalLinks = "rolodex"
+    /// Whether the core says where a terminal's link opens (op link).
+    private(set) var canLink = false
     /// The helper shown beside each session's conversation, as sub:<id>, by
     /// session (ConversationView, HelperPane.swift).
     private(set) var openHelpers: [String: String] = [:]
@@ -209,9 +227,16 @@ final class Store {
     var focusFind = 0
     /// The sidebar's filter, which the keys that walk the sidebar follow.
     var filter = ""
+    /// The terminal's text size on show: the window's, or zen's own while
+    /// zen is on (Zen.swift).
     private(set) var fontSize: CGFloat = Store.savedFontSize()
+    /// The window's own text size, kept while zen shows its own.
+    private(set) var windowFontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
-    @ObservationIgnored weak var terminalView: NSView?
+    @ObservationIgnored weak var terminalView: NSView? {
+        // The sizes wait for it (PaneSizes.swift).
+        didSet { if terminalView !== oldValue { sizesSoon() } }
+    }
     /// The split's lead pane, the picked session's own terminal while it
     /// shows beside its teammates (TeamSplit.swift).
     @ObservationIgnored weak var leadView: NSView?
@@ -227,6 +252,18 @@ final class Store {
             keepSplit()
         }
     }
+    /// The layout reversed, the window as in a mirror: the sidebar on the
+    /// right, the terminal beside it, and the panes and the right sidebar
+    /// on the left (Fn+X Fn+L Fn+R, View › Layout › Reverse; KeyTree.swift).
+    /// Text still reads left to right. Remembered across launches; zen
+    /// keeps its own layout, so it never reverses.
+    var reversed = UserDefaults.standard.bool(forKey: Store.reversedKey) {
+        didSet { if reversed != oldValue, !isFixture { UserDefaults.standard.set(reversed, forKey: Store.reversedKey) } }
+    }
+    static let reversedKey = "layoutReversed"
+    /// The window's parts run right to left: the layout is reversed and zen,
+    /// which has a layout of its own, is off.
+    var mirrored: Bool { reversed && !zen.on }
     /// The right sidebar: whether it is open, its width and its
     /// tab, kept across launches but never by `--snapshot` (RightSidebar.swift).
     var side = SideState.saved() {
@@ -260,7 +297,9 @@ final class Store {
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     var outside: [OutsideSession] = []
-    var outsideSelection: String?
+    var outsideSelection: String? {
+        didSet { if outsideSelection != oldValue { rolodex.follow(paneSession?.id) } }
+    }
     var confirmingMove: OutsideSession?
     var moving: String?
     /// The closed sessions reopen can bring back, the last closed first
@@ -320,14 +359,19 @@ final class Store {
     /// The mail plugin's accounts and list, which the Mail tab and window
     /// share (Mail.swift).
     let mail: MailModel
+    /// The Yoink plugin's downloads, which its tab draws (Yoink.swift).
+    let yoink: YoinkModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
+    /// Zen: the session on show alone, full screen (Zen.swift).
+    let zen = ZenModel()
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
         mail = MailModel(client: client)
+        yoink = YoinkModel(client: client)
         notes.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
@@ -358,6 +402,12 @@ final class Store {
             MainActor.assumeIsolated { self?.loadPluginsSoon() }
         }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: false) }
+        // A link clicked in a terminal (TerminalLinks.swift).
+        nc.addObserver(forName: .irieTerminalLink, object: nil, queue: .main) { [weak self] n in
+            guard let link = n.userInfo?["link"] as? String else { return }
+            let other = n.userInfo?["other"] as? Bool ?? false
+            MainActor.assumeIsolated { self?.openTerminalLink(link, other: other) }
+        }
         watchPopOut()
         Task { await run() }
     }
@@ -387,6 +437,7 @@ final class Store {
                 canLearn = hello.features.contains("learn")
                 canDock = hello.features.contains("dock")
                 rolodex.canShell = hello.features.contains("pane")
+                canLink = hello.features.contains("link")
                 canConfigure = hello.features.contains("config")
                 canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
@@ -398,8 +449,13 @@ final class Store {
                 canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
+                canConfirmUndo = hello.features.contains("undo-confirm")
                 canPlugins = hello.features.contains("plugins")
                 canHelpers = hello.features.contains("helpers")
+                // A core that restarted, or a new one, hears them again.
+                canSizes = hello.features.contains("sizes")
+                sizesSent = nil
+                sizesSoon()
                 notes.connected(serves: hello.features.contains("notepad"))
                 canVariorum = hello.features.contains("variorum")
                 knowsFeatures = true
@@ -629,6 +685,9 @@ final class Store {
         if let s = h.helperStyle, s != helperStyle {
             helperStyle = s
         }
+        if let s = h.terminalLinks, s != terminalLinks {
+            terminalLinks = s
+        }
         if h.trod != trod {
             trod = h.trod
         }
@@ -670,6 +729,8 @@ final class Store {
     private func derive() {
         let row = selection.flatMap { id in sessions.first { $0.id == id } }
         if row != selectedRow { selectedRow = row }
+        // The panes beside it show as it last had them (Rolodex.swift).
+        rolodex.follow(paneSession?.id)
         let c = RowCounts(sessions)
         if c != counts { counts = c }
         if hasRows == sessions.isEmpty { hasRows = !sessions.isEmpty }
@@ -734,6 +795,8 @@ final class Store {
     /// Fills the store with sessions no core sent, for `--snapshot`.
     func loadFixture(_ rows: [Session], selection: String?) {
         isFixture = true
+        // Zen draws only as the snapshot asks, and saves nothing.
+        zen.fixture = true
         // Whatever the app popped out, the fixture's terminal is in.
         poppedOut = nil
         sessions = rows.sorted(by: Self.before)
@@ -788,6 +851,7 @@ final class Store {
                                  ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
+        canConfirmUndo = true
         taskRepo = "\(Brand.slug)"
     }
 
@@ -972,8 +1036,13 @@ final class Store {
         }
     }
 
-    /// Moves the keyboard between the session list and the terminal.
+    /// Moves the keyboard between the session list and the terminal. In zen,
+    /// which hides the list, zen ends and the list takes it (Zen.swift).
     func toggleFocus() {
+        if zen.on {
+            afterZen { [weak self] in self?.focusSidebar += 1 }
+            return
+        }
         if !showTerminal {
             if messageHasKeys { focusSidebar += 1 } else { focusMessage += 1 }
         } else if let t = terminalView, t.window?.firstResponder === t {
@@ -983,9 +1052,33 @@ final class Store {
         }
     }
 
+    /// ⌘+, ⌘- and ⌘0: the text size on show, the window's, or zen's own
+    /// while zen is on, which zen keeps apart (Zen.swift).
     func setFontSize(_ size: CGFloat) {
         fontSize = min(max(size, 9), 28)
-        UserDefaults.standard.set(Double(fontSize), forKey: "terminalFontSize")
+        if zen.on {
+            zen.textSize = Double(fontSize)
+        } else {
+            keepWindowFontSize(fontSize)
+        }
+    }
+
+    /// Settings › Appearance › Window: the window's text size, which zen
+    /// follows while it has none of its own.
+    func setWindowFontSize(_ size: CGFloat) {
+        keepWindowFontSize(min(max(size, 9), 28))
+        if !zen.on || zen.textSize == nil { fontSize = windowFontSize }
+    }
+
+    private func keepWindowFontSize(_ size: CGFloat) {
+        if windowFontSize != size { windowFontSize = size }
+        UserDefaults.standard.set(Double(size), forKey: "terminalFontSize")
+    }
+
+    /// Puts on zen's own text size as zen starts, or the window's as it ends.
+    func useZenText(_ on: Bool) {
+        let size = on ? zen.textSize.map { CGFloat($0) } ?? windowFontSize : windowFontSize
+        if fontSize != size { fontSize = size }
     }
 
     private static func savedFontSize() -> CGFloat {
@@ -1063,6 +1156,9 @@ final class Store {
         if renaming != nil && renaming != id { endRename(commit: true) }
         // A card in another space takes the sidebar there (Spaces.swift).
         if let s = sessions.first(where: { $0.id == id }), s.peerName == nil, s.spaceKey != space { setSpace(s.spaceKey, showing: false) }
+        // Its panes show otherwise: the terminal keeps its size until the
+        // core has swapped it in (PaneSizes.swift).
+        if holdsForSwap(to: id) { ResizeHold.shared.holdForSwap() }
         // Each set is news to every view that read it, even to the same
         // value, so only what changes is set.
         if selection != id { selection = id }
@@ -1104,6 +1200,8 @@ final class Store {
                 }
             }
             showing = false
+            // The session is in: the terminal takes its size.
+            ResizeHold.shared.letGoOfSwap()
         }
     }
 
@@ -1183,6 +1281,11 @@ final class Store {
             case "answered" where r.op == "markets":
                 // :markets: the Markets window says how the map stands.
                 NotificationCenter.default.post(name: .irieMarkets, object: nil)
+            case _ where r.op == "yoink" && yoinkPane != nil:
+                // :yoink opens the Yoink tab, where the download shows as it
+                // goes; a start says so too.
+                showYoink()
+                if r.did != "answered" { say(r.text, error: false, seconds: 5) }
             case "answered":
                 // :mail opens the Mail tab, which says more than words can.
                 if r.op == "mail", mailShown {
@@ -1227,6 +1330,11 @@ final class Store {
 
     /// Opens the session's name to edit, in its card.
     func beginRename(_ id: String) {
+        // The name is edited in its card, which zen hides (Zen.swift).
+        if zen.on {
+            afterZen { [weak self] in self?.beginRename(id) }
+            return
+        }
         guard let s = sessions.first(where: { $0.id == id }) else { return }
         if renaming != id {
             endRename(commit: true)

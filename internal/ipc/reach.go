@@ -36,7 +36,7 @@ var reaches = map[string]Reach{
 	OpHello: ReachRead, OpList: ReachRead, OpSubscribe: ReachRead, OpComplete: ReachRead,
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
 	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
-	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead,
+	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
 
 	// Steps of the history.
 	OpRename: ReachInside, OpPark: ReachInside, OpUnpark: ReachInside, OpPin: ReachInside,
@@ -51,7 +51,7 @@ var reaches = map[string]Reach{
 	OpSpaces: ReachInside, OpNotepad: ReachInside, OpConfig: ReachInside, OpTheme: ReachInside,
 	OpPlugins: ReachInside, OpHelpers: ReachInside, OpGabriel: ReachInside, OpLocal: ReachInside, OpPreflight: ReachInside,
 	OpRate: ReachInside, OpLabel: ReachInside, OpPeers: ReachInside, OpContext: ReachInside, OpShow: ReachInside,
-	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpHook: ReachInside,
+	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpSizes: ReachInside, OpHook: ReachInside,
 	OpStatus: ReachInside,
 
 	// What leaves Irie.
@@ -60,6 +60,8 @@ var reaches = map[string]Reach{
 	OpKeys: ReachOutside, OpStopSub: ReachOutside, OpMove: ReachOutside, OpPair: ReachOutside,
 	OpVPN: ReachOutside, OpAnon: ReachOutside, OpMail: ReachOutside, OpVariorum: ReachOutside,
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
+	// A download fetches from a site and writes to the person's folder.
+	OpYoink: ReachOutside,
 	// A check asks OSV.dev about the versions the locks name.
 	OpLock: ReachOutside,
 	// A sweep with drop removes closed sessions' worktrees: reopen adds

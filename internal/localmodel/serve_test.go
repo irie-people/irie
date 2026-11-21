@@ -68,9 +68,9 @@ func TestARunnerLeftBehindIsStopped(t *testing.T) {
 	if code := exitCode(t, cmd); code != 3 {
 		t.Errorf("exit %d, want the server's 3", code)
 	}
-	if !gone(runner) {
-		t.Error("the runner outlived the server")
-	}
+	// Killed as the server exits, the runner may take a moment to die, and
+	// as an orphan a moment more for init to reap it.
+	testutil.Eventually(t, 5*time.Second, "the runner outlived the server", func() bool { return gone(runner) })
 }
 
 func TestARunnerThatIgnoresTerminationIsKilled(t *testing.T) {
@@ -80,12 +80,10 @@ func TestARunnerThatIgnoresTerminationIsKilled(t *testing.T) {
 	if code := exitCode(t, cmd); code != 0 {
 		t.Errorf("exit %d", code)
 	}
-	if !gone(runner) {
-		t.Error("a runner that ignores SIGTERM outlived the server")
-	}
 	if d := time.Since(start); d > 10*time.Second {
 		t.Errorf("took %v", d)
 	}
+	testutil.Eventually(t, 5*time.Second, "a runner that ignores SIGTERM outlived the server", func() bool { return gone(runner) })
 }
 
 func TestServeNeedsACommand(t *testing.T) {

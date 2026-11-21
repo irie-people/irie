@@ -227,6 +227,16 @@ enum Theme {
     /// How far text sits in from the edge of a card or a field, so the text
     /// of everything down a column starts on one line.
     static let inset: CGFloat = 12
+    /// A section's head, as a group's, the notes' or the sessions outside
+    /// Irie (Roots' components §3.4): smaller than a card's name, muted and
+    /// spaced a little, so the cards lead and a head only says where its
+    /// section starts.
+    static let headSize: CGFloat = 11.5
+    static let headTracking: CGFloat = 0.3
+    /// The room a head keeps above it, on top of the list's spacing: a
+    /// section stands further from the one before it than its head from its
+    /// own cards (Roots' principles §2.6).
+    static let headGap: CGFloat = 8
 
     /// Rounded type, as the cards use.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
@@ -551,6 +561,35 @@ extension NSColor {
 
 extension Color {
     init(hex: UInt32) { self.init(nsColor: NSColor(hex: hex)) }
+}
+
+extension View {
+    /// A band across its column, such as the sidebar's header and footer or
+    /// the strip under the terminal: its ground, with round corners on the
+    /// side that faces the work, and a hairline along that side alone, which
+    /// fades out as the corners turn into the column's edges. The hairline
+    /// and the step in lightness set it apart, rather than a shadow: in a
+    /// view the selected card is the one thing that stands up (Roots'
+    /// principles §2.5).
+    func band(_ fill: Color, facing side: VerticalEdge) -> some View {
+        let r = Theme.frameRadius
+        let top = side == .top
+        let shape = UnevenRoundedRectangle(topLeadingRadius: top ? r : 0, bottomLeadingRadius: top ? 0 : r,
+                                           bottomTrailingRadius: top ? 0 : r, topTrailingRadius: top ? r : 0,
+                                           style: .continuous)
+        return background {
+            shape.fill(fill)
+                .overlay {
+                    shape.strokeBorder(Theme.edge, lineWidth: 1)
+                        .mask(alignment: top ? .top : .bottom) {
+                            LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.55),
+                                                   .init(color: .clear, location: 1)],
+                                           startPoint: top ? .top : .bottom, endPoint: top ? .bottom : .top)
+                                .frame(height: r * 1.6)
+                        }
+                }
+        }
+    }
 }
 
 /// The sun rising over two waves: Irie's mark.

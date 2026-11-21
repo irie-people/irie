@@ -1,0 +1,67 @@
+#!/bin/sh
+# A stand-in for yt-dlp in Yoink's tests: no network, and it answers by the
+# link's words. With --dump-single-json it prints what a link offers: a
+# video (video.json), a playlist, a link that isn't there, or one behind a
+# sign-in. Else it downloads: ok and lag make a file in the folder after
+# progress like yt-dlp's (lag slowly, to outlive a core), fail fails part
+# way, slow stops in the middle until it is killed. It writes its
+# arguments, one a line, to $YOINK_ARGS when that is set.
+here=$(dirname "$0")
+if [ -n "${YOINK_ARGS:-}" ]; then printf '%s\n' "$@" > "$YOINK_ARGS"; fi
+look=0 audio=0 home= temp= url=
+while [ $# -gt 0 ]; do
+	case $1 in
+	--dump-single-json) look=1 ;;
+	-x) audio=1 ;;
+	-P)
+		shift
+		case $1 in
+		home:*) home=${1#home:} ;;
+		temp:*) temp=${1#temp:} ;;
+		esac
+		;;
+	--) shift; url=$1 ;;
+	esac
+	shift
+done
+if [ $look = 1 ]; then
+	case $url in
+	*playlist*) echo '{"_type": "playlist", "id": "PL1", "title": "A list", "playlist_count": 12, "entries": []}' ;;
+	*missing*)
+		echo 'ERROR: [generic] missing: Unable to download webpage: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)' >&2
+		exit 1
+		;;
+	*login*)
+		echo 'ERROR: [instagram] abc: Requested content is not available, rate-limit reached or login required. Use --cookies, --cookies-from-browser, --username and --password' >&2
+		exit 1
+		;;
+	*) cat "$here/video.json" ;;
+	esac
+	exit 0
+fi
+name='Clip [abc123].mp4'
+if [ $audio = 1 ]; then name='Clip [abc123].mp3'; fi
+echo 'yoink-plan [{"format_id": "137", "filesize": 600, "vcodec": "avc1.640028", "acodec": "none"}, {"format_id": "140", "filesize": 400, "vcodec": "none", "acodec": "mp4a.40.2"}]'
+echo 'yoink-format {"format_id": "137+140", "filesize_approx": 1000, "ext": "mp4", "height": 1080}'
+case $url in
+*fail*)
+	echo 'part' > "$temp/Clip [abc123].f137.mp4.part"
+	echo 'yoink-progress downloading 300 600 NA 1000.5 NA 137'
+	echo 'ERROR: [generic] fail: Unable to download video data: HTTP Error 403: Forbidden (caused by <HTTPError 403: Forbidden>)' >&2
+	exit 1
+	;;
+*slow*)
+	echo 'part' > "$temp/Clip [abc123].f137.mp4.part"
+	echo 'yoink-progress downloading 300 600 NA 1000.5 3 137'
+	exec sleep 60
+	;;
+*lag*) sleep 2 ;;
+esac
+echo 'yoink-progress downloading 300 600 NA 1000.5 1 137'
+echo 'yoink-progress finished 600 600 NA NA NA 137'
+echo 'yoink-progress downloading 200 400 NA 2000 NA 140'
+echo 'yoink-progress finished 400 400 NA NA NA 140'
+echo 'yoink-step started Merger' >&2
+echo 'video' > "$home/$name"
+echo 'yoink-step finished Merger' >&2
+printf 'yoink-file "%s/%s"\n' "$home" "$name"

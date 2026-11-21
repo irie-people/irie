@@ -1,90 +1,108 @@
-/* Irie's site. One stylesheet, no build step, no web fonts.
-   Irie's colours come from internal/ui/view.go. The page follows the
-   system's light or dark setting; terminal pictures stay dark in both.
+/* Irie's site. One stylesheet, no build step, no web fonts, no script.
 
-   Spacing sits on a 4 px grid, in steps of 0.25rem. Weights stay at 400
-   to 600, and size and colour make the hierarchy. The sun marks only
-   what is happening now (this page in the navigation, a milestone in
-   progress, the picked agent) and the main button on a dark page; links
-   are green in both themes. These rules follow an audit with unslop,
-   by Damir Sokolovsky (github.com/heydamir/unslop, CC BY 4.0), as
-   PROVENANCE.md records. */
+   It draws from Roots, Irie People's design library
+   (github.com/irie-people/roots): its colours are the roles of Roots'
+   Evergreen palette, the palette of the site's films, and its parts follow
+   Roots' components (principles.md, components.md): one prominent button,
+   soft buttons and pills, panels a step up from the page, the state marks
+   with a glyph each, focus rings in the accent. The page follows the
+   system's light or dark setting; pictures of a terminal stay dark in both.
+
+   The blocks between design: comments are the library's values: Irie's
+   tools/design.sh checks them and writes them again (internal/designcheck),
+   so change a colour in Roots, never here. Everything below them names
+   roles, never colours.
+
+   Sizes step on a 4 px grid (0.25rem). Headings are rounded and 600, text
+   400, and size and colour make the hierarchy. Corners go by size: 14 px
+   for boxes and films, 12 for code, 8 for small controls, round for buttons
+   and pills. These follow Roots and an earlier audit with unslop, by Damir
+   Sokolovsky (github.com/heydamir/unslop, CC BY 4.0), as PROVENANCE.md
+   records. */
 
 :root {
-  color-scheme: light dark;
+  /* design: evergreen light */
+  --sidebar: #F4F4EC; --ground: #E9EBDF; --card: #FBFBF6; --panel: #F1F2E8; --field: #FDFDF9;
+  --edge: #D8DCC9; --hover: #F6F7EF; --selection: #DDE5D3; --needs-tint: #FBE5DC;
+  --ink: #1E2B22; --muted: #56635A;
+  --accent: #2F5D46; --accent-ink: #264D3A; --accent-fill: #9DB8A3; --on-accent: #1E2B22;
+  --needs: #892319; --done: #2C7043; --paused: #8C5500; --frozen: #00566B;
+  --sun: #D9A93F; --waves: #5E8A6E;
+  /* design: end */
+  color-scheme: light;
 
-  /* Irie's colours (internal/ui/view.go) */
-  --sun: #F2B544;
-  --deep-green: #1E5A42;
-  --on-green: #EAF6EF;
-  --rule-green: #3D5247;
-  --sea: #2E9E77;
-  --deep-sea: #1D7357;
+  /* Pictures of a terminal: the terminal's own ground and text, and
+     Evergreen's dark set for the sidebar drawn on it, in both modes. */
+  /* design: terminal t-ground=ground t-ink=ink */
+  --t-ground: #14110D; --t-ink: #EEE5D5;
+  /* design: end */
+  /* design: evergreen dark t-tile=card t-tile-ink=ink t-faint=muted t-red=needs t-green=done t-yellow=paused t-cyan=frozen */
+  --t-tile: #1C2620; --t-tile-ink: #ECF0E6; --t-faint: #B3BFB5;
+  --t-red: #FF9585; --t-green: #B0F2B1; --t-yellow: #EFC468; --t-cyan: #86E0FD;
+  /* design: end */
+  --t-bar: color-mix(in oklab, var(--t-ink) 8%, var(--t-ground));
+  --t-frame: color-mix(in oklab, var(--t-ink) 22%, var(--t-ground));
+  --t-title: color-mix(in oklab, var(--t-ink) 72%, var(--t-ground));
 
-  /* Light theme. Sun is too light for text here, so it only decorates. */
-  --bg: #FCFCF8;
-  --bg-soft: #EAF6EF;
-  --ink: #14261D;
-  --ink-soft: #4A5E54;
-  --line: #D3E2D9;
-  --line-strong: #6E8879;
-  --link: #1E5A42;
-  --link-hover: #1D7357;
-  --mark: #1E5A42;
-  --done: #1E5A42;
-  --done-ink: #EAF6EF;
-  --done-text: #1E5A42;
-  --button: #1E5A42;
-  --button-ink: #EAF6EF;
-  --focus: #1D7357;
-  --code-bg: #E3EFE7;
+  /* The site's names for what the roles do here */
+  --page: var(--sidebar);
+  --foot: var(--ground);
+  --text: var(--ink);
+  --quiet: var(--muted);
+  --link: var(--accent-ink);
+  --line: var(--edge);
+  --line-strong: color-mix(in oklab, var(--muted) 70%, var(--edge));
+  --wash: color-mix(in srgb, var(--ink) 7%, transparent);
+  --on-done: var(--card);
+  --wave-2: var(--accent);
 
-  /* Terminal pictures, the same in both themes. The red, green, yellow
-     and cyan stand in for the terminal's own palette. */
-  --term-bg: #0B1310;
-  --term-bar: #18241E;
-  --term-frame: #2C3D34;
-  --term-title: #B9C9C0;
-  --term-ink: #DDE9E2;
-  --term-faint: #8C9E94;
-  --term-red: #FF6E64;
-  --term-green: #57D08C;
-  --term-yellow: #E8C04F;
-  --term-cyan: #4CC9DB;
-  --term-age-on-green: #C2D8CB;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Menlo, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace;
 
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace;
-
-  --page: 62rem;
+  --page-width: 68rem;
   --measure: 40rem;
-  --gutter: 1.25rem;
-  /* Corners by size: boxes and pictures, then buttons, then tags */
+  --gutter: 1.5rem;
   --radius: 14px;
+  --radius-code: 12px;
   --radius-control: 8px;
-  --radius-tag: 4px;
+  --pill: 999px;
+  --ease: cubic-bezier(.2, .85, .25, 1);
 }
 
-/* Dark theme. Links take sea, lightened to 8.6:1 on the page; the sun is
-   left for the main button and the marks of "now". */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0D1713;
-    --bg-soft: #15221C;
-    --ink: #EAF6EF;
-    --ink-soft: #A7BBB0;
-    --line: #2C3D34;
-    --line-strong: #5E7A6B;
-    --link: #5CC59C;
-    --link-hover: #EAF6EF;
-    --mark: #F2B544;
-    --done: #2E9E77;
-    --done-ink: #0D1713;
-    --done-text: #5CC59C;
-    --button: #F2B544;
-    --button-ink: #10231A;
-    --focus: #5CC59C;
-    --code-bg: #1B2B23;
+    /* design: evergreen dark */
+    --sidebar: #141C17; --ground: #0E1410; --card: #1C2620; --panel: #18221C; --field: #202B24;
+    --edge: #34443A; --hover: #25322A; --selection: #2A3D31; --needs-tint: #4A251C;
+    --ink: #ECF0E6; --muted: #B3BFB5;
+    --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
+    --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD;
+    --sun: #D9A93F; --waves: #9CC5A1;
+    /* design: end */
+    color-scheme: dark;
+    --line-strong: color-mix(in oklab, var(--muted) 55%, var(--edge));
+    --on-done: var(--ground);
+    --wave-2: var(--ink);
+  }
+}
+
+/* Increase Contrast (Roots principles §7.1): text moves toward black on a
+   light page and toward white on a dark one, and hairlines toward the ink. */
+@media (prefers-contrast: more) {
+  :root {
+    --text: color-mix(in oklab, var(--ink) 65%, #000);
+    --quiet: color-mix(in oklab, var(--muted) 65%, #000);
+    --link: color-mix(in oklab, var(--accent-ink) 65%, #000);
+    --line: color-mix(in oklab, var(--edge) 60%, var(--ink));
+    --line-strong: var(--muted);
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --text: color-mix(in oklab, var(--ink) 55%, #fff);
+    --quiet: color-mix(in oklab, var(--muted) 55%, #fff);
+    --link: color-mix(in oklab, var(--accent-ink) 55%, #fff);
   }
 }
 
@@ -96,58 +114,74 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--sans);
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font);
   font-size: 1.0625rem;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 { line-height: 1.2; margin: 0; font-weight: 500; text-wrap: balance; }
-h1 { font-size: clamp(1.9rem, 1.1rem + 3.2vw, 3rem); letter-spacing: -0.015em; }
-h2 { font-size: clamp(1.35rem, 1.1rem + 1vw, 1.65rem); margin-top: 3rem; }
-h3 { font-size: 1.15rem; margin-top: 1.75rem; }
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--round);
+  font-weight: 600;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+h1 { font-size: clamp(2rem, 1.15rem + 3.2vw, 3rem); letter-spacing: -0.02em; }
+h2 { margin-top: 3rem; font-size: clamp(1.4rem, 1.15rem + 1vw, 1.75rem); letter-spacing: -0.01em; }
+h3 { margin-top: 1.75rem; font-size: 1.2rem; }
 p, ul, ol, dl { margin: 0.75rem 0 0; }
 p, li { max-width: var(--measure); }
 strong, b { font-weight: 600; }
 
 a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
-a:hover { color: var(--link-hover); text-decoration-thickness: 2px; }
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
-code, kbd {
-  font-family: var(--mono);
-  font-size: 0.9em;
-  background: var(--code-bg);
-  border-radius: 6px;
+code, kbd { font-family: var(--mono); font-size: 0.875em; }
+code {
   padding: 0.125rem 0.375rem;
+  border-radius: 6px;
+  background: var(--wash);
   overflow-wrap: anywhere;
 }
-kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; }
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.375rem;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+  line-height: 1.5;
+  text-align: center;
+}
 
 dfn { font-style: normal; font-weight: 600; }
 
-/* Page frame */
+/* The frame: a bar with the name and the pages, the page, and a foot.
+   The bar and the foot run the whole width, their contents lined up with
+   the page's. */
 
 .skip {
   position: absolute;
   left: var(--gutter);
-  top: -3rem;
-  z-index: 1;
+  top: -4rem;
+  z-index: 20;
   padding: 0.5rem 1rem;
-  background: var(--button);
-  color: var(--button-ink);
-  border-radius: var(--radius-control);
+  border-radius: var(--pill);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 600;
 }
 .skip:focus { top: 0.75rem; }
 
 .site-header,
-main,
 .site-footer {
-  max-width: calc(var(--page) + 2 * var(--gutter));
-  margin: 0 auto;
-  padding-left: var(--gutter);
-  padding-right: var(--gutter);
+  padding-inline: max(var(--gutter), calc((100% - var(--page-width)) / 2));
 }
 
 .site-header {
@@ -156,54 +190,63 @@ main,
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1.5rem;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  padding-block: 0.75rem;
   border-bottom: 1px solid var(--line);
+  background: var(--page);
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--ink);
+  color: var(--text);
+  font-family: var(--round);
+  font-size: 1.375rem;
   font-weight: 600;
-  font-size: 1.3rem;
+  letter-spacing: -0.01em;
   text-decoration: none;
 }
-.brand:hover { color: var(--ink); }
-.brand svg { width: 2rem; height: 2rem; flex: none; }
+.brand svg { width: 2.25rem; height: 2.25rem; flex: none; }
 
 .site-header ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-  list-style: none;
-  margin: 0;
+  gap: 0.25rem;
+  margin: 0 -0.75rem;
   padding: 0;
+  list-style: none;
 }
+.site-header li { max-width: none; }
 .site-header nav a {
-  display: inline-block;
-  padding: 0.25rem 0;
-  color: var(--ink);
-  font-size: 0.98rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: var(--pill);
+  color: var(--text);
+  font-size: 0.9375rem;
   text-decoration: none;
-  border-bottom: 3px solid transparent;
+  transition: background-color .15s var(--ease);
 }
-.site-header nav a:hover { border-bottom-color: var(--line-strong); }
-/* The page you are on: the sun, which means "now" */
+.site-header nav a:hover { background: var(--wash); }
+/* The page you are on, as Roots marks where you are: the selection */
 .site-header nav a[aria-current="page"],
-.site-header nav a[aria-current="true"] { border-bottom-color: var(--sun); font-weight: 600; }
+.site-header nav a[aria-current="true"] { background: var(--selection); font-weight: 600; }
 
-main { padding-top: 2.5rem; padding-bottom: 4rem; }
+main {
+  max-width: calc(var(--page-width) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 3rem var(--gutter) 5rem;
+}
 
 .site-footer {
-  padding-top: 1.5rem;
-  padding-bottom: 2.5rem;
+  padding-block: 2rem 3rem;
   border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-size: 0.95rem;
+  background: var(--foot);
+  color: var(--quiet);
+  font-size: 0.9375rem;
 }
-.site-footer p { margin: 0.25rem 0 0; }
+.site-footer p { margin: 0.375rem 0 0; max-width: 46rem; }
 
 /* Links to the other irie-people sites. The same rules are in the base
    stylesheet of Riddim, Steak and the home page (irie-people.github.io),
@@ -215,19 +258,146 @@ main { padding-top: 2.5rem; padding-bottom: 4rem; }
 .dot.irie { background: #1E5A42; }
 .dot.riddim { background: #1F1F24; box-shadow: inset 0 -0.25rem 0 #F2B544; }
 .dot.steak { background: #7A2E1F; }
+.dot.roots { background: #1C2620; box-shadow: inset 0 -0.25rem 0 #9CC5A1; }
 @media (prefers-color-scheme: dark) {
   .dot.riddim { background: #34343C; }
+  .dot.roots { background: #34443A; }
 }
+
+/* From a tablet up the bar stays at the top, and a jump to a heading
+   leaves room for it. */
+@media (min-width: 48rem) {
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: color-mix(in srgb, var(--page) 88%, transparent);
+    -webkit-backdrop-filter: saturate(1.2) blur(12px);
+    backdrop-filter: saturate(1.2) blur(12px);
+  }
+  [id] { scroll-margin-top: 5.5rem; }
+}
+
+/* Buttons (Roots components §3.6): one prominent button, in the accent's
+   fill, and soft ones on a card with a hairline. Both are round and 48 px
+   tall, a finger's size. */
+
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1.5rem;
+  border-radius: var(--pill);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  transition: background-color .15s var(--ease);
+}
+.button:hover { background: color-mix(in oklab, var(--accent-fill) 86%, var(--ink)); color: var(--on-accent); }
+.button.quiet { background: var(--card); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.button.quiet:hover { background: var(--hover); box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+/* A note beside the text (Roots' banner): a card, a hairline and round
+   corners, never a coloured edge. */
+.note {
+  margin-top: 1.5rem;
+  padding: 0.875rem 1.125rem;
+  max-width: var(--measure);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* Status marks: what works on main today, and what is planned. Built is
+   done's fill, in progress the sun, which means now, and planned an
+   outline that links to its milestone. */
+
+.tag {
+  display: inline-block;
+  margin-right: 0.375rem;
+  padding: 0 0.5rem;
+  border-radius: var(--pill);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--quiet);
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.5rem;
+  white-space: nowrap;
+  text-decoration: none;
+  vertical-align: 0.15em;
+}
+a.tag:hover { background: var(--wash); color: var(--text); }
+.tag.built { background: var(--done); color: var(--on-done); box-shadow: none; }
+.tag.next { background: var(--sun); color: var(--t-ground); box-shadow: none; }
+h1 .tag, h2 .tag, h3 .tag { margin-left: 0.5rem; }
+
+/* State marks (Roots components §2.1): each state's glyph in its colour,
+   on a card, so colour is never the only cue. */
+.glyph {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-control);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: -0.2em;
+}
+.glyph.red { color: var(--needs); }
+.glyph.green { color: var(--done); }
+.glyph.yellow { color: var(--paused); }
+.glyph.cyan { color: var(--frozen); }
+.glyph.accent { color: var(--accent-ink); }
+.glyph.ink { color: var(--text); }
+.glyph.faint { color: var(--quiet); }
+h2 .glyph { margin-right: 0.5rem; vertical-align: 0.1em; }
+
+/* A fold that opens on request: its chevron turns as it opens. */
+details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.75rem;
+  color: var(--link);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before {
+  content: "";
+  flex: none;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: 0.125rem;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(-45deg);
+  transition: transform .15s var(--ease);
+}
+details[open] > summary::before { transform: rotate(45deg); }
+details > summary:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
 
 /* Pictures */
 
-.picture { margin: 1.75rem 0 0; }
+.picture { margin: 2rem 0 0; }
 .picture svg { display: block; width: 100%; height: auto; }
 .picture figcaption {
   margin: 0.75rem auto 0;
   max-width: var(--measure);
-  color: var(--ink-soft);
-  font-size: 0.95rem;
+  color: var(--quiet);
+  font-size: 0.9375rem;
   text-align: center;
 }
 .picture.narrow svg { max-width: 34rem; margin: 0 auto; }
@@ -248,119 +418,142 @@ main { padding-top: 2.5rem; padding-bottom: 4rem; }
   .window { aspect-ratio: 400 / 356; }
 }
 
-/* SVG paint, so pictures follow the theme */
-svg { font-family: var(--sans); }
+/* The pictures' paint, all roles, so a picture follows the page's mode */
+svg { font-family: var(--font); }
 svg .mono { font-family: var(--mono); }
+svg .rounded { font-family: var(--round); }
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-.s-bg { fill: var(--bg); }
-.s-card { fill: var(--bg-soft); }
-.s-ink { fill: var(--ink); color: var(--ink); }
-.s-soft { fill: var(--ink-soft); color: var(--ink-soft); }
-.s-mark { fill: var(--mark); color: var(--mark); }
+.s-bg { fill: var(--page); }
+.s-card { fill: var(--card); }
+.s-ink { fill: var(--text); color: var(--text); }
+.s-soft { fill: var(--quiet); color: var(--quiet); }
+.s-mark { fill: var(--accent); color: var(--accent); }
 .s-sun { fill: var(--sun); color: var(--sun); }
-.s-sea { fill: var(--sea); color: var(--sea); }
-.s-deep-sea { fill: var(--deep-sea); color: var(--deep-sea); }
-.s-green { fill: var(--deep-green); color: var(--deep-green); }
-.s-on-green { fill: var(--on-green); color: var(--on-green); }
+/* Irie itself, in a diagram: the tile of its icon, dark in both modes */
+.s-green { fill: var(--t-tile); color: var(--t-tile); }
+.s-on-green { fill: var(--t-tile-ink); color: var(--t-tile-ink); }
 .s-done { fill: var(--done); color: var(--done); }
-.s-done-ink { fill: var(--done-ink); color: var(--done-ink); }
-.s-stroke-done-ink { stroke: var(--done-ink); }
+.s-done-ink { fill: var(--on-done); color: var(--on-done); }
+.s-stroke-done-ink { stroke: var(--on-done); }
 .s-line { stroke: var(--line-strong); }
 .s-edge { stroke: var(--line); }
-.s-stroke-ink { stroke: var(--ink); }
-.s-stroke-soft { stroke: var(--ink-soft); }
-.s-stroke-mark { stroke: var(--mark); }
+.s-stroke-ink { stroke: var(--text); }
+.s-stroke-soft { stroke: var(--quiet); }
+.s-stroke-mark { stroke: var(--accent); }
 .s-stroke-sun { stroke: var(--sun); }
-.s-stroke-sea { stroke: var(--sea); }
-.s-stroke-deep-sea { stroke: var(--deep-sea); }
+.s-stroke-sea, .s-stroke-waves { stroke: var(--waves); }
+.s-stroke-deep-sea, .s-stroke-wave-2 { stroke: var(--wave-2); }
 
-.t-bg { fill: var(--term-bg); }
-.t-bar { fill: var(--term-bar); }
-.t-frame { stroke: var(--term-frame); }
-.t-dot { fill: var(--term-frame); }
-.t-title { fill: var(--term-title); }
-.t-ink { fill: var(--term-ink); color: var(--term-ink); }
-.t-faint { fill: var(--term-faint); color: var(--term-faint); }
-.t-red { fill: var(--term-red); color: var(--term-red); }
-.t-green { fill: var(--term-green); color: var(--term-green); }
-.t-yellow { fill: var(--term-yellow); color: var(--term-yellow); }
-.t-cyan { fill: var(--term-cyan); color: var(--term-cyan); }
+.t-bg { fill: var(--t-ground); }
+.t-bar { fill: var(--t-bar); }
+.t-frame { stroke: var(--t-frame); }
+.t-dot { fill: var(--t-frame); }
+.t-title { fill: var(--t-title); }
+.t-ink { fill: var(--t-ink); color: var(--t-ink); }
+.t-faint { fill: var(--t-faint); color: var(--t-faint); }
+.t-red { fill: var(--t-red); color: var(--t-red); }
+.t-green { fill: var(--t-green); color: var(--t-green); }
+.t-yellow { fill: var(--t-yellow); color: var(--t-yellow); }
+.t-cyan { fill: var(--t-cyan); color: var(--t-cyan); }
 .t-sun { fill: var(--sun); color: var(--sun); }
-.t-on-green { fill: var(--on-green); color: var(--on-green); }
-.t-age-on-green { fill: var(--term-age-on-green); }
-.t-deep-green { fill: var(--deep-green); }
-.t-rule { stroke: var(--rule-green); }
+.t-rule { stroke: var(--t-frame); }
 
-/* Home. The hero is the headline, what Irie does and the two buttons,
-   beside the intro film; on a phone the film comes after the buttons.
-   Both columns start at the top, so opening the film's words never moves
-   the buttons. */
+/* Films of the Mac app from docs/demo, 16:10, which play only when asked */
 
-.hero { display: grid; gap: 2rem; align-items: start; }
-.hero .definition { margin: 0 0 1.5rem; }
+.demo { margin: 2rem 0 0; }
+.demos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 0 1.5rem;
+  max-width: 52rem;
+}
+.demo-box {
+  display: block;
+  aspect-ratio: 16 / 10;
+  max-width: 42rem;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+video.demo-box {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.demo figcaption {
+  max-width: 42rem;
+  margin-top: 0.75rem;
+  color: var(--quiet);
+  font-size: 0.9375rem;
+}
+
+/* Home. The hero is the definition, the tagline and headline, what Irie
+   does and the two buttons, beside the intro film; on a phone the film
+   comes after the buttons. Both columns start at the top, so opening the
+   film's words never moves the buttons. */
+
+.hero { display: grid; gap: 2.5rem; align-items: start; }
 .hero hgroup { margin: 0; }
-.tagline { margin: 0 0 0.5rem; color: var(--ink-soft); font-size: 1.15rem; text-wrap: balance; }
+.tagline { margin: 0 0 0.75rem; color: var(--quiet); font-size: 1.15rem; text-wrap: balance; }
 .hero h1 { max-width: 22ch; }
-.lead { font-size: 1.2rem; color: var(--ink-soft); }
-.hero .actions { margin-top: 1.5rem; }
+.lead { color: var(--quiet); font-size: 1.2rem; }
+.hero .actions { margin-top: 2rem; }
 .hero .demo { margin: 0; }
 @media (min-width: 60rem) {
-  .hero { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 3rem; }
-  .hero h1 { font-size: clamp(2rem, 1rem + 1.6vw, 2.5rem); }
+  .hero { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 3.5rem; }
+  .hero h1 { font-size: clamp(2.1rem, 1rem + 1.7vw, 2.6rem); }
   .hero .lead { font-size: 1.125rem; }
 }
-.hero + .note { margin-top: 2.5rem; }
+.hero + .note { margin-top: 3rem; }
 
-.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; }
-.button {
-  display: inline-flex;
-  align-items: center;
-  min-height: 3rem;
-  padding: 0 1.25rem;
-  border: 1px solid var(--button);
-  border-radius: var(--radius-control);
-  background: var(--button);
-  color: var(--button-ink);
-  font-weight: 600;
-  line-height: 1.25;
-  text-decoration: none;
-}
-.button:hover { color: var(--button-ink); filter: brightness(1.08); text-decoration: none; }
-.button.quiet { border-color: var(--line-strong); background: var(--bg-soft); color: var(--ink); }
-.button.quiet:hover { color: var(--ink); border-color: var(--ink-soft); background: var(--code-bg); filter: none; }
+/* The intro on Home: 16:9, with sound. Its disclosure sits under it, and
+   its words open on request. */
+.demo-box.wide { aspect-ratio: 16 / 9; max-width: none; }
+.intro .disclosure { display: block; margin-top: 0.25rem; font-size: 0.8125rem; }
+.script { margin-top: 0.5rem; max-width: 42rem; }
+.script p { color: var(--quiet); }
 
-/* A note beside the text: a step up from the page, with a hairline */
-.note {
-  margin-top: 1.5rem;
-  padding: 0.75rem 1rem;
+/* The definition from the README, word for word (docs/PHRASES.md). A
+   dictionary entry on a card: colour, not italics, sets the word's kind
+   and its example apart. */
+.definition {
+  margin: 1rem 0 0;
+  padding: 1rem 1.25rem;
   max-width: var(--measure);
-  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--bg-soft);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
+.hero .definition { margin: 0 0 2rem; }
+.definition p { margin: 0.25rem 0 0; }
+.definition p:first-child { margin-top: 0; }
+.definition strong { font-family: var(--round); font-size: 1.125rem; }
+.definition .pos,
+.definition .example { color: var(--quiet); }
 
-/* Why Irie: one row per reason, its line on the left and what it means
-   on the right, with what is built and planned in quiet text. */
+/* Why Irie: one row per reason, its line on the left and what it means on
+   the right, with what is built and planned in quiet text. */
 .reasons {
-  margin-top: 1.25rem;
+  margin-top: 1.5rem;
   padding: 0;
-  max-width: 52rem;
+  max-width: 54rem;
   list-style: none;
   border-top: 1px solid var(--line);
 }
 .reasons li {
   max-width: none;
-  padding: 1.5rem 0;
+  padding: 1.75rem 0;
   border-bottom: 1px solid var(--line);
 }
-.reasons h3 { margin: 0; font-size: 1.25rem; }
+.reasons h3 { margin: 0; font-size: 1.3rem; }
 .reasons h3 + p { margin-top: 0.5rem; }
 @media (min-width: 47.5rem) {
   .reasons li {
     display: grid;
     grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
-    column-gap: 2rem;
+    column-gap: 2.5rem;
     align-items: baseline;
   }
   .reasons h3 { grid-row: span 3; }
@@ -371,84 +564,25 @@ svg .mono { font-family: var(--mono); }
   margin-top: 0.5rem;
   padding-left: 4.5rem;
   text-indent: -4.5rem;
-  color: var(--ink-soft);
-  font-size: 0.95rem;
+  color: var(--quiet);
+  font-size: 0.9375rem;
 }
 .reasons .status .tag {
   width: 4.5rem;
   margin: 0;
   padding: 0;
-  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   background: none;
-  color: var(--ink-soft);
+  color: var(--quiet);
   font-size: inherit;
-  font-weight: 600;
   line-height: inherit;
   text-indent: 0;
   vertical-align: baseline;
 }
-.reasons .status .tag.built { color: var(--done-text); }
-.reasons .status a.tag { text-decoration: underline; text-decoration-thickness: 1px; }
-.reasons .status a.tag:hover { color: var(--ink); text-decoration-thickness: 2px; }
-
-/* Status marks: what works on main today, and what is planned */
-
-.tag {
-  display: inline-block;
-  margin-right: 0.375rem;
-  padding: 0 0.375rem;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-tag);
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  font-weight: 500;
-  line-height: 1.25rem;
-  white-space: nowrap;
-  text-decoration: none;
-  vertical-align: 0.1em;
-}
-a.tag:hover { color: var(--ink); border-color: var(--ink); text-decoration: none; }
-.tag.built { border-color: var(--done); background: var(--done); color: var(--done-ink); }
-.tag.next { border-color: var(--sun); background: var(--sun); color: #14261D; }
-h2 .tag, h3 .tag { font-size: 0.8rem; margin-left: 0.5rem; }
-
-/* Recording boxes: 16:10 films of the Mac app from docs/demo, which play
-   only when asked. A box without its film yet is dashed. */
-
-.demo { margin: 2rem 0 0; }
-.demos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: 0 1.5rem;
-  max-width: 52rem;
-}
-.demo-box {
-  aspect-ratio: 16 / 10;
-  max-width: 42rem;
-  border: 2px dashed var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--bg-soft);
-}
-video.demo-box {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--line);
-}
-.demo figcaption {
-  max-width: 42rem;
-  margin-top: 0.5rem;
-  color: var(--ink-soft);
-  font-size: 0.95rem;
-}
-
-/* The intro on Home: 16:9, with sound. Its disclosure sits under it,
-   and its words open on request. */
-.demo-box.wide { aspect-ratio: 16 / 9; max-width: none; }
-.intro .disclosure { display: block; margin-top: 0.25rem; font-size: 0.85rem; }
-.script { margin-top: 0.75rem; max-width: 42rem; }
-.script summary { cursor: pointer; color: var(--link); font-weight: 600; }
-.script p { color: var(--ink-soft); }
+.reasons .status .tag.built { color: var(--done); }
+.reasons .status a.tag { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+.reasons .status a.tag:hover { color: var(--text); text-decoration-thickness: 2px; }
 
 /* Steps (Get started), numbered in plain figures */
 
@@ -457,16 +591,17 @@ video.demo-box {
   counter-increment: step;
   position: relative;
   padding-left: 2.5rem;
-  margin-top: 1.5rem;
+  margin-top: 1.75rem;
 }
 .steps > li::before {
   content: counter(step);
   position: absolute;
   left: 0;
   top: 0;
-  color: var(--ink-soft);
-  font-size: 1.15rem;
-  font-weight: 500;
+  color: var(--quiet);
+  font-family: var(--round);
+  font-size: 1.2rem;
+  font-weight: 600;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -480,52 +615,34 @@ video.demo-box {
 .spawn-parts dt code { margin-right: 0.25rem; }
 .spawn-parts dd { margin: 0.25rem 0 0; max-width: var(--measure); }
 
-/* State list (How it works) */
+/* The states (How it works): the list's marks beside what each means */
 
 .states-layout {
   display: grid;
-  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
-  gap: 1.5rem 2.5rem;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  gap: 1.5rem 3rem;
   align-items: start;
-  margin-top: 1.75rem;
+  margin-top: 2rem;
 }
 .states-layout .picture { margin: 0; }
 @media (max-width: 47.5rem) {
   .states-layout { grid-template-columns: minmax(0, 1fr); }
-  .states-layout .picture svg { max-width: 22rem; margin: 0 auto; }
+  .states-layout .picture svg { max-width: 20rem; margin: 0 auto; }
 }
 
 .states { margin: 0; padding: 0; list-style: none; }
-.states li { display: flex; gap: 0.75rem; align-items: baseline; margin-top: 0.5rem; }
+.states li { display: flex; gap: 0.875rem; align-items: baseline; margin-top: 0.75rem; }
 .states li:first-child { margin-top: 0; }
-.glyph {
-  flex: none;
-  display: inline-block;
-  min-width: 2rem;
-  padding: 0 0.5rem;
-  border-radius: 6px;
-  background: var(--term-bg);
-  font-family: var(--mono);
-  font-weight: 700;
-  line-height: 1.6;
-  text-align: center;
-}
-.glyph.red { color: var(--term-red); }
-.glyph.green { color: var(--term-green); }
-.glyph.yellow { color: var(--term-yellow); }
-.glyph.cyan { color: var(--term-cyan); }
-.glyph.ink { color: var(--term-ink); }
-.glyph.faint { color: var(--term-faint); }
 
 /* Roadmap. Its numbered stones stay: there the number is the milestone. */
 
-.milestones { list-style: none; padding: 0; margin-top: 1.25rem; }
+.milestones { list-style: none; padding: 0; margin-top: 1.5rem; }
 .milestones > li {
   display: grid;
   grid-template-columns: 2.5rem minmax(0, 1fr);
   gap: 0 1rem;
-  max-width: 46rem;
-  padding: 1rem 0;
+  max-width: 48rem;
+  padding: 1.25rem 0;
   border-bottom: 1px solid var(--line);
 }
 .milestones > li:first-child { border-top: 1px solid var(--line); }
@@ -534,17 +651,18 @@ video.demo-box {
   grid-row: span 2;
   width: 2.5rem;
   height: 2.5rem;
-  border: 2px solid var(--ink-soft);
+  border: 2px solid var(--line-strong);
   border-radius: 50%;
-  color: var(--ink-soft);
+  color: var(--quiet);
+  font-family: var(--round);
   font-weight: 600;
   line-height: 2.25rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.milestones .done .num { border-color: var(--done); background: var(--done); color: var(--done-ink); }
-.milestones .now .num { border-color: #14261D; background: var(--sun); color: #14261D; }
-.milestones h3 { margin: 0.5rem 0 0; font-size: 1.1rem; }
+.milestones .done .num { border-color: var(--done); background: var(--done); color: var(--on-done); }
+.milestones .now .num { border-color: var(--t-ground); background: var(--sun); color: var(--t-ground); }
+.milestones h3 { margin: 0.5rem 0 0; font-size: 1.15rem; }
 .milestones h3 .tag { margin-left: 0.5rem; }
 .milestones p { margin-top: 0.25rem; }
 
@@ -553,65 +671,101 @@ video.demo-box {
 
 /* FAQ and Contribute */
 
-/* The definition from the README, word for word (docs/PHRASES.md). A
-   dictionary entry: colour, not italics, sets the word's kind and its
-   example apart. */
-.definition {
-  margin: 1rem 0 0;
-  padding: 0.75rem 1rem;
-  max-width: var(--measure);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-soft);
-}
-.definition p { margin: 0.25rem 0 0; }
-.definition p:first-child { margin-top: 0; }
-.definition .pos,
-.definition .example { color: var(--ink-soft); }
-
-.qa h2 { font-size: 1.25rem; margin-top: 2.25rem; }
+.qa h2 { margin-top: 2.5rem; font-size: 1.3rem; }
 .rules { padding-left: 1.25rem; }
 .rules li { margin-top: 0.5rem; }
 
 .links { padding-left: 1.25rem; }
 .links li { margin-top: 0.25rem; }
 
-/* Docs */
-
-/* Commands and files. They scroll sideways rather than wrap, so a
-   command can be copied as it is. */
+/* Commands and files. They scroll sideways rather than wrap, so a command
+   can be copied as it is. */
 pre {
   margin: 1rem 0 0;
-  padding: 0.75rem 1rem;
-  max-width: 46rem;
+  padding: 0.875rem 1.125rem;
+  max-width: 48rem;
   overflow-x: auto;
-  background: var(--code-bg);
-  border-radius: 10px;
+  border-radius: var(--radius-code);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line);
   font-family: var(--mono);
-  font-size: 0.88rem;
-  line-height: 1.55;
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
-pre code { padding: 0; background: none; border-radius: 0; font-size: inherit; overflow-wrap: normal; }
-.prompt { color: var(--ink-soft); user-select: none; }
+pre code { padding: 0; border-radius: 0; background: none; font-size: inherit; overflow-wrap: normal; }
+.prompt { color: var(--quiet); user-select: none; }
 
-.table-wrap { margin-top: 1rem; max-width: 52rem; overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 0.97rem; line-height: 1.5; }
-caption { padding-bottom: 0.5rem; color: var(--ink-soft); font-size: 0.95rem; text-align: left; }
-th, td { padding: 0.5rem 1rem 0.5rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-th { border-bottom: 2px solid var(--line-strong); font-weight: 600; }
+/* Tables: hairlines between rows, the heads quiet */
+.table-wrap { margin-top: 1.25rem; max-width: 54rem; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; line-height: 1.5; }
+caption { padding-bottom: 0.5rem; color: var(--quiet); font-size: 0.9375rem; text-align: left; }
+th, td { padding: 0.625rem 1rem 0.625rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-weight: 600; }
+thead th { border-bottom-color: var(--line-strong); color: var(--quiet); font-size: 0.875rem; }
 td code, th code { white-space: nowrap; }
 td .tag { margin-top: 0.25rem; }
 
-.doc h2 { scroll-margin-top: 1rem; }
-.doc h3 { font-size: 1.08rem; }
+/* Docs: their pages in a side list on a wide screen, as Roots' docs are,
+   and at the foot of each page the next one, then all of them. */
+
+.docs-layout {
+  max-width: calc(var(--page-width) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+}
+.docs-layout > main { max-width: none; margin: 0; padding-inline: 0; }
+.docs-side { display: none; }
+.docs-side ol { margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.docs-side li { max-width: none; }
+.docs-side a {
+  display: block;
+  padding: 0.3125rem 0.75rem;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.docs-side a:hover { background: var(--wash); }
+.docs-side a[aria-current="page"] { background: var(--selection); font-weight: 600; }
+.docs-side .docs-side-title { margin: 0; padding: 0 0.75rem; }
+.docs-side .docs-side-title a {
+  display: inline;
+  padding: 0;
+  color: var(--quiet);
+  font-family: var(--round);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.docs-side .docs-side-title a:hover { background: none; color: var(--text); }
+.docs-side .docs-side-title a[aria-current="page"] { background: none; color: var(--text); }
+@media (min-width: 64rem) {
+  .docs-layout {
+    display: grid;
+    grid-template-columns: 12.5rem minmax(0, 1fr);
+    gap: 0 3rem;
+  }
+  .docs-side {
+    display: block;
+    position: sticky;
+    top: 4.5rem;
+    align-self: start;
+    max-height: calc(100vh - 4.5rem);
+    overflow-y: auto;
+    padding: 3rem 0 2rem;
+  }
+  .docs-nav ol { display: none; }
+}
+
+.doc h3 { font-size: 1.125rem; }
 .doc ul.rules, .doc ol.rules { max-width: var(--measure); }
 
 /* The list of docs pages, on the docs index, numbered in plain figures */
-.doc-list { margin-top: 1.25rem; padding: 0; list-style: none; counter-reset: doc; max-width: 46rem; }
+.doc-list { margin-top: 1.5rem; padding: 0; list-style: none; counter-reset: doc; max-width: 48rem; }
 .doc-list > li {
   counter-increment: doc;
   position: relative;
-  padding: 1rem 0 1rem 2.5rem;
+  padding: 1.125rem 0 1.125rem 2.5rem;
   border-bottom: 1px solid var(--line);
 }
 .doc-list > li:first-child { border-top: 1px solid var(--line); }
@@ -619,27 +773,27 @@ td .tag { margin-top: 0.25rem; }
   content: counter(doc);
   position: absolute;
   left: 0;
-  top: 1.25rem;
-  color: var(--ink-soft);
+  top: 1.375rem;
+  color: var(--quiet);
+  font-family: var(--round);
   font-size: 1.15rem;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
-.doc-list h2 { margin: 0.25rem 0 0; font-size: 1.15rem; }
+.doc-list h2 { margin: 0.25rem 0 0; font-size: 1.2rem; }
 .doc-list p { margin-top: 0.25rem; }
 
-/* At the foot of each docs page: the next page, then all of them */
 .docs-nav {
-  margin-top: 3.5rem;
-  padding: 1rem 1.25rem 1.25rem;
-  max-width: 46rem;
-  border: 1px solid var(--line);
+  margin-top: 4rem;
+  padding: 1.125rem 1.25rem;
+  max-width: 48rem;
   border-radius: var(--radius);
-  background: var(--bg-soft);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .docs-nav .next { margin: 0; font-weight: 600; }
-.docs-nav .next a { font-size: 1.1rem; }
+.docs-nav .next a { font-family: var(--round); font-size: 1.15rem; }
 .docs-nav ol {
   display: flex;
   flex-wrap: wrap;
@@ -650,31 +804,34 @@ td .tag { margin-top: 0.25rem; }
   list-style: none;
 }
 .docs-nav li { max-width: none; }
-.docs-nav a[aria-current="page"] { color: var(--ink); font-weight: 600; text-decoration: none; }
+.docs-nav a[aria-current="page"] { color: var(--text); font-weight: 600; text-decoration: none; }
 
 /* Themes. Each picture carries its theme's own colours, so it looks the
    same in the site's light and dark. */
-svg .rounded { font-family: ui-rounded, "SF Pro Rounded", var(--sans); }
 .pair {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: 0 1.5rem;
-  max-width: 44rem;
+  max-width: 46rem;
 }
 .pair .picture svg { max-width: 21rem; margin: 0 auto; }
-.colours { margin-top: 1.25rem; max-width: 44rem; }
-.colours summary { cursor: pointer; color: var(--link); font-weight: 600; }
-.colours .role { display: block; color: var(--ink-soft); font-size: 0.85rem; font-weight: 400; }
+.colours { margin-top: 1.25rem; max-width: 46rem; }
+.colours .role { display: block; color: var(--quiet); font-size: 0.8125rem; font-weight: 400; }
 .colours td { white-space: nowrap; }
 .sw { width: 1rem; height: 1rem; margin-right: 0.5rem; vertical-align: -0.125rem; }
 
 @media (max-width: 32.5rem) {
   :root { --gutter: 1rem; }
   body { font-size: 1rem; }
-  main { padding-top: 1.75rem; }
+  main { padding-top: 2rem; }
   .lead { font-size: 1.1rem; }
+  .site-header ul { margin-inline: -0.625rem; }
+  .site-header nav a { padding: 0 0.625rem; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
 }

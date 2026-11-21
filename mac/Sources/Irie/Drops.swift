@@ -33,10 +33,13 @@ struct DropRowFrames: PreferenceKey {
 }
 
 /// The list's layout that the drop's line follows: its side inset, and
-/// each group's step further in (GroupTree).
+/// each group's step further in (GroupTree). A group's rail runs down at
+/// `rail`, under its header's chevron, which the header sets that far in,
+/// so its cards step in past it.
 enum ListLayout {
     static let inset: CGFloat = 10
-    static let indent: CGFloat = 9
+    static let indent: CGFloat = 14
+    static let rail: CGFloat = 9
 }
 
 extension View {

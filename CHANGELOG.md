@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.9.1](https://github.com/irie-people/irie/compare/v1.9.0...v1.9.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **core:** read a + word as a pick only where it names one ([ec92d76](https://github.com/irie-people/irie/commit/ec92d768386666ba0cb0dfe59286aab9d611e9f8))
+
+## [1.9.0](https://github.com/irie-people/irie/compare/v1.8.0...v1.9.0) (2026-11-16)
+
+
+### Features
+
+* **mac:** set the sidebar's sections apart with space and hairlines, and join what belongs together ([8722606](https://github.com/irie-people/irie/commit/872260666d7abdc7ad8905de888f8e37eedaccdc))
+* **mac:** zen keeps the session's own card and panes ([14f08bd](https://github.com/irie-people/irie/commit/14f08bd726030fdc9ec1fa8c3d1a86b8aa9ac516))
+* **mac:** zen mode on Fn+Z, the session alone in a layout of its own ([a323437](https://github.com/irie-people/irie/commit/a323437d9ec5f3c72a9532475de0364905cba19b))
+* **mac:** zen's card becomes a header bubble over the terminal ([61daaa3](https://github.com/irie-people/irie/commit/61daaa37bb805088b657477d4d57e703557dd098))
+* **terms:** Terms in short, a plugin of its own with a Terms tab in Irie ([9a11932](https://github.com/irie-people/irie/commit/9a11932bfca14a38f522584f60a51a52154e6247))
+* **undo:** ask before ⌘Z or ⇧⌘Z takes a step, naming it ([4b7db63](https://github.com/irie-people/irie/commit/4b7db63b8d2a5bc6d102ea6b645688df80756305))
+
+## [1.8.0](https://github.com/irie-people/irie/compare/v1.7.0...v1.8.0) (2026-11-16)
+
+
+### Features
+
+* **core:** keep each agent's window at its own session's terminal size ([e96cbfc](https://github.com/irie-people/irie/commit/e96cbfc3281db4026e944b9aa10c1507bcab5728))
+* **core:** say where a terminal's link opens, by ui.terminal_links ([0e112c6](https://github.com/irie-people/irie/commit/0e112c67877150133f7a190865a0687639803d7c))
+* **extension:** Irie in your browser, with Terms in short as its first tool ([372019f](https://github.com/irie-people/irie/commit/372019fbeffa2a8ebf42f38df42dad2a1788742d))
+* **extension:** irie terms serve, the panel as a page for Irie's own panes ([5c5959e](https://github.com/irie-people/irie/commit/5c5959e3f6be69039615e61ea1e18db7c6eb8c98))
+* **mac:** open a terminal's links in the session's panes ([6003581](https://github.com/irie-people/irie/commit/600358169826e898cecae5629273981458d7b8e6))
+* **mac:** show or hide each session's panes as it last had them ([1d92d43](https://github.com/irie-people/irie/commit/1d92d431e0129658e7bc6f9e85387c483242bdd7))
+* **plugins:** Bitwarden fills the sign-ins of your panes ([2f5a223](https://github.com/irie-people/irie/commit/2f5a22389121fb87c169f879ed74bc40cb96a725))
+
+
+### Bug Fixes
+
+* **core:** mirror the helpers op in the core package, and name irie-agents by brand ([20163ce](https://github.com/irie-people/irie/commit/20163ce305217ab3a418944381fae5ece7091fbf))
+* **core:** pick out an app or a script a link names, never open it ([e926487](https://github.com/irie-people/irie/commit/e9264876a117d6b049d9b7e5c01520b762e9249b))
+* **extension:** harden the terms reader and the host after review ([a859ff9](https://github.com/irie-people/irie/commit/a859ff91f6835ac9db506cf44612701318dfe4fe))
+* **mac:** ask tmux for links in the app's own terminals only ([6385cc0](https://github.com/irie-people/irie/commit/6385cc0f201fad111a8b3de96c0b13e2bfbecfdb))
+* **mac:** make every ⌘-click on a link open it, and leave the wheel be ([508fc5e](https://github.com/irie-people/irie/commit/508fc5e8b3038b5e0edb96481dd16aa05e31bdd5))
+* **mac:** wait for the terminal before telling the core its sizes ([0f49cfe](https://github.com/irie-people/irie/commit/0f49cfe52d3d13979e694ed1d04970bf3af7b98c))
+* stop macOS's firewall asking about irie at every install and test ([0764881](https://github.com/irie-people/irie/commit/076488168e7b6586cb60acf75ab76178feaa741d))
+
+
+### Performance Improvements
+
+* **tests:** run every test in 83 s instead of 595 s, spread over the CPUs, and rerun only what changed ([0f52e2b](https://github.com/irie-people/irie/commit/0f52e2bf4884d29c0049fdff04c52894a5be5513))
+
 ## [1.7.0](https://github.com/irie-people/irie/compare/v1.6.0...v1.7.0) (2026-11-15)
 
 

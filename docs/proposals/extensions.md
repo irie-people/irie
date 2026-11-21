@@ -274,6 +274,14 @@ Before Bitwarden for agents came into the privacy plugin (DESIGN §4.17), a revi
 
 The review found sound: request ids from `crypto/rand`, each answered once and dropped, so a signature can't be replayed; domain-separated messages checked with P-256 over SHA-256; ids checked before they reach bw; a new item on stdin; no stdin for the command; logs with names and never values; `BW_SESSION` and `BW_PASSWORD` kept from agents; vault ops never forwarded to peers or the phone.
 
+### 3.9 Filling the person's own sign-ins, 2026-11-15
+
+The owner asked for Bitwarden "as a pluggin to auto fill accounts and pw from bw". That is a different job from this section's: the logins go to the person, into the sign-in pages of their own web panes, never to an agent. So it was built apart, as the Bitwarden plugin's first part (DESIGN §4.17), and Bitwarden for agents moved into that plugin, still held. What it takes from this review:
+
+- **No request an agent can make.** The Mac app unlocks, reads and fills by itself; the core has no op for it, so §3.8's first, second and fourth findings have nothing to work on: no Allow, no keys file, no setting that names bw, and no command run with a secret.
+- **The master password through a pipe** (finding 3): `bw unlock --raw --passwordfile /dev/stdin`, which bw 2025.9.0 reads with `NodeUtils.readFirstLine` like any file. The session key is still in `BW_SESSION` while `bw sync` and `bw list items` run, readable to a process of the same user with `ps -E`, so the app runs bw only right after the person unlocks, never at anyone else's word, and `bw lock` ends the key at once.
+- **What stays.** The panes' logins, in the app's memory, until the screen locks, the Mac sleeps, its user switches away, four hours pass or the person locks them. §3.7's limit holds here too: a determined program of the same user can read what that user can.
+
 ---
 
 ## 4. Mullvad VPN control

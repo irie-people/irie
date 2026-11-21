@@ -117,6 +117,8 @@ extension Store {
     /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button: it opens
     /// on the tab it closed on, a plugin's pane too while that is on.
     func toggleSide() {
+        // Zen hides it: it gives way, and the sidebar shows (Zen.swift).
+        if zenGivesWay(), side.open { return }
         if side.open {
             closeSide()
         } else if side.tab == .plugin, let id = side.pane, panes.contains(where: { $0.id == id }) {
@@ -129,6 +131,7 @@ extension Store {
     /// A tab's own key (⌥⌘1 to ⌥⌘8): shows the sidebar on that tab, or
     /// closes it when that tab already shows.
     func toggleSideTab(_ tab: SideTab) {
+        if zenGivesWay() { return openSide(tab) }
         if side.open && side.tab == tab { closeSide() } else { openSide(tab) }
     }
 
@@ -162,6 +165,7 @@ extension Store {
 
     /// Opens the right sidebar on a tab: a closed one slides in.
     func openSide(_ tab: SideTab) {
+        zenGivesWay()
         var s = side
         s.open = true
         s.tab = sideTabs.contains(tab) ? tab : SideTab.built(variorum: false)[0]
@@ -171,6 +175,7 @@ extension Store {
     /// Opens the right sidebar on a plugin's pane (PluginPanes.swift): a closed
     /// one slides in.
     func openPane(_ id: String) {
+        zenGivesWay()
         var s = side
         s.open = true
         s.tab = .plugin
@@ -271,11 +276,15 @@ struct RightSidebar: View {
     /// which keeps the terminal some room.
     var drawn = SideState.startWidth
     var most = SideState.maxWidth
+    /// The layout is reversed (Store.reversed): it comes out of the
+    /// window's left edge, and faces the terminal with its right.
+    var flip = false
 
     /// Rounded where it faces the terminal, as the terminal's frame is, and
     /// square at the window's edge, which it comes out of.
     private var shape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, bottomLeadingRadius: Theme.frameRadius, style: .continuous)
+        flip ? UnevenRoundedRectangle(bottomTrailingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+            : UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, bottomLeadingRadius: Theme.frameRadius, style: .continuous)
     }
 
     var body: some View {
@@ -288,11 +297,13 @@ struct RightSidebar: View {
         .clipShape(shape)
         // The shadow it casts on the terminal as it slides over its edge.
         .background(shape.fill(Theme.panel)
-            .shadow(color: .black.opacity(0.18), radius: 10, x: -2))
+            .shadow(color: .black.opacity(0.18), radius: 10, x: flip ? 2 : -2))
         // Its edge, on every side but the window's: that one lies just
         // past the window, out of sight.
-        .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1).padding(.trailing, -1))
-        .overlay(alignment: .leading) { SideEdge(guide: $guide, drawn: drawn, most: most).offset(x: -5) }
+        .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1).padding(flip ? .leading : .trailing, -1))
+        .overlay(alignment: flip ? .trailing : .leading) {
+            SideEdge(guide: $guide, drawn: drawn, most: most, flip: flip).offset(x: flip ? 5 : -5)
+        }
         // Esc hands the keyboard back; closing would resize every agent.
         .onExitCommand {
             if store.showTerminal { store.focusTerminal += 1 } else { store.focusMessage += 1 }
@@ -331,19 +342,15 @@ struct RightSidebar: View {
         return Button { store.openPane(p.id) } label: {
             HStack(spacing: 4) {
                 if tight {
-                    Text(Image(systemName: p.symbol))
-                        .font(.system(size: 12, weight: on ? .bold : .medium))
+                    Self.steady(Text(Image(systemName: p.symbol)), on: on) { $0.font(.system(size: 12, weight: $1 ? .bold : .medium)) }
                 } else {
-                    Text(p.title)
-                        .font(Theme.font(12, on ? .bold : .medium))
-                        .lineLimit(1)
-                        .fixedSize()
+                    Self.steady(Text(p.title), on: on) { $0.font(Theme.font(12, $1 ? .bold : .medium)) }
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
             .padding(.horizontal, tight ? 5 : 7)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
+            .background(Self.thumb(on))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -358,14 +365,9 @@ struct RightSidebar: View {
         return Button { store.openSide(t) } label: {
             HStack(spacing: 4) {
                 if tight {
-                    Text(Image(systemName: t.symbol))
-                        .font(.system(size: 12, weight: on ? .bold : .medium))
-                        .foregroundStyle(on ? Theme.ink : Theme.muted)
+                    Self.steady(Text(Image(systemName: t.symbol)), on: on) { $0.font(.system(size: 12, weight: $1 ? .bold : .medium)) }
                 } else {
-                    Text(t.title)
-                        .font(Theme.font(12, on ? .bold : .medium))
-                        .lineLimit(1)
-                        .fixedSize()
+                    Self.steady(Text(t.title), on: on) { $0.font(Theme.font(12, $1 ? .bold : .medium)) }
                 }
                 if n.count > 0 {
                     Text("\(n.count)")
@@ -373,19 +375,40 @@ struct RightSidebar: View {
                         .monospacedDigit()
                         .foregroundStyle(n.needsYou ? Theme.onAccent : (on ? Theme.ink : Theme.muted))
                         .padding(.horizontal, 5)
-                        .background(Capsule().fill(n.needsYou ? Theme.needs : (on ? Theme.card : Theme.edge)))
+                        .background(Capsule().fill(n.needsYou ? Theme.needs : Theme.edge))
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
             .padding(.horizontal, tight ? 5 : 7)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
+            .background(Self.thumb(on))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("\(t.title) (⌥⌘\(String(t.key.character)))")
         .accessibilityLabel(t.title + (n.count > 0 ? ", \(n.count)" : "") + (n.needsYou ? ", needs you" : ""))
         .accessibilityAddTraits(on ? [.isSelected] : [])
+    }
+
+    /// The picked tab's thumb, as the List and Repo switch's: the card's
+    /// ground on a soft shadow (Roots' components §3.7, §3.13). Not the
+    /// selection's colour, which marks the session on show: these tabs are
+    /// the same whichever session shows.
+    private static func thumb(_ on: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(on ? Theme.card : Color.clear)
+            .shadow(color: on ? Theme.shadow : Color.clear, radius: 1.5, y: 0.5)
+    }
+
+    /// A tab's label as wide as its bold self, picked or not, so a pick
+    /// moves no tab after it (Roots' principles §2.3).
+    private static func steady(_ text: Text, on: Bool, _ style: @escaping (Text, Bool) -> Text) -> some View {
+        ZStack {
+            style(text, true).hidden()
+            style(text, on)
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 
     private func iconButton(_ symbol: String, help: String, label: String, action: @escaping () -> Void) -> some View {
@@ -437,7 +460,7 @@ struct RightSidebar: View {
     }
 }
 
-/// The sidebar's leading edge, which a drag moves. A guide line shows where
+/// The sidebar's edge toward the terminal, which a drag moves. A guide line shows where
 /// it would go, and the width applies on release: one resize of the
 /// terminal, and of every agent, not one per frame. The drag starts from
 /// the width it is drawn at, which a narrow window can hold below the one
@@ -448,6 +471,8 @@ private struct SideEdge: View {
     @Binding var guide: Double?
     let drawn: Double
     let most: Double
+    /// Reversed, the edge is the sidebar's right one: a drag right widens it.
+    let flip: Bool
     /// The resize pointer is pushed. It is popped once, and also when the
     /// drawer closes under the pointer, which ends no hover: the pointer
     /// would stay a resize one over the terminal.
@@ -471,7 +496,10 @@ private struct SideEdge: View {
                 pushed = false
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { g in guide = min(SideState.clamp(drawn - Double(g.translation.width)), max(most, SideState.minWidth)) }
+                .onChanged { g in
+                    let dx = Double(g.translation.width)
+                    guide = min(SideState.clamp(drawn + (flip ? dx : -dx)), max(most, SideState.minWidth))
+                }
                 .onEnded { _ in
                     if let g = guide { store.setSideWidth(g) }
                     guide = nil

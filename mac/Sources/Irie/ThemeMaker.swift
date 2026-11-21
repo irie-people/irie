@@ -496,7 +496,7 @@ struct ThemeMaker: View {
                         .font(Theme.font(13, .semibold))
                         .foregroundStyle(Color.primary)
                     PaneDiagram(facts: panes, terminal: store.showTerminal, detailsMinimized: detailsMinimized,
-                                detailsHeight: detailsHeight, side: store.side)
+                                detailsHeight: detailsHeight, side: store.side, reversed: store.reversed)
                         .frame(maxWidth: 560)
                     paneControls
                         .frame(maxWidth: 560)
@@ -530,7 +530,7 @@ struct ThemeMaker: View {
                 Text("Layouts")
                     .font(Theme.font(19, .bold))
                     .foregroundStyle(Color.primary)
-                Text("A layout keeps how \(Brand.name)’s window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. Arrange the window, here or by hand, and save it; View › Layout puts it back, and ⌃⌘1 to ⌃⌘9 your first nine.")
+                Text("A layout keeps how \(Brand.name)’s window is arranged: what the right side shows, the sidebar and which side it is on, the details panel, the right sidebar and the text size. Arrange the window, here or by hand, and save it; View › Layout puts it back, and ⌃⌘1 to ⌃⌘9 your first nine.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -653,6 +653,12 @@ struct ThemeMaker: View {
                 Text("Terminal").tag(true)
             }
             .pickerStyle(.segmented)
+            // The window as in a mirror (Fn+X Fn+L Fn+R).
+            Toggle("Reversed, the sidebar on the right", isOn: Binding(get: { store.reversed }, set: { on in
+                if on != store.reversed { store.toggleReversed() }
+            }))
+            .toggleStyle(.switch)
+            .help("Fn+X Fn+L Fn+R, or View › Layout › Reverse")
             controlRow("Sidebar", shown: Binding(get: { panes.sidebarShown }, set: { on in
                 WindowPanes.setSidebar(shown: on, width: nil)
                 panes.sidebarShown = on
@@ -691,8 +697,8 @@ struct ThemeMaker: View {
             HStack {
                 Text("Terminal text")
                 Spacer()
-                Stepper(value: Binding(get: { Int(store.fontSize) }, set: { store.setFontSize(CGFloat($0)) }), in: 9...28) {
-                    Text("\(Int(store.fontSize)) pt").monospacedDigit()
+                Stepper(value: Binding(get: { Int(store.windowFontSize) }, set: { store.setWindowFontSize(CGFloat($0)) }), in: 9...28) {
+                    Text("\(Int(store.windowFontSize)) pt").monospacedDigit()
                 }
             }
         }
@@ -1153,13 +1159,15 @@ struct ThemeSketch: View {
 
 /// The window's panes as they stand, drawn small: the sidebar with the
 /// details panel and the task bar, the conversation or the terminal, and
-/// the right sidebar, each as wide as it is beside the window.
+/// the right sidebar, each as wide as it is beside the window, the other
+/// way round while the layout is reversed.
 private struct PaneDiagram: View {
     let facts: ThemeMaker.PaneFacts
     let terminal: Bool
     let detailsMinimized: Bool
     let detailsHeight: Double
     let side: SideState
+    var reversed = false
 
     var body: some View {
         GeometryReader { g in
@@ -1183,6 +1191,7 @@ private struct PaneDiagram: View {
                         .frame(width: max(54, side.width * scale))
                 }
             }
+            .environment(\.layoutDirection, reversed ? .rightToLeft : .leftToRight)
             .padding(6)
             .frame(width: g.size.width, height: g.size.height)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ground))
@@ -1191,6 +1200,7 @@ private struct PaneDiagram: View {
         .aspectRatio(1.7, contentMode: .fit)
         .animation(.easeOut(duration: 0.2), value: facts)
         .animation(.easeOut(duration: 0.2), value: side)
+        .animation(.easeOut(duration: 0.2), value: reversed)
         .accessibilityElement(children: .combine)
     }
 
@@ -1198,6 +1208,7 @@ private struct PaneDiagram: View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(fill)
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
-            .overlay(Text(title).font(Theme.font(10, .medium)).foregroundStyle(ink).lineLimit(1).padding(.horizontal, 3))
+            .overlay(Text(title).font(Theme.font(10, .medium)).foregroundStyle(ink).lineLimit(1).padding(.horizontal, 3)
+                .environment(\.layoutDirection, .leftToRight))
     }
 }
