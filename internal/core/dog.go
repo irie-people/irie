@@ -14,8 +14,11 @@ package core
 // tests: a last message that says the tests pass, while the latest test run
 // of the jot's agents failed as the hooks read it, sends the agent back
 // likewise, and stands on its row if the turn ends with it. A jot you close
-// is done: the dog never sends it back, lists it or brings it back, whatever
-// it left. The dog only reads: it never commits, merges or removes anything.
+// is done: the dog never sends it back or brings it back, whatever it left,
+// and lists it only when commits of its work had not landed as it closed,
+// for a week after, so a close in a hurry still leaves a trail
+// (notlive.go). The dog only reads: it never commits, merges or removes
+// anything.
 
 import (
 	"fmt"
@@ -483,9 +486,12 @@ func (c *Core) dogSweep() {
 }
 
 // dogList is the dog's report (irie ctl dog): the jots that are not through,
-// looked at afresh. The open ones come in the list's order, then those that
-// closed on their own (spawn.close_when_done) in the last day, the last
-// closed first. A jot you closed is done, so it is never on the report.
+// looked at afresh. The open ones come in the list's order, then the closed
+// ones, the last closed first: those that closed on their own
+// (spawn.close_when_done) in the last day, and the cards you closed in the
+// last notLiveFor whose commits had not landed as they closed and still
+// have not. A card you closed is done, so it is on the report for nothing
+// else.
 func (c *Core) dogList() (ipc.DogResult, error) {
 	type closedLook struct {
 		jotLook
@@ -504,6 +510,12 @@ func (c *Core) dogList() (ipc.DogResult, error) {
 			if l, ok := c.closedJot(r); ok {
 				closed = append(closed, closedLook{l, r})
 			}
+		}
+	}
+	var kept []cardLook
+	for _, l := range c.closedNotLive(time.Now()) {
+		if !slices.ContainsFunc(closed, func(cl closedLook) bool { return cl.r.ID == l.id }) {
+			kept = append(kept, l)
 		}
 	}
 	repos := c.knownRepos()
@@ -525,12 +537,23 @@ func (c *Core) dogList() (ipc.DogResult, error) {
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	var gone []ipc.Jot
 	for _, cl := range closed {
 		if _, loose := c.readJot(cl.jotLook, repos, dogSweepGit); len(loose) > 0 {
 			at := cl.r.Closed
-			out.Jots = append(out.Jots, ipc.Jot{ID: cl.r.ID, Name: cl.r.Name, State: "closed", Closed: &at, Loose: *wireLoose(loose, 0, "")})
+			gone = append(gone, ipc.Jot{ID: cl.r.ID, Name: cl.r.Name, State: "closed", Closed: &at, Loose: *wireLoose(loose, 0, "")})
 		}
 	}
+	byID := c.notLive(kept, dogSweepGit)
+	for _, l := range kept {
+		if n, ok := byID[l.id]; ok {
+			at := l.closed
+			gone = append(gone, ipc.Jot{ID: l.id, Name: l.name, State: "closed", Closed: &at, NotLive: true,
+				Loose: ipc.Loose{Ahead: n.Ahead, Land: n.Land, Where: []ipc.LoosePlace{{Path: n.Path, Branch: n.Branch, Ahead: n.Ahead}}}})
+		}
+	}
+	slices.SortStableFunc(gone, func(a, b ipc.Jot) int { return b.Closed.Compare(*a.Closed) })
+	out.Jots = append(out.Jots, gone...)
 	return out, nil
 }
 

@@ -986,7 +986,7 @@ func alreadyDone(question string) problem {
 
 // doClose closes a's session the way the close op does, and notes when.
 func doClose(c *Core, a action) (action, error) {
-	if err := c.close(ipc.CloseArgs{Session: a.Session}); err != nil {
+	if _, err := c.close(ipc.CloseArgs{Session: a.Session}); err != nil {
 		return a, err
 	}
 	c.mu.Lock()

@@ -15,9 +15,10 @@ import (
 )
 
 // ctlDog is the jot dog's report (DESIGN §4.8): the jots whose turn is over
-// but whose work has not landed, open ones first, then those that closed on
-// their own in the last day. A jot you closed is done and never listed. The
-// core looks at each afresh.
+// but whose work has not landed, open ones first, then the closed ones:
+// those that closed on their own in the last day, and the cards you closed
+// in the last week with commits not landed. A jot you closed is done and
+// listed for nothing else. The core looks at each afresh.
 func ctlDog(args []string) error {
 	fs := flag.NewFlagSet("ctl dog", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the jots as JSON")
@@ -52,7 +53,11 @@ func ctlDog(args []string) error {
 				where += " (" + w.Branch + ")"
 			}
 			if i == 0 {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", j.ID, j.State, j.Name, j.Loose.Words(), where)
+				state := j.State
+				if j.Closed != nil {
+					state += " " + ago(*j.Closed)
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", j.ID, state, j.Name, j.Loose.Words(), where)
 			} else {
 				fmt.Fprintf(tw, "\t\t\t\t%s\n", where)
 			}

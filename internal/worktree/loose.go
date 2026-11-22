@@ -68,10 +68,13 @@ func list(repo string, timeout time.Duration) ([]Tree, error) {
 
 // Loose is what a worktree holds that has not landed.
 type Loose struct {
-	Branch  string   // HEAD's branch; "" when it is detached
-	Dirty   int      // files not committed
-	Files   []string // the first of them, relative to the worktree
-	Ahead   int      // commits that the land branch lacks
+	Branch string   // HEAD's branch; "" when it is detached
+	Dirty  int      // files not committed
+	Files  []string // the first of them, relative to the worktree
+	// Ahead counts the commits whose work the land branch lacks, as
+	// ahead reads them: merges are not counted, nor a commit the land
+	// branch has a copy of.
+	Ahead   int
 	Commits []string // the first of them, as "abc1234 subject", newest first
 	NoLand  bool     // the land branch is not in the repo
 }
@@ -132,8 +135,29 @@ func ReadBranch(repo, branch, land string, since time.Time, timeout time.Duratio
 	return l, ahead(&l, repo, land, "refs/heads/"+branch, since, timeout)
 }
 
-// ahead counts the commits of rev that land lacks into l, those committed
-// since since, run in dir. With no land it counts none.
+// ReadCommits reads the commits of the worktree at dir whose work land
+// lacks, as ReadLoose does, without looking at its files: what a close
+// says has not landed (DESIGN §4.5).
+func ReadCommits(dir, land string, since time.Time, timeout time.Duration) (Loose, error) {
+	var l Loose
+	out, err := git(timeout, dir, nil, "symbolic-ref", "--quiet", "--short", "HEAD")
+	switch {
+	case err == nil:
+		l.Branch = strings.TrimSpace(out)
+	case exitCode(err) != 1: // 1 is a detached HEAD
+		return l, err
+	}
+	return l, ahead(&l, dir, land, "HEAD", since, timeout)
+}
+
+// ahead counts into l the commits of rev, run in dir, whose work land
+// lacks: those not in land, committed since since, but merges, which bring
+// in what is on a branch already. A commit counts as landed when land has
+// a copy of it in another commit: one with the same patch, as git cherry
+// finds a cherry-pick or a rebase, or with the same author, author time
+// and subject, which a cherry-pick keeps when it had to be adapted. When
+// git cannot read the copies in time, every commit not in land counts.
+// With no land it counts none.
 func ahead(l *Loose, dir, land, rev string, since time.Time, timeout time.Duration) error {
 	if land == "" {
 		return nil
@@ -145,23 +169,88 @@ func ahead(l *Loose, dir, land, rev string, since time.Time, timeout time.Durati
 		}
 		return err
 	}
-	out, err := git(timeout, dir, nil, "log", "--format=%h%x09%ct%x09%s", land+".."+rev)
+	out, err := git(timeout, dir, nil, "log", "--no-merges", "--format=%H%x09%ct%x09%ae%x09%at%x09%h%x09%s", land+".."+rev)
 	if err != nil {
 		return err
 	}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		hash, rest, ok := strings.Cut(line, "\t")
-		at, subject, ok2 := strings.Cut(rest, "\t")
-		secs, err := strconv.ParseInt(at, 10, 64)
-		if !ok || !ok2 || err != nil || time.Unix(secs, 0).Before(since.Truncate(time.Second)) {
+	type commit struct{ hash, made, short, subject string }
+	var mine []commit
+	for _, line := range lines(out) {
+		f := strings.SplitN(line, "\t", 6)
+		if len(f) < 6 {
+			continue
+		}
+		secs, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil || time.Unix(secs, 0).Before(since.Truncate(time.Second)) {
+			continue
+		}
+		mine = append(mine, commit{hash: f[0], made: madeKey(f[2], f[3], f[5]), short: f[4], subject: f[5]})
+	}
+	if len(mine) == 0 {
+		return nil
+	}
+	copied := landedCopies(dir, land, rev, mine[len(mine)-1].hash, timeout)
+	for _, c := range mine {
+		if copied[c.hash] || copied[c.made] {
 			continue
 		}
 		l.Ahead++
 		if len(l.Commits) < named {
-			l.Commits = append(l.Commits, hash+" "+subject)
+			l.Commits = append(l.Commits, c.short+" "+c.subject)
 		}
 	}
 	return nil
+}
+
+// landedCopies are the commits of rev that land has a copy of, keyed both
+// ways ahead looks for one: by hash, those git cherry marks as having the
+// same patch in land, and by author, author time and subject (madeKey),
+// those of land's commits since the branch's oldest commit not in it,
+// oldest, parted from it. A copy that also changed its author time, behind
+// a merge of land into rev since, is found by neither: git cherry looks
+// only at the land commits rev lacks, so that commit counts as not landed,
+// which says too much rather than too little. What git cannot read, as
+// when it runs out of time, is left out.
+func landedCopies(dir, land, rev, oldest string, timeout time.Duration) map[string]bool {
+	copied := map[string]bool{}
+	if out, err := git(timeout, dir, nil, "cherry", land, rev); err == nil {
+		for _, line := range lines(out) {
+			if hash, ok := strings.CutPrefix(line, "- "); ok {
+				copied[strings.TrimSpace(hash)] = true
+			}
+		}
+	}
+	// Where the branch parted from land, so that a merge of land into it
+	// since, as tools/live.sh makes, hides none of the copies.
+	parted := rev
+	if base, err := git(timeout, dir, nil, "merge-base", land, oldest+"^"); err == nil && strings.TrimSpace(base) != "" {
+		parted = strings.TrimSpace(base)
+	}
+	if out, err := git(timeout, dir, nil, "log", "--no-merges", "--format=%ae%x09%at%x09%s", parted+".."+land); err == nil {
+		for _, line := range lines(out) {
+			if f := strings.SplitN(line, "\t", 3); len(f) == 3 {
+				copied[madeKey(f[0], f[1], f[2])] = true
+			}
+		}
+	}
+	return copied
+}
+
+// madeKey names a commit by what a cherry-pick keeps of it: its author's
+// email, the author time in seconds, and its subject.
+func madeKey(email, at, subject string) string {
+	return "made\x00" + email + "\x00" + at + "\x00" + subject
+}
+
+// lines are out's lines, but blank ones.
+func lines(out string) []string {
+	var ls []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) != "" {
+			ls = append(ls, line)
+		}
+	}
+	return ls
 }
 
 // nth is what follows the first n space-separated fields of an entry of

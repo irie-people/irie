@@ -92,13 +92,19 @@ type closedRecord struct {
 	// its context when it closed, and when its cache runs out (DESIGN
 	// §6.3). Zero when Irie did not know.
 	Wake rebuild.Wake
+	// NotLive is how many commits of its work had not landed when you
+	// closed it, which irie ctl dog lists for notLiveFor (notlive.go).
+	NotLive int
 }
 
-// pastClose is what find shows of a closed session.
+// pastClose is what find shows of a closed session, and what the dog
+// needs of one closed with work not live (notlive.go).
 type pastClose struct {
-	name   string
-	closed time.Time
-	lost   bool
+	name    string
+	closed  time.Time
+	lost    bool
+	created time.Time
+	notLive int
 }
 
 // ending is a closing pane's agent on its way out.
@@ -130,6 +136,7 @@ func closedFrom(e event.Event) closedRecord {
 	r.Resume, _ = e.Data["resume"].(bool)
 	r.Lost, r.Pinned, r.Parked, r.Frozen = e.Data["lost"] == true, e.Data["pinned"] == true, e.Data["parked"] == true, e.Data["frozen"] == true
 	r.Space, r.Group = e.Str("space"), e.Str("group")
+	r.NotLive, _ = e.Int("not_live")
 	named, ok := e.Data["named"].(bool)
 	r.Named, r.Old = named, !ok
 	r.Wake = wakeFrom(e)
@@ -183,7 +190,7 @@ func (c *Core) addClosed(r closedRecord) {
 	if c.closes.past == nil {
 		c.closes.past = map[string]pastClose{}
 	}
-	c.closes.past[r.ID] = pastClose{name: r.Name, closed: r.Closed, lost: r.Lost}
+	c.closes.past[r.ID] = pastClose{name: r.Name, closed: r.Closed, lost: r.Lost, created: r.Created, notLive: r.NotLive}
 	c.closes.list = slices.Insert(c.closes.list, 0, r)
 	if len(c.closes.list) > maxClosed {
 		c.closes.list = c.closes.list[:maxClosed]
@@ -247,28 +254,63 @@ func (c *Core) publishClosed() {
 
 // close closes a session at your word (DESIGN §4.5), which makes it done:
 // its row goes at once, its pane leaves the slot before anything ends it,
-// and its agent ends in the background.
-func (c *Core) close(a ipc.CloseArgs) error {
+// and its agent ends in the background. What of its work had not landed
+// it says, and keeps in its ui.closed (notlive.go); it never waits for you
+// on it.
+func (c *Core) close(a ipc.CloseArgs) ([]ipc.NotLive, error) {
 	c.mu.Lock()
-	err := c.closeLocked(a.Session, false)
+	looks := c.cardLooks([]string{a.Session})
+	c.mu.Unlock()
+	notLive := c.notLive(looks, notLiveGit)
+	c.mu.Lock()
+	err := c.closeWith(a.Session, false, notLive)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
 	if err != nil {
 		c.log.Warn("close", "session", a.Session, "err", err)
-		return err
+		return nil, err
 	}
 	c.publishClosed()
-	return nil
+	return inOrder([]string{a.Session}, notLive), nil
 }
 
 // closeMany closes several sessions at your word, as close closes one: the
 // sessions a names, and with a.Finished every session whose work is
 // through (doneWith). It returns those it closed, in the list's order, and
-// passes over one closed or gone meanwhile; the first other error stops it,
-// with what closed so far.
-func (c *Core) closeMany(a ipc.CloseArgs) ([]string, error) {
+// what of their work had not landed; it passes over one closed or gone
+// meanwhile, and the first other error stops it, with what closed so far.
+func (c *Core) closeMany(a ipc.CloseArgs) ([]string, []ipc.NotLive, error) {
 	c.mu.Lock()
+	looks := c.cardLooks(c.closeTargets(a))
+	c.mu.Unlock()
+	notLive := c.notLive(looks, notLiveGit)
+	c.mu.Lock()
+	var closed []string
+	var err error
+	for _, id := range c.closeTargets(a) {
+		if c.sessions[id] == nil {
+			continue
+		}
+		if err = c.closeWith(id, false, notLive); err != nil {
+			c.log.Warn("close", "session", id, "err", err)
+			break
+		}
+		closed = append(closed, id)
+	}
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+	if len(closed) > 0 {
+		c.publishClosed()
+	}
+	return closed, inOrder(closed, notLive), err
+}
+
+// closeTargets are the sessions a close of a closes, in the list's order:
+// those a names, and with a.Finished every session whose work is through
+// (doneWith), of one space when a.Space names it. The caller holds c.mu.
+func (c *Core) closeTargets(a ipc.CloseArgs) []string {
 	want := map[string]bool{}
 	for _, id := range append([]string{a.Session}, a.Sessions...) {
 		if id != "" {
@@ -284,25 +326,7 @@ func (c *Core) closeMany(a ipc.CloseArgs) ([]string, error) {
 			ids = append(ids, id)
 		}
 	}
-	var closed []string
-	var err error
-	for _, id := range ids {
-		if c.sessions[id] == nil {
-			continue
-		}
-		if err = c.closeLocked(id, false); err != nil {
-			c.log.Warn("close", "session", id, "err", err)
-			break
-		}
-		closed = append(closed, id)
-	}
-	frames := c.changes()
-	c.mu.Unlock()
-	c.publish(frames)
-	if len(closed) > 0 {
-		c.publishClosed()
-	}
-	return closed, err
+	return ids
 }
 
 // doneWith reports whether Close All Finished closes x: its turn is over,
@@ -327,6 +351,13 @@ func (c *Core) doneWith(x *session) bool {
 // closeLocked closes session id: at your word, or on its own (auto) when
 // spawn.close_when_done closes it. The caller holds c.mu.
 func (c *Core) closeLocked(id string, auto bool) error {
+	return c.closeWith(id, auto, nil)
+}
+
+// closeWith closes session id as closeLocked does, keeping in its
+// ui.closed how many commits of its work had not landed, by notLive's
+// look (notlive.go). The caller holds c.mu.
+func (c *Core) closeWith(id string, auto bool, notLive map[string]ipc.NotLive) error {
 	if err := c.refresh(); err != nil {
 		return err
 	}
@@ -369,6 +400,11 @@ func (c *Core) closeLocked(id string, auto bool) error {
 		r.Wake = w
 		wakeData(data, w)
 	}
+	// Its work that had not landed, which the dog lists for a while.
+	if n, ok := notLive[id]; ok && n.Ahead > 0 {
+		r.NotLive = n.Ahead
+		data["not_live"] = n.Ahead
+	}
 	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: data})
 	c.addClosed(r)
 	delete(c.sessions, id)
@@ -382,7 +418,7 @@ func (c *Core) closeLocked(id string, auto bool) error {
 	}
 	// Its Dock controls' copies end with it (dock.go).
 	go c.dockEnd(x.id)
-	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume, "auto", auto)
+	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume, "auto", auto, "not_live", r.NotLive)
 	return c.refresh()
 }
 

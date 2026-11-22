@@ -66,7 +66,8 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          or not yet in their repo's land branch
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
-                                         done, so it is never listed
+                                         done, listed only for a week after, when
+                                         you closed it with commits not landed
 ` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
@@ -109,7 +110,8 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          closes its own once you approve its
                                          work. It is done: the jot dog lets it
                                          be. history lists it and reopen
-                                         brings it back
+                                         brings it back. It never waits: what
+                                         of its work has not landed it says
   ` + brand.Slug + ` ctl reopen [--lost | SESSION]     bring a closed session back, by id or name
                                          (the one closed last with none), carrying
                                          on its conversation; prints its new id.
@@ -1021,7 +1023,8 @@ func waitStarted(sock, id string, d time.Duration) {
 
 // ctlClose closes a session, found by id or name; with none named, the one
 // it runs in, which is how an agent closes its own once the user approves
-// its work (DESIGN §4.5).
+// its work (DESIGN §4.5). It never waits for a word on it: when commits of
+// the session's work had not landed, it closes it and says so on stderr.
 func ctlClose(args []string) error {
 	if len(args) > 1 {
 		return errors.New("usage: " + brand.Slug + " ctl close [SESSION]")
@@ -1038,7 +1041,20 @@ func ctlClose(args []string) error {
 	if err != nil {
 		return err
 	}
-	return ipc.Call(sock, 10*time.Second, ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
+	var r ipc.CloseResult
+	if err := ipc.Call(sock, 30*time.Second, ipc.OpClose, ipc.CloseArgs{Session: id}, &r); err != nil {
+		return err
+	}
+	for _, n := range r.NotLive {
+		fmt.Fprintln(os.Stderr, notLiveWarning(n))
+	}
+	return nil
+}
+
+// notLiveWarning is ctl close's line for a session closed with commits of
+// its work not landed.
+func notLiveWarning(n ipc.NotLive) string {
+	return fmt.Sprintf("%s: closed %q with %s. Its branch keeps them, and %s ctl dog lists it for a week.", brand.Slug, n.Name, n.Words(), brand.Slug)
 }
 
 // sessionTarget is the id of the session ctl close, park, unpark, send or

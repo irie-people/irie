@@ -58,6 +58,10 @@ const (
 	// undo, carries the session on again (DESIGN §2.4, §4.5).
 	OpClose  = "close"
 	OpReopen = "reopen"
+	// OpUnlanded says what of the work of the sessions a close would close
+	// has not landed, and closes nothing: a client asks before it closes,
+	// to say so first (DESIGN §4.5, "Work that is not live").
+	OpUnlanded = "unlanded"
 	// OpUndo and OpRedo step back and forth through the history of what
 	// the user did (DESIGN §2.4, §4.5).
 	OpUndo = "undo"
@@ -683,8 +687,10 @@ type LoosePlace struct {
 }
 
 // DogResult lists the jots that are not through: the open ones in the
-// list's order, then those that closed on their own in the last day, the
-// last closed first. A jot you closed is done and never listed.
+// list's order, then the closed ones, the last closed first: those that
+// closed on their own in the last day, and the cards you closed in the last
+// week whose commits had not landed as they closed and still have not. A
+// jot you closed is done and listed for nothing else.
 type DogResult struct {
 	Jots []Jot `json:"jots"`
 }
@@ -695,7 +701,10 @@ type Jot struct {
 	Name   string     `json:"name"`
 	State  string     `json:"state"`            // its row's state, or closed
 	Closed *time.Time `json:"closed,omitempty"` // when it was closed
-	Loose  Loose      `json:"loose"`
+	// NotLive says you closed it with commits of its work not landed,
+	// which Loose counts, its files not looked at (DESIGN §4.5).
+	NotLive bool  `json:"not_live,omitempty"`
+	Loose   Loose `json:"loose"`
 }
 
 // Tokens counts a session's model usage: each reply once, from the usage
@@ -894,9 +903,51 @@ type CloseArgs struct {
 	Space *string `json:"space,omitempty"`
 }
 
-// CloseResult lists the sessions a close closed.
+// CloseResult lists the sessions a close closed, and those of them whose
+// work had not landed, which a close never waits on: a script hears it
+// here, and irie ctl dog lists them for a week (DESIGN §4.5, §4.8).
 type CloseResult struct {
-	Sessions []string `json:"sessions"`
+	Sessions []string  `json:"sessions"`
+	NotLive  []NotLive `json:"not_live,omitempty"`
+}
+
+// UnlandedResult is what of the work of the sessions a close of its
+// args would close has not landed: those sessions, in the list's order,
+// and the cards among them whose work has not landed.
+type UnlandedResult struct {
+	Sessions []string  `json:"sessions"`
+	NotLive  []NotLive `json:"not_live"`
+}
+
+// NotLive is a card whose work has not landed: the commits on the branch
+// of the worktree Irie made for it whose work its repo's land branch
+// lacks, dog.land or else live. A merge is not counted, nor a commit the
+// land branch has in another form, as a cherry-pick (DESIGN §4.5).
+type NotLive struct {
+	Session string   `json:"session"`
+	Name    string   `json:"name"`
+	Path    string   `json:"path"`             // its worktree
+	Branch  string   `json:"branch,omitempty"` // that worktree's branch
+	Land    string   `json:"land"`             // the branch its work has not reached
+	Ahead   int      `json:"ahead"`            // how many of its commits
+	Commits []string `json:"commits"`          // the first of them, as "abc1234 subject", newest first
+}
+
+// Words says it in a line: "2 commits on irie/fix not in live: abc1234
+// Fix it; def5678 Test it".
+func (n NotLive) Words() string {
+	s := counted(n.Ahead, "commit")
+	if n.Branch != "" {
+		s += " on " + n.Branch
+	}
+	s += " not in " + n.Land
+	if len(n.Commits) > 0 {
+		s += ": " + strings.Join(n.Commits, "; ")
+		if n.Ahead > len(n.Commits) {
+			s += fmt.Sprintf(" and %d more", n.Ahead-len(n.Commits))
+		}
+	}
+	return s
 }
 
 // ReopenArgs name the closed session to reopen: the one closed last when
