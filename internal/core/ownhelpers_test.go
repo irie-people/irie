@@ -93,7 +93,7 @@ func TestTheCoreKeepsYourHelpersRunning(t *testing.T) {
 	if err := c.call(ipc.OpHelpers, ipc.HelpersArgs{ID: "inbox.tick", Restart: true}, nil); err != nil {
 		t.Fatal(err)
 	}
-	testutil.Eventually(t, 30*time.Second, "the helper never started again", func() bool {
+	testutil.Eventually(t, patience(t, 30*time.Second), "the helper never started again", func() bool {
 		_, err := os.Stat(who)
 		return err == nil
 	})

@@ -136,6 +136,14 @@ func printAB(w io.Writer, r ab.Report) {
 	row("cpu", r.CPU, secs)
 	row("memory", r.Memory, memOf)
 	tw.Flush()
+	// The times measure the machine as much as the builds when it holds
+	// them back: say so before the verdict.
+	if r.HeldBack {
+		fmt.Fprintf(w, "\nnote: this ran in macOS's background state, as when Gabriel holds a session back, so both builds ran slower and varied more (%s ctl gabriel says why)\n", brand.Slug)
+	}
+	if r.RunQueue > 0 {
+		fmt.Fprintf(w, "\nnote: %.1f CPUs' worth of work waited on %d CPUs, so the times varied more than the builds do\n", r.RunQueue, r.CPUs)
+	}
 	if r.Same {
 		verdict := "neither clearly faster nor slower"
 		switch r.Time.Change {
