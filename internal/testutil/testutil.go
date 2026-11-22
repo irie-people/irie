@@ -18,6 +18,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 type build struct {
@@ -50,7 +52,7 @@ func Main(m *testing.M) {
 	mainRan = true
 	// No test keeps a key in the user's Keychain (internal/keyring), even
 	// one that builds a core without a test Irie around it.
-	os.Setenv("IRIE_KEYCHAIN", "off")
+	os.Setenv(brand.Env("KEYCHAIN"), "off")
 	sweep(filepath.Join("/tmp", shortPrefix+"*"), filepath.Join(os.TempDir(), buildPrefix+"*"))
 	code := m.Run()
 	if buildDir != "" {
@@ -252,7 +254,7 @@ type Env struct {
 	ConfigHome, StateHome, DataHome, CacheHome string
 	RuntimeDir                                 string // XDG_RUNTIME_DIR, under ShortDir
 	TmuxTmpDir                                 string // TMUX_TMPDIR, under ShortDir
-	Socket                                     string // tmux -L name: irie-test-<random>
+	Socket                                     string // tmux -L name: <slug>-test-<random>
 }
 
 // NewEnv sets up an isolated environment for t with t.Setenv. The
@@ -272,7 +274,8 @@ func NewEnv(t *testing.T) *Env {
 		CacheHome:  filepath.Join(root, "cache"),
 		RuntimeDir: filepath.Join(short, "run"),
 		TmuxTmpDir: filepath.Join(short, "tmux"),
-		Socket:     "irie-test-" + Random(4),
+		// The core's sweep of leftovers knows a test's server by this name.
+		Socket: brand.Slug + "-test-" + Random(4),
 	}
 	for _, d := range []string{e.ConfigHome, e.StateHome, e.DataHome, e.CacheHome, e.RuntimeDir, e.TmuxTmpDir} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -288,27 +291,30 @@ func NewEnv(t *testing.T) *Env {
 	// A test core never slows the machine's other processes for the user's
 	// focus (Gabriel, DESIGN §4.11): it would take the user's own agents for
 	// apps outside it.
-	t.Setenv("IRIE_GABRIEL", "off")
+	// The switches are the product's own variables (brand.Env), so that a
+	// renamed copy's test cores are switched off too: theirs read PESTO_LID
+	// in a copy called Pesto, not IRIE_LID.
+	t.Setenv(brand.Env("GABRIEL"), "off")
 	// Nor does it look over the machine, or restart itself, for Raphael
 	// (DESIGN §4.11): the user's own core does that once.
-	t.Setenv("IRIE_RAPHAEL", "off")
+	t.Setenv(brand.Env("RAPHAEL"), "off")
 	// Nor does it hold Raguel's council by itself (DESIGN §4.11): that
 	// starts a real Claude Code session.
-	t.Setenv("IRIE_RAGUEL", "off")
+	t.Setenv(brand.Env("RAGUEL"), "off")
 	// Nor does it turn the Mac's sleep off and on for a closed lid (DESIGN
 	// §4.12): that would be the user's own Mac, and its lid.
-	t.Setenv("IRIE_LID", "off")
+	t.Setenv(brand.Env("LID"), "off")
 	// Nor does it stop the Iries of other test runs and agents (DESIGN §2.9):
 	// the tests that run beside it are using theirs.
 	t.Setenv("IRIE_LEFTOVERS", "off")
 	// Nor does it keep mail passwords in the user's Keychain: they go to
 	// files in its own state folder (docs/proposals/mail.md).
-	t.Setenv("IRIE_KEYCHAIN", "off")
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
 	// Nor does it read the machine's memory: a local model's spawn would
 	// pass or fail with what the user's other programs take. It sees a
 	// machine with room for the fake models (IRIE_FAKE_MEMORY, in GiB).
 	t.Setenv("IRIE_FAKE_MEMORY", "64/48")
-	for _, k := range []string{"TMUX", "TMUX_PANE", "IRIE_BIN"} {
+	for _, k := range []string{"TMUX", "TMUX_PANE", brand.Env("BIN")} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
@@ -329,7 +335,8 @@ func (e *Env) killServers() { stopServers(tmuxSockets(e.TmuxTmpDir)) }
 // WriteConfig writes config.toml with the test's tmux socket and extra TOML.
 func (e *Env) WriteConfig(t testing.TB, extra string) {
 	t.Helper()
-	dir := filepath.Join(e.ConfigHome, "irie")
+	// The product's own folder, which a renamed copy's core reads.
+	dir := filepath.Join(e.ConfigHome, brand.Slug)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
