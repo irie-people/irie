@@ -56,7 +56,8 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
-  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...   the sessions, open or closed, most like
+  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...
+                                         the sessions, open or closed, most like
                                          WORDS by their names, their tasks and what
                                          their agents said last, by words and by
                                          meaning (route.embed's model): each with

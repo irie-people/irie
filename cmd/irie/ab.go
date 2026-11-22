@@ -37,7 +37,7 @@ they differ, 2 on a usage error and 3 when a build could not run.
 // whether it is faster (DESIGN §4.24).
 func abCmd(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("ab", flag.ContinueOnError)
-	fs.Usage = func() { fmt.Fprint(os.Stderr, abUsage) }
+	fs.Usage = func() { fmt.Fprint(os.Stderr, aligned(abUsage)) }
 	var o ab.Options
 	fs.IntVar(&o.Runs, "n", 10, "timed runs of each build")
 	fs.IntVar(&o.Warmup, "warmup", 1, "runs of each build before the timed ones, compared but not timed")
