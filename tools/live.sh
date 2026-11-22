@@ -58,7 +58,7 @@ say() { echo "live: $*" >&2; }
 start=$(date +%s)
 took=
 if [ -n "${IRIE_LIVE_T0:-}" ]; then
-	took=" merge=$((start - IRIE_LIVE_T0))"
+	if [ $((start - IRIE_LIVE_T0)) -gt 0 ]; then took=" merge=$((start - IRIE_LIVE_T0))"; fi
 else
 	IRIE_LIVE_T0=$start
 	export IRIE_LIVE_T0

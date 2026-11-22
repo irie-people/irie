@@ -27,6 +27,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/sysload"
 )
 
 // Options says what to run and how often.
@@ -63,6 +65,13 @@ type Report struct {
 	Time    Metric `json:"time"`
 	CPU     Metric `json:"cpu"`
 	Memory  Metric `json:"memory"`
+	// What makes the times vary more than the builds do: a run in macOS's
+	// background state (HeldBack), as when Gabriel holds its session back,
+	// or more work waiting to run than CPUs as the runs ended (RunQueue,
+	// the last minute's average, set only when it is over CPUs).
+	HeldBack bool    `json:"held_back,omitempty"`
+	RunQueue float64 `json:"run_queue,omitempty"`
+	CPUs     int     `json:"cpus,omitempty"`
 }
 
 // Output is one build's output on its first run.
@@ -141,6 +150,7 @@ func Run(ctx context.Context, o Options) (Report, error) {
 		}
 	}
 	scratch := filepath.Join(dir, "run.out")
+	held := proc.InBackground()
 	for i := 0; i < o.Warmup+o.Runs; i++ {
 		order := []*side{gold, nw}
 		if i%2 == 1 {
@@ -173,6 +183,10 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	rep := Report{
 		Gold: o.Gold, New: o.New, Args: o.Args, Runs: o.Runs, Warmup: o.Warmup,
 		GoldOut: gold.first.out, NewOut: nw.first.out,
+		HeldBack: held || proc.InBackground(),
+	}
+	if l, err := sysload.Read(); err == nil && l.RunQueue > float64(l.CPUs) {
+		rep.RunQueue, rep.CPUs = l.RunQueue, l.CPUs
 	}
 	switch {
 	case gold.variesAt > 0:

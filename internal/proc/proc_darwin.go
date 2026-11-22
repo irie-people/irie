@@ -90,3 +90,12 @@ func SetBackground(pid int, on bool) error {
 	}
 	return unix.Setpriority(prioDarwinProcess, pid, prio)
 }
+
+// InBackground reports whether this process runs in macOS's background
+// state, as when Gabriel holds its session back or another is promoted.
+// getpriority(2) reads the state only for the calling process, and gives
+// 1 in it and 0 out of it (measured on macOS 14), not PRIO_DARWIN_BG.
+func InBackground() bool {
+	v, err := unix.Getpriority(prioDarwinProcess, 0)
+	return err == nil && v != 0
+}

@@ -24,6 +24,9 @@ func started(int64) (time.Time, bool) { return time.Time{}, false }
 // SetBackground is not available here; see CanBackground.
 func SetBackground(pid int, on bool) error { return errors.ErrUnsupported }
 
+// InBackground is false where there is no background state.
+func InBackground() bool { return false }
+
 // holders is not available here: no folder is known to be free.
 func holders() ([]Holder, error) { return nil, errors.ErrUnsupported }
 
