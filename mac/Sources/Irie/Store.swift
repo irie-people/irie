@@ -1366,6 +1366,13 @@ final class Store {
         return did
     }
 
+    /// What session's project's own docs teach, for the Teach tile: none
+    /// without a session, or a core that serves them.
+    func learnTopics(_ session: String?) async -> [LearnTopic] {
+        guard canLearn, !isFixture, let session else { return [] }
+        return (try? await client.call("learn", LearnArgs(session: session), timeout: 5, as: LearnResult.self))?.topics ?? []
+    }
+
     /// What the Help menu shows: the resources, with the shown session's
     /// language first, and the glossary. Nil without a core that serves it.
     func learn() async -> LearnResult? {

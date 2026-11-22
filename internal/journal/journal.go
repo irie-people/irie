@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -36,6 +37,11 @@ type Journal struct {
 	seq uint64
 	day string
 	f   *os.File
+
+	// The lines of the latest day file that Open found are not valid
+	// envelopes, and where the first is (Unreadable).
+	unreadable int
+	firstBad   string
 }
 
 const dayLayout = "2006-01-02"
@@ -58,13 +64,24 @@ func Open(dir string, o Options) (*Journal, error) {
 		return nil, err
 	}
 	for i := len(files) - 1; i >= 0 && j.seq == 0; i-- {
-		evs, _ := readFile(filepath.Join(dir, files[i]), nil)
+		evs, bad, _ := readFile(filepath.Join(dir, files[i]), nil)
 		for _, e := range evs {
 			j.seq = max(j.seq, e.Seq)
+		}
+		if len(bad) > 0 {
+			j.unreadable += len(bad)
+			j.firstBad = fmt.Sprintf("%s:%d", files[i], bad[0])
 		}
 	}
 	return j, nil
 }
+
+// Unreadable is how many lines Open found in the journal's latest day that
+// are not valid envelopes, such as one a crash or a full disk cut short,
+// and where the first of them is, as file:line. Every read skips them, so
+// the events they held are missing; the core says so as it starts, rather
+// than carry on as if its record were whole.
+func (j *Journal) Unreadable() (int, string) { return j.unreadable, j.firstBad }
 
 // Append stamps e with the envelope version, the next seq and, unless it has
 // one, the current time, caps its data strings and writes it. An event that
@@ -93,7 +110,14 @@ func (j *Journal) Append(e event.Event) (event.Event, error) {
 	if err := j.open(now.UTC().Format(dayLayout)); err != nil {
 		return e, err
 	}
-	_, err = j.f.Write(append(line, '\n'))
+	if _, err = j.f.Write(append(line, '\n')); err != nil {
+		// A write cut short, as on a full disk, can leave part of a line.
+		// The next append opens the file again, and open ends that line
+		// first, so the events after it stand alone rather than run on
+		// into it and be lost with it.
+		j.f.Close()
+		j.f = nil
+	}
 	return e, err
 }
 
@@ -229,7 +253,7 @@ func read(dir string, since time.Time, keep func([]byte) bool) ([]event.Event, e
 		if f < from {
 			continue
 		}
-		evs, err := readFile(filepath.Join(dir, f), keep)
+		evs, _, err := readFile(filepath.Join(dir, f), keep)
 		if err != nil {
 			return out, err
 		}
@@ -238,23 +262,29 @@ func read(dir string, since time.Time, keep func([]byte) bool) ([]event.Event, e
 	return out, nil
 }
 
-func readFile(path string, keep func([]byte) bool) ([]event.Event, error) {
+// readFile reads one day file: the events of the lines keep accepts, and
+// the numbers of those lines, from 1, that hold something but no valid
+// envelope.
+func readFile(path string, keep func([]byte) bool) ([]event.Event, []int, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
 	var out []event.Event
+	var bad []int
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 16<<20)
-	for sc.Scan() {
+	for n := 1; sc.Scan(); n++ {
 		if keep != nil && !keep(sc.Bytes()) {
 			continue
 		}
 		var e event.Event
 		if json.Unmarshal(sc.Bytes(), &e) == nil && event.Validate(e) == nil {
 			out = append(out, e)
+		} else if len(bytes.TrimSpace(sc.Bytes())) > 0 {
+			bad = append(bad, n)
 		}
 	}
-	return out, sc.Err()
+	return out, bad, sc.Err()
 }
