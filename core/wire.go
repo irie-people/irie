@@ -585,6 +585,8 @@ const (
 	ArchNumber           = ipc.ArchNumber
 	ArchLines            = ipc.ArchLines
 	UnprovenTests        = ipc.UnprovenTests
+	UnprovenFaster       = ipc.UnprovenFaster
+	UnprovenSame         = ipc.UnprovenSame
 	DidUndo              = ipc.DidUndo
 	DidRedo              = ipc.DidRedo
 	DidSettle            = ipc.DidSettle

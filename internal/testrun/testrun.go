@@ -284,10 +284,15 @@ var sentence = regexp.MustCompile(`[.!?](?:\s|$)|[;\n]`)
 
 // SaysPassed reports whether a message says, plainly and in full, that tests
 // or checks pass: a sentence that claims it with no word that takes it back.
-func SaysPassed(msg string) bool {
+func SaysPassed(msg string) bool { return Says(msg, passClaim) }
+
+// Says reports whether a message says, plainly and in full, what claim
+// matches: a sentence that claims it with no word that takes it back, such
+// as a negation, a condition, the future or an exception (hedge).
+func Says(msg string, claim *regexp.Regexp) bool {
 	msg = strings.ReplaceAll(msg, "’", "'")
 	for _, s := range sentence.Split(msg, -1) {
-		if passClaim.MatchString(s) && !hedge.MatchString(s) {
+		if claim.MatchString(s) && !hedge.MatchString(s) {
 			return true
 		}
 	}

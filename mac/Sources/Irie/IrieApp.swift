@@ -279,6 +279,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Zen as it was when the app last ran (Zen.swift).
         ZenResume.launch()
+        // A relaunch can leave the sidebar folded: it comes back, unless zen
+        // folded it (Looks.swift).
+        WindowPanes.unfoldAfterLaunch()
         FreezeDog.start(socketPath: CorePaths.socket())
     }
 

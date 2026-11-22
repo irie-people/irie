@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -177,6 +178,39 @@ func TestTheDogHoldsAJotToItsWordOnItsTests(t *testing.T) {
 	c.restartCore()
 	if row, _ := c.row(s.ID); row.Loose == nil || row.Loose.Unproven != ipc.UnprovenTests {
 		t.Errorf("loose after a restart = %+v", row.Loose)
+	}
+}
+
+// A jot that says it made something faster, or left the output the same,
+// is held to its own last `irie ab` run (DESIGN §4.24); one whose run backs
+// it is left alone.
+func TestTheDogHoldsAJotToItsWordOnItsAB(t *testing.T) {
+	c, repo := dogSetup(t, "")
+	cmd := brand.Slug + " ab -n 10 ./gold ./new -- big.ldif"
+	for _, k := range []struct{ task, unproven, said, detail string }{
+		{"prompt,ab:slower,stop:faster", ipc.UnprovenFaster,
+			"You said it is faster, but your last `" + brand.Slug + " ab` run, `" + cmd + "`, said: new is slower, with the same output.",
+			"Not through: says it's faster, but its last A/B was slower"},
+		{"prompt,ab:differs,stop:same", ipc.UnprovenSame,
+			"You said the output is the same, but your last `" + brand.Slug + " ab` run, `" + cmd + "`, said: " + brand.Slug + ": ab: new's output differs from gold's, so its times are for different work.",
+			"Not through: says the output is the same, but its last A/B differed"},
+	} {
+		s := c.spawnArgs(ipc.SpawnArgs{Task: k.task, Repo: repo})
+		row := c.waitState(s.ID, ipc.StateDone)
+		if said := c.sentOn(s.ID); len(said) != 1 || !strings.Contains(said[0], k.said) || !strings.Contains(said[0], "before you say") {
+			t.Errorf("%s: the dog said %q", k.task, said)
+		}
+		if l := row.Loose; l == nil || l.Unproven != k.unproven {
+			t.Errorf("%s: loose = %+v", k.task, row.Loose)
+		}
+		if row.Detail != k.detail {
+			t.Errorf("%s: detail = %q", k.task, row.Detail)
+		}
+	}
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,ab:faster,stop:faster", Repo: repo})
+	row := c.waitState(s.ID, ipc.StateDone)
+	if said := c.sentOn(s.ID); len(said) != 0 || row.Loose != nil {
+		t.Errorf("a claim its run backs: the dog said %q, loose %+v", said, row.Loose)
 	}
 }
 
