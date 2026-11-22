@@ -173,6 +173,11 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 		if err := os.Remove(agent); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+		launcher := lid.LauncherPath(p.Data)
+		if err := os.Remove(launcher); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		os.Remove(filepath.Dir(launcher)) // once empty
 		if _, err := os.Stat(lid.Rule); err == nil {
 			if err := asRoot(lid.RemoveScript(), brand.Name+" wants to remove the rule that let it keep this Mac awake with its lid closed."); err != nil {
 				return fmt.Errorf("setup lid: remove %s: %w", lid.Rule, err)
@@ -202,17 +207,14 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 	}
 	// The check runs the installed irie, which outlives a build in a
-	// worktree.
+	// worktree, through a launcher no install replaces (lid.LauncherScript).
 	bin := filepath.Join(p.Data, "bin", brand.Slug)
 	if _, err := os.Stat(bin); err != nil {
 		if bin, err = os.Executable(); err != nil {
 			return err
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(agent), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(agent, []byte(lid.AgentPlist(bin, p.LidFile())), 0o644); err != nil {
+	if _, err := lid.Agent(home, p.Data, bin, p.LidFile()); err != nil {
 		return err
 	}
 	exec.Command("/bin/launchctl", "bootout", "gui/"+uid+"/"+lid.Label).Run()
@@ -222,8 +224,9 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 	fmt.Fprintf(stdout, `Done: with its lid closed, this Mac now stays awake while `+brand.Name+`'s sessions work.
   The rule:  %s lets you run pmset -a disablesleep 1 or 0 without a password.
   The check: %s turns sleep back on if no core does.
+             macOS lists it as %s in System Settings › General › Login Items.
 Undo it with `+brand.Slug+` setup lid --remove.
-`, strings.TrimPrefix(lid.Rule, "/private"), agent)
+`, strings.TrimPrefix(lid.Rule, "/private"), agent, lid.LauncherName)
 	return nil
 }
 

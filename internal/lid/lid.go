@@ -441,9 +441,120 @@ func AgentPath(home string) string {
 	return filepath.Join(home, "Library", "LaunchAgents", Label+".plist")
 }
 
-// AgentPlist is the launchd agent that runs `bin lid check --file state` as
-// the user logs in, and every Every after.
-func AgentPlist(bin, state string) string {
+// LauncherName is the launcher's file name, which macOS names the agent by
+// in System Settings › General › Login Items and in its "Background Items
+// Added" alerts.
+const LauncherName = brand.Slug + "-lid"
+
+// LauncherPath is where the launcher lives: a folder of its own in the data
+// dir, which no install replaces.
+func LauncherPath(data string) string { return filepath.Join(data, "lid", LauncherName) }
+
+// LauncherScript is the launcher: a script that runs bin's `lid check` with
+// the arguments it is given. The agent runs it rather than bin, which each
+// install replaces, because macOS's Background Task Management looks at
+// the file an agent's ProgramArguments name, not at what it holds: once
+// that file is a new one, it counts the agent as a new background item
+// and says so again, in an alert that stays until it is closed. The
+// launcher stays the same file from one install to the next.
+func LauncherScript(bin string) string {
+	return "#!/bin/sh\n" +
+		"# " + brand.Name + "'s lid check (" + brand.Slug + " setup lid): it turns the Mac's sleep back on when no core keeps it off.\n" +
+		"# launchd runs this file rather than " + brand.Slug + ", which each install replaces, so that macOS does not announce a new\n" +
+		"# background item after every install.\n" +
+		"exec " + shQuote(bin) + " lid check \"$@\"\n"
+}
+
+// shQuote is s as one word of sh.
+func shQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// Agent writes the launchd agent of the user whose home is home: the
+// launcher, which runs bin's check, and the plist, which runs the launcher
+// for the core's state file. A file that already holds what it should is
+// left as it is, with its inode and its times, so that macOS sees nothing
+// to announce. It reports whether the plist changed, so that launchd must
+// load it again.
+func Agent(home, data, bin, state string) (bool, error) {
+	launcher := LauncherPath(data)
+	if err := os.MkdirAll(filepath.Dir(launcher), 0o700); err != nil {
+		return false, err
+	}
+	if _, err := writeIfChanged(launcher, LauncherScript(bin), 0o700); err != nil {
+		return false, err
+	}
+	agent := AgentPath(home)
+	if err := os.MkdirAll(filepath.Dir(agent), 0o755); err != nil {
+		return false, err
+	}
+	return writeIfChanged(agent, AgentPlist(launcher, state), 0o644)
+}
+
+// Refresh moves an agent an older setup wrote, which runs the installed
+// binary itself, onto the launcher, so that the next install raises no
+// alert; macOS announces the move once. It touches only an agent that runs
+// this data dir's binary or launcher, so a test core, whose folders are
+// its own, never changes the person's. It reports whether the plist
+// changed.
+func Refresh(home, data, state string) (bool, error) {
+	b, err := os.ReadFile(AgentPath(home))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil // not set up
+	}
+	if err != nil {
+		return false, err
+	}
+	bin := filepath.Join(data, "bin", brand.Slug)
+	if p := Program(string(b)); p != bin && p != LauncherPath(data) {
+		return false, nil
+	}
+	return Agent(home, data, bin, state)
+}
+
+// programArgs finds the first of a plist's ProgramArguments.
+var programArgs = regexp.MustCompile(`<key>ProgramArguments</key>\s*<array>\s*<string>([^<]*)</string>`)
+
+// Program is the program a launchd plist that AgentPlist wrote runs, the
+// first of its ProgramArguments; "" when it names none.
+func Program(plist string) string {
+	m := programArgs.FindStringSubmatch(plist)
+	if m == nil {
+		return ""
+	}
+	return strings.NewReplacer("&lt;", "<", "&gt;", ">", "&quot;", `"`, "&apos;", "'", "&amp;", "&").Replace(m[1])
+}
+
+// writeIfChanged writes text to path with mode, through a file beside it,
+// unless path holds text already. A file that holds it keeps its inode and
+// its modification time; only its mode is set, when that differs. It
+// reports whether it wrote.
+func writeIfChanged(path, text string, mode os.FileMode) (bool, error) {
+	if b, err := os.ReadFile(path); err == nil && string(b) == text {
+		if fi, err := os.Stat(path); err == nil && fi.Mode().Perm() != mode {
+			return false, os.Chmod(path, mode)
+		}
+		return false, nil
+	}
+	tmp := path + ".new"
+	if err := os.WriteFile(tmp, []byte(text), mode); err != nil {
+		return false, err
+	}
+	// WriteFile leaves the mode of a file that was there, and the umask
+	// trims a new one's.
+	if err := os.Chmod(tmp, mode); err != nil {
+		os.Remove(tmp)
+		return false, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return false, err
+	}
+	return true, nil
+}
+
+// AgentPlist is the launchd agent that runs `launcher --file state` (the
+// launcher runs `irie lid check`) as the user logs in, and every Every
+// after.
+func AgentPlist(launcher, state string) string {
 	esc := func(s string) string {
 		return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 	}
@@ -455,9 +566,7 @@ func AgentPlist(bin, state string) string {
 	<string>` + Label + `</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>` + esc(bin) + `</string>
-		<string>lid</string>
-		<string>check</string>
+		<string>` + esc(launcher) + `</string>
 		<string>--file</string>
 		<string>` + esc(state) + `</string>
 	</array>

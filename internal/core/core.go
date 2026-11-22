@@ -431,6 +431,7 @@ func Run(o Options) error {
 	go c.trodSweep()
 	c.lidAdopt()
 	go c.lidSweep()
+	go c.lidRefreshAgent()
 	if err := c.loadPeers(); err != nil {
 		c.log.Warn("peers", "err", err)
 	}
