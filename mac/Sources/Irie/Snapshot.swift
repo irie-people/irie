@@ -183,9 +183,9 @@ enum Snapshot {
             // The question a close asks first when commits of a card's work
             // have not landed (Closing.swift): of one card, and of a close of
             // five, two of them not landed.
-            let fix = NotLive(session: "s1", name: "api-fix", path: "/home/alice/worktrees/website/api-fix", branch: "irie/api-fix", land: "live",
+            let fix = NotLive(session: "s1", name: "api-fix", path: "/home/alice/worktrees/website/api-fix", branch: "\(Brand.slug)/api-fix", land: "live",
                               ahead: 2, commits: ["3f2a9c1 fix(api): retry a dropped connection", "b71e04d test(api): a dropped connection comes back"])
-            let docs = NotLive(session: "s2", name: "Write the install guide", path: "/home/alice/worktrees/website/install-guide", branch: "irie/install-guide",
+            let docs = NotLive(session: "s2", name: "Write the install guide", path: "/home/alice/worktrees/website/install-guide", branch: "\(Brand.slug)/install-guide",
                                land: "live", ahead: 5, commits: ["9e1d2aa docs: the install guide", "41c77b0 docs: the guide's pictures", "0aa1f3e docs: say what to do when it fails", "c2b8e19 docs: a first draft"])
             for (base, list, count) in [("close-not-live", [fix], 1), ("close-many-not-live", [fix, docs], 5)] {
                 let alert = NotLiveConfirm.alert(list, closing: count)
