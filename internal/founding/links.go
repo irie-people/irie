@@ -119,7 +119,10 @@ var Links = []Link{
 		Why: "Ten months after the Proclamation declared that persons held as slaves “are, and henceforward shall be free”, the Address resolves that the nation “shall have a new birth of freedom”."},
 	{From: "gettysburg", To: "declaration", How: Follows,
 		Why: "“Four score and seven years ago” counts from the Declaration, and the Address holds the nation “dedicated to the proposition that all men are created equal”, the Declaration's “all men are created equal”, as what the war would decide."},
-	// The Universal Declaration of Human Rights, 1948.
+	// The Universal Declaration of Human Rights, 1948, which the Charter of
+	// the United Nations of 1945 called for.
+	{From: "udhr", To: "un-charter", How: Follows,
+		Why: "The Declaration's preamble rests on the Charter, whose peoples “have in the Charter reaffirmed their faith in fundamental human rights, in the dignity and worth of the human person and in the equal rights of men and women”, the Charter's own “to reaffirm faith in fundamental human rights, in the dignity and worth of the human person, in the equal rights of men and women and of nations large and small”, and sets out the rights the Charter named but did not list."},
 	{From: "udhr", To: "declaration", How: DrewOn,
 		Why: "Article 1's “All human beings are born free and equal in dignity and rights” and the Preamble's “equal and inalienable rights” carry the Declaration's “all men are created equal” and “unalienable Rights” to everyone."},
 	{From: "udhr", To: "french", How: DrewOn,
@@ -166,6 +169,9 @@ var Links = []Link{
 		Why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552a, on the records agencies keep about individuals."},
 	{From: "privacy", To: "udhr", How: Follows,
 		Why: "Article 12 holds that “No one shall be subjected to arbitrary interference with his privacy”; the Act gives that right form for the records the government keeps on a person."},
+	// The Convention on the Rights of the Child, November 1989.
+	{From: "crc", To: "udhr", How: DrewOn,
+		Why: "The Convention recalls that “in the Universal Declaration of Human Rights, the United Nations has proclaimed that childhood is entitled to special care and assistance”, the Declaration's “Motherhood and childhood are entitled to special care and assistance”, and sets out what that care is in fifty-four articles."},
 	// The Americans with Disabilities Act of 1990.
 	{From: "ada", To: "civil-rights", How: Follows,
 		Why: "Title I takes Title VII's form for disability: where the Act of 1964 holds that “It shall be an unlawful employment practice for an employer” to discriminate by race, colour, religion, sex or national origin, the Act of 1990 holds that “No covered entity shall discriminate against a qualified individual with a disability because of the disability of such individual in regard to job application procedures, the hiring, advancement, or discharge of employees”."},

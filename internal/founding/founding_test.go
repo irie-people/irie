@@ -693,6 +693,67 @@ func TestTheDisabilitiesAct(t *testing.T) {
 	}
 }
 
+// TestTheCharterOfTheUnitedNations: the UN's text as amended: the
+// preamble, nineteen chapters with Articles 1 to 111 in order under them,
+// the chapters' sub-headings, and the UN's note on the amendments as notes.
+func TestTheCharterOfTheUnitedNations(t *testing.T) {
+	c := docs(t)["un-charter"]
+	if c.Title != "The Charter of the United Nations" || !strings.Contains(c.About, "26 June 1945") || !strings.Contains(c.About, "Statute of the International Court of Justice") {
+		t.Errorf("the Charter: %q, %q", c.Title, c.About)
+	}
+	chapters, subs, notes := 0, 0, 0
+	var articles []string
+	for _, b := range c.Blocks {
+		switch {
+		case b.Kind == "h2" && strings.HasPrefix(b.Text, "Chapter "):
+			chapters++
+		case b.Kind == "h3" && strings.HasPrefix(b.Text, "Article "):
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case b.Kind == "h3":
+			subs++
+		case b.Kind == "note":
+			notes++
+		}
+	}
+	var want []string
+	for i := 1; i <= 111; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if chapters != 19 || !slices.Equal(articles, want) || subs != 19 || notes != 4 {
+		t.Errorf("the Charter: %d chapters, %d articles, %d sub-headings, %d notes", chapters, len(articles), subs, notes)
+	}
+}
+
+// TestTheChildConvention: the UN's text: its preamble of twelve paragraphs,
+// then Parts I to III with Articles 1 to 54 in order under them.
+func TestTheChildConvention(t *testing.T) {
+	c := docs(t)["crc"]
+	if c.Title != "The Convention on the Rights of the Child" || !strings.Contains(c.About, "44/25") || !strings.Contains(c.About, "2 September 1990") {
+		t.Errorf("the Child Convention: %q, %q", c.Title, c.About)
+	}
+	var parts, articles []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, b.Text)
+		case "h3":
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case "text":
+			if len(parts) == 1 {
+				preamble++
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 54; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if strings.Join(parts, "|") != "Preamble|Part I|Part II|Part III" || !slices.Equal(articles, want) || preamble != 12 {
+		t.Errorf("the Child Convention: parts %v, %d articles, %d preamble paragraphs", parts, len(articles), preamble)
+	}
+}
+
 // TestTheRightToInformationAct: India's Act, as India Code sets it out:
 // its number and date, its long title, its six chapters and two schedules
 // in order, its 31 sections in order, and India Code's footnotes as notes.
@@ -895,6 +956,10 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		"icescr": {"conditions of work, which ensure", "legal guardians, to choose", "the right of everyone to education"},
 		"cerd":   {"the rights to participate", "shall be those nominees", "or in conventions"},
 		"cedaw":  {"connexion", "security, relaxation", "self-employment", "the equal right of men and women"},
+		// The UN's web text's own readings: as amended, in its spelling, with its slip "Vll".
+		"un-charter": {"The Security Council shall consist of fifteen Members", "under Chapter Vll.", "neighbours", "1 January 1942"},
+		// OHCHR's text's readings where the Treaty Series print differs.
+		"crc": {"with a view to re-establishing speedily", "breastfeeding", "the spirit of international cooperation"},
 		// The Court's print's own slips, kept.
 		"echr": {"10th December 1948", "under paragraph1.", "the provisions of Article 1 to 6 of this Protocol", "the licensing of broadcasting, television or cinema enterprises"},
 		// India Code's own readings, where the 2005 Gazette differs.
@@ -996,6 +1061,8 @@ func TestFindAnySpelling(t *testing.T) {
 		"lawful judgment of his peers":                         "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
 		"securing the liberty of the subject":                  "habeas: ",
 		"all men and women are created equal":                  "seneca: ",
+		"reaffirm faith in fundamental human rights":           "un-charter: Preamble › WE THE PEOPLES OF THE UNITED NATIONS DETERMINED",
+		"rights of the child":                                  "crc: Part II › Article 43",
 		"qualified individual with a disability":               "ada: Title I. Employment",
 		"without interference by public authority":             "echr: Section I. Rights and freedoms › Article 10 – Freedom of expression",
 		"discrimination against women":                         "cedaw: Part I › Article 1",
