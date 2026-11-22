@@ -222,3 +222,41 @@ func TestPassagesAreParagraphsItemsAndRows(t *testing.T) {
 		}
 	}
 }
+
+func TestTheDocsTopicsAreTheirBoldItemsInOrder(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "GUIDE.md"), []byte("# Guide\n\n## The list\n\n"+
+		"- **Your groups.** New Group in a card's menu.\n"+
+		"- **Spaces:** chips under the list.\n"+
+		"  - **Nested.** an indented item is not a topic\n"+
+		"- a plain item\n"+
+		"- **Your groups.** told again, kept once\n\n"+
+		"## Moving\n\n"+
+		"* **Drag to reorder** a card where it goes\n"), 0o644)
+	want := []ipc.LearnTopic{
+		{Title: "Your groups", File: "docs/GUIDE.md", Heading: "The list"},
+		{Title: "Spaces", File: "docs/GUIDE.md", Heading: "The list"},
+		{Title: "Drag to reorder", File: "docs/GUIDE.md", Heading: "Moving"},
+	}
+	got := docTopics(dir)
+	if len(got) != len(want) {
+		t.Fatalf("topics %+v; want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("topic %d: %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	// The learn op gives them for a session in that folder, and none
+	// without one.
+	c := cardCore(t, "http://127.0.0.1:1")
+	c.sessions["s1"] = &session{id: "s1", name: "Guide", pane: "%1", cwd: dir}
+	if r, err := c.learnOp(ipc.LearnArgs{Session: "s1"}); err != nil || len(r.Topics) != 3 || r.Topics[2].Title != "Drag to reorder" {
+		t.Errorf("learn for the session: %+v, %v", r.Topics, err)
+	}
+	if r, _ := c.learnOp(ipc.LearnArgs{}); len(r.Topics) != 0 {
+		t.Errorf("learn with no session gave topics %+v", r.Topics)
+	}
+}

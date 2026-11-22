@@ -21,8 +21,10 @@ final class TeachTile {
     /// height it takes at most until it is made taller: its top 60 percent.
     static let least = CGSize(width: 360, height: 200)
     static let share: CGFloat = 0.6
-    /// Its head, field and padding: the room in it that is not the card.
+    /// Its head, field and padding: the room in it that is not the card;
+    /// and the tour's bar under a topic's card.
     static let chrome: CGFloat = 112
+    static let tourBar: CGFloat = 30
     /// How wide a card of pictures has it, and one of words, or none yet,
     /// at most: as wide as the terminal within those.
     static let picturesWidth: CGFloat = 1000
@@ -69,6 +71,13 @@ final class TeachTile {
     private(set) var recent: [String]
     /// Counts up when its field should take the keyboard.
     private(set) var wantsKeys = 0
+    /// What the selected session's project's own docs teach, and the
+    /// session they were read for.
+    private(set) var topics: [LearnTopic] = []
+    @ObservationIgnored private var topicsFor: String?
+    /// The topic the card on show explains, when it was asked from one: a
+    /// step of a tour through its doc's topics.
+    private(set) var tour: LearnTopic?
 
     @ObservationIgnored private var fixture = false
     @ObservationIgnored private var pending: Task<Void, Never>?
@@ -90,12 +99,13 @@ final class TeachTile {
     /// conversation when one is selected, and shows it; while a local
     /// model makes it, the tile says so, and draws it once it is made.
     /// Again drops the kept card first, so it is made anew.
-    func ask(_ q: String, store: Store, again: Bool = false) {
+    func ask(_ q: String, store: Store, again: Bool = false, topic: LearnTopic? = nil) {
         let q = q.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         shown = true
         text = q
         asked = q
+        if !again { tour = topic }
         askedIn = store.selectedRow.map { ($0.id, $0.name) }
         problem = nil
         // Another question's card goes; the same one's stays on show while
@@ -108,6 +118,7 @@ final class TeachTile {
             return
         }
         let session = askedIn?.id
+        let current = tour
         pending?.cancel()
         pending = Task { [weak self] in
             guard let self else { return }
@@ -125,6 +136,12 @@ final class TeachTile {
                     guard asked == q, !Task.isCancelled else { return }
                     result = r
                 }
+                // On a tour, the next topic's card is made while this one is
+                // read, so the next step shows at once. An ask that finds it
+                // kept costs nothing.
+                if let next = step(from: current, by: 1) {
+                    _ = try? await store.explainCard(Self.question(next), session: session)
+                }
             } catch {
                 guard asked == q else { return }
                 problem = error.localizedDescription
@@ -136,6 +153,62 @@ final class TeachTile {
     func again(store: Store) {
         guard let q = asked else { return }
         ask(q, store: store, again: true)
+    }
+
+    /// What a topic is asked as: the same words each time, so its card is
+    /// kept, and a tour taken again shows each step at once.
+    static func question(_ t: LearnTopic) -> String {
+        "What is “\(t.title)” in this project, and how do I use it?"
+    }
+
+    /// Explains topic t, as a step of a tour through its doc.
+    func askTopic(_ t: LearnTopic, store: Store) {
+        ask(Self.question(t), store: store, topic: t)
+    }
+
+    /// The topic by steps after t in its doc, or before it; nil past either
+    /// end, or with no t.
+    func step(from t: LearnTopic?, by: Int) -> LearnTopic? {
+        guard let t else { return nil }
+        let doc = topics.filter { $0.file == t.file }
+        guard let i = doc.firstIndex(of: t), doc.indices.contains(i + by) else { return nil }
+        return doc[i + by]
+    }
+
+    /// Where t sits in its doc, from 1, and how many its doc has.
+    func place(of t: LearnTopic) -> (at: Int, of: Int) {
+        let doc = topics.filter { $0.file == t.file }
+        return ((doc.firstIndex(of: t) ?? 0) + 1, doc.count)
+    }
+
+    /// The docs that teach something, in their order, with how much each.
+    var docs: [(file: String, count: Int)] {
+        var out: [(file: String, count: Int)] = []
+        for t in topics {
+            if let i = out.firstIndex(where: { $0.file == t.file }) { out[i].count += 1 } else { out.append((t.file, 1)) }
+        }
+        return out
+    }
+
+    /// Reads what the selected session's project's docs teach, once for
+    /// each session it is asked for.
+    func loadTopics(store: Store) async {
+        let session = store.selection
+        guard !fixture, session != topicsFor else { return }
+        topicsFor = session
+        let got = await store.learnTopics(session)
+        if store.selection == session { topics = got }
+    }
+
+    /// Topics whose names have every word typed, for the field's
+    /// suggestions: at most most of them.
+    func matches(_ typed: String, most: Int = 6) -> [LearnTopic] {
+        let words = typed.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard !words.isEmpty else { return [] }
+        return Array(topics.filter { t in
+            let name = t.title.lowercased()
+            return words.allSatisfy { name.contains($0) }
+        }.prefix(most))
     }
 
     private func remember(_ q: String) {
@@ -201,9 +274,12 @@ final class TeachTile {
 
     /// The tile as the snapshots draw it: shown, at its place, with a card
     /// made, and nothing saved.
-    func loadFixture(shown: Bool, asked: String?, in session: (String, String)?, result: MaterializeResult?, recent: [String] = []) {
+    func loadFixture(shown: Bool, asked: String?, in session: (String, String)?, result: MaterializeResult?, recent: [String] = [],
+                     topics: [LearnTopic] = [], tour: LearnTopic? = nil) {
         fixture = true
         pending?.cancel()
+        self.topics = topics
+        self.tour = tour
         self.shown = shown
         self.asked = asked
         self.text = asked ?? ""
@@ -253,6 +329,7 @@ struct TeachTileView: View {
                     let base = TeachTile.frame(area: area, term: t, own: tile.own, wants: TeachTile.wants(tile.result?.spec))
                     let now = changed(base.rect, fixed: base.fixed, by: change, in: area)
                     let most = (now.fixed ? now.rect.height : area.height * TeachTile.share) - TeachTile.chrome
+                        - (tile.tour == nil ? 0 : TeachTile.tourBar)
                     panel(width: now.rect.width, height: now.fixed ? now.rect.height : nil, most: max(most, 60))
                         .overlay { handles(base, area: area) }
                         .offset(x: now.rect.minX, y: now.rect.minY)
@@ -267,6 +344,11 @@ struct TeachTileView: View {
             if let text = note.userInfo?["text"] as? String { tile.ask(text, store: store) }
         }
         .onChange(of: tile.wantsKeys) { typing = true }
+        // What the selected session's project's docs teach, for the field's
+        // suggestions and the tour.
+        .task(id: "\(tile.shown) \(store.selection ?? "")") {
+            if tile.shown { await tile.loadTopics(store: store) }
+        }
     }
 
     /// base with a move or a stretch applied, kept in the area. A tile as
@@ -349,8 +431,14 @@ struct TeachTileView: View {
         VStack(alignment: .leading, spacing: 10) {
             head
             field
-            content(most: most, wide: width >= 760)
+            let found = suggestions
+            if !found.isEmpty {
+                suggest(found)
+            } else {
+                content(most: most, wide: width >= 760)
+            }
             if height != nil { Spacer(minLength: 0) }
+            if found.isEmpty, let t = tile.tour { tourBar(t) }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -485,9 +573,104 @@ struct TeachTileView: View {
                     .font(Theme.font(11.5))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if !tile.docs.isEmpty { tours }
                 if !tile.recent.isEmpty { recents }
             }
         }
+    }
+
+    /// The topics whose names have every word typed, while what is typed is
+    /// not what is on show.
+    private var suggestions: [LearnTopic] {
+        guard tile.text != tile.asked else { return [] }
+        return tile.matches(tile.text)
+    }
+
+    /// Topics to explain instead of what is typed: a click explains one,
+    /// as a step of a tour through its doc.
+    private func suggest(_ found: [LearnTopic]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("In this project's docs").font(Theme.font(10.5, .semibold)).foregroundStyle(Theme.muted)
+            ForEach(found, id: \.self) { t in
+                Button { tile.askTopic(t, store: store) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "book").font(.system(size: 10)).foregroundStyle(Theme.muted)
+                        Text(t.title).font(Theme.font(12)).foregroundStyle(Theme.ink).lineLimit(1)
+                        Text(Self.docName(t.file)).font(Theme.font(10.5)).foregroundStyle(Theme.muted)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// Each doc that teaches something, to take a tour of from its first
+    /// topic: the first is the guide when the project has one.
+    private var tours: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("A tour of this project's docs").font(Theme.font(10.5, .semibold)).foregroundStyle(Theme.muted)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+                ForEach(tile.docs, id: \.file) { d in
+                    Button {
+                        if let first = tile.topics.first(where: { $0.file == d.file }) { tile.askTopic(first, store: store) }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "book.pages").font(.system(size: 10))
+                            Text(Self.docName(d.file)).font(Theme.font(11.5, .semibold))
+                            Text("\(d.count)").font(Theme.font(10.5)).foregroundStyle(Theme.muted)
+                        }
+                        .foregroundStyle(Theme.accentInk)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Theme.card))
+                        .overlay(Capsule().strokeBorder(Theme.edge, lineWidth: 1))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Explain its topics one by one, from the first")
+                }
+            }
+        }
+    }
+
+    /// The tour's bar under a topic's card: the one before, where it is in
+    /// its doc, and the one after, each a click away.
+    private func tourBar(_ t: LearnTopic) -> some View {
+        let p = tile.place(of: t)
+        return HStack(spacing: 8) {
+            if let before = tile.step(from: t, by: -1) {
+                Button { tile.askTopic(before, store: store) } label: {
+                    Label(before.title, systemImage: "chevron.left").lineLimit(1)
+                }
+                .help("The topic before")
+            }
+            Spacer(minLength: 6)
+            Text("\(p.at) of \(p.of) in \(Self.docName(t.file))")
+                .font(Theme.font(10.5))
+                .foregroundStyle(Theme.muted)
+                .fixedSize()
+            Spacer(minLength: 6)
+            if let after = tile.step(from: t, by: 1) {
+                Button { tile.askTopic(after, store: store) } label: {
+                    HStack(spacing: 4) {
+                        Text(after.title).lineLimit(1)
+                        Image(systemName: "chevron.right")
+                    }
+                }
+                .help("The next topic, made while you read this one")
+            }
+        }
+        .buttonStyle(.borderless)
+        .font(Theme.font(11.5, .semibold))
+        .foregroundStyle(Theme.accentInk)
+        .frame(height: 20)
+    }
+
+    /// A doc's name as the tile shows it: its file's, without its folder.
+    static func docName(_ file: String) -> String {
+        (file as NSString).lastPathComponent
     }
 
     /// The questions asked last, to ask again.

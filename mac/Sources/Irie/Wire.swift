@@ -803,6 +803,17 @@ struct LearnResult: Decodable {
     var bar: String?
     /// The tips it shows one at a time when it is tips.
     var tips: [String]?
+    /// What the session's project's own docs teach, doc by doc, each in its
+    /// order, for the Teach tile; nil from a core from before them.
+    var topics: [LearnTopic]?
+}
+
+/// One thing a project's docs teach: an item of a list that leads with its
+/// name in bold, the doc it is in, and the heading it sits under.
+struct LearnTopic: Decodable, Hashable {
+    var title: String
+    var file: String
+    var heading: String?
 }
 
 struct LearnResource: Decodable, Identifiable, Hashable {
