@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Options says what to run and how often.
@@ -123,7 +125,7 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	if o.Runs < 1 {
 		return Report{}, errors.New("want at least one run")
 	}
-	dir, err := os.MkdirTemp("", "irie-ab-")
+	dir, err := os.MkdirTemp("", brand.Slug+"-ab-")
 	if err != nil {
 		return Report{}, err
 	}
