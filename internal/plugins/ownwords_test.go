@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -31,14 +32,14 @@ skill = "grants"
 dir = "~/Documents/Grants"
 `)
 	ws := Words(e)
-	if len(ws) != 1 || ws[0].Off != ":grants is off, as the grants-app plugin is: `irie plugins on grants-app` turns it on." {
+	if len(ws) != 1 || ws[0].Off != ":grants is off, as the grants-app plugin is: `"+brand.Slug+" plugins on grants-app` turns it on." {
 		t.Fatalf("off, Words = %+v", ws)
 	}
 	e.Config.Plugins.Manifests["grants-app"] = true
 	p := mine(t, e, "grants-app")
 	x := part(t, p, "words.grants")
 	if x.Title != "Grant work" || x.State != ipc.PartReady || x.Setup != ":grants" ||
-		x.Detail != "Type :grants in a task bar to start a session on /irie:grants, or :grants and a task to hand it the task." {
+		x.Detail != "Type :grants in a task bar to start a session on /"+brand.Slug+":grants, or :grants and a task to hand it the task." {
 		t.Errorf("on: %+v", x)
 	}
 	want := OwnWord{Name: "grants", Plugin: "grants-app", Title: "Grant work", Skill: "grants", Dir: filepath.Join(h, "Documents", "Grants"), Manifest: filepath.Join(e.Paths.Plugins(), "grants-app.toml")}
@@ -65,7 +66,7 @@ dir = "~/Documents/Grants"
 // why, in its part and when typed.
 func TestAWordThatDoesntReadSaysWhy(t *testing.T) {
 	for _, c := range []struct{ id, table, want string }{
-		{"close", ``, "Irie has a :close of its own: give [words.close] another name."},
+		{"close", ``, brand.Name + " has a :close of its own: give [words.close] another name."},
 		{"grants", `skill = "funding"`, `skill = "funding" isn't one of this plugin's skills`},
 		{"grants", `dir = "Documents"`, `dir = "Documents" isn't a full path to a folder`},
 		{"Grants", ``, "isn't a word"},

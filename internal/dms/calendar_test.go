@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -28,6 +30,8 @@ func golden(t *testing.T, name string, got []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The golden file is Irie's; the product names itself in PRODID.
+	want = bytes.ReplaceAll(want, []byte("-//Irie//"), []byte("-//"+brand.Name+"//"))
 	if !bytes.Equal(got, want) {
 		t.Errorf("%s:\n%s\nwant:\n%s", name, got, want)
 	}

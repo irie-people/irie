@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -18,7 +19,7 @@ func TestParkAndUnparkTargetTheNamedSessionOrYourOwn(t *testing.T) {
 		if got, err := sessionTarget(verb, nil, "s02b", sessions); err != nil || got != "s02b" {
 			t.Errorf("%s with no SESSION: %q, %v; want its own, s02b", verb, got, err)
 		}
-		want := "usage: irie ctl " + verb + " [SESSION]: with no SESSION it " + verb + "s the session it runs in, and it runs in none"
+		want := "usage: " + brand.Slug + " ctl " + verb + " [SESSION]: with no SESSION it " + verb + "s the session it runs in, and it runs in none"
 		if _, err := sessionTarget(verb, nil, "", sessions); err == nil || err.Error() != want {
 			t.Errorf("%s with no SESSION and no session of its own: %v, want %q", verb, err, want)
 		}
@@ -92,6 +93,7 @@ OUTSIDE IRIE
 SESSION                               STATUS  KIND         NAME   CWD
 c04fe21e-5265-4b41-aa88-b5f651e6360d  idle    interactive  notes  /home/alice
 `
+	want = strings.Replace(want, "OUTSIDE IRIE", "OUTSIDE "+strings.ToUpper(brand.Name), 1)
 	if b.String() != want {
 		t.Errorf("printed\n%s\nwant\n%s", b.String(), want)
 	}

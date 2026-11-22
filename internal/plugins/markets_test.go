@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -35,7 +36,7 @@ func TestMarketsIsOffByDefault(t *testing.T) {
 	if x := part(t, p, Map); x.State != ipc.PartPluginOff || x.Switch != "" || x.Setup != "" {
 		t.Errorf("map = %+v", x)
 	}
-	if why := Why(e.Config, Map); !strings.Contains(why, "irie plugins on markets") {
+	if why := Why(e.Config, Map); !strings.Contains(why, brand.Slug+" plugins on markets") {
 		t.Errorf("Why = %q", why)
 	}
 	if ed, err := Edits("markets", "", true); err != nil || len(ed) != 1 || ed[0].Key != "plugins.markets" || ed[0].Value != true {

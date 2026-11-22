@@ -99,7 +99,7 @@ func TestTheVPNSaysWhatItLacks(t *testing.T) {
 		t.Errorf("command with its status = %+v", x)
 	}
 	e.Config.VPN.Provider, e.Config.VPN.Mullvad = "mullvad", program(t, "mullvad")
-	if x := vpnStatus(t, e); x.State != ipc.PartReady || !strings.Contains(x.Detail, "Irie shows Mullvad VPN in every client") {
+	if x := vpnStatus(t, e); x.State != ipc.PartReady || !strings.Contains(x.Detail, brand.Name+" shows Mullvad VPN in every client") {
 		t.Errorf("mullvad installed = %+v", x)
 	}
 	e.Config.VPN.On = false
@@ -127,7 +127,7 @@ func TestTheCoreSaysHowTheVPNIsNow(t *testing.T) {
 func TestTheVPNPluginsSwitch(t *testing.T) {
 	cfg := config.Default()
 	cfg.VPN.On, cfg.VPN.Provider = false, "mullvad"
-	if why := Why(cfg, VPN); !strings.Contains(why, "irie setup vpn") || !strings.Contains(why, "irie plugins on vpn") {
+	if why := Why(cfg, VPN); !strings.Contains(why, brand.Slug+" setup vpn") || !strings.Contains(why, brand.Slug+" plugins on vpn") {
 		t.Errorf("Why(vpn) = %q", why)
 	}
 	cfg.VPN.On = true

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/dms"
 )
 
@@ -22,7 +23,7 @@ func dmsEnv(t *testing.T) dms.Store {
 	for k, v := range map[string]string{"HOME": home, "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_CONFIG_HOME": filepath.Join(home, "config"), "XDG_DATA_HOME": filepath.Join(home, "data")} {
 		t.Setenv(k, v)
 	}
-	return dms.Store{Dir: filepath.Join(home, "state", "irie", "dms")}
+	return dms.Store{Dir: filepath.Join(home, "state", brand.Slug, "dms")}
 }
 
 // stdin feeds text to the command's standard input.
@@ -85,7 +86,7 @@ func TestDMSKeyIsKeptAndNeverPrinted(t *testing.T) {
 func TestDMSNeedsChecksFirst(t *testing.T) {
 	dmsEnv(t)
 	for _, sub := range []string{"status", "ping", "pause"} {
-		if err := dmsCmd([]string{sub}); err == nil || !strings.Contains(err.Error(), "irie dms checks") {
+		if err := dmsCmd([]string{sub}); err == nil || !strings.Contains(err.Error(), brand.Slug+" dms checks") {
 			t.Errorf("%s: err = %v", sub, err)
 		}
 	}

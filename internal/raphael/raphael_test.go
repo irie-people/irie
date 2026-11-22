@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/sysload"
 )
@@ -117,7 +118,7 @@ func TestHotFindingsAdviseAndOfferAStopOnlyForAPlainProgram(t *testing.T) {
 	if spot.Fix != nil || !strings.Contains(spot.Advice, "Spotlight") {
 		t.Errorf("macOS's own: %+v", spot)
 	}
-	if irie.Fix != nil || !strings.Contains(irie.Advice, "Irie's own") {
+	if irie.Fix != nil || !strings.Contains(irie.Advice, brand.Name+"'s own") {
 		t.Errorf("Irie's own: %+v", irie)
 	}
 }
@@ -134,7 +135,7 @@ func TestMemoryFinding(t *testing.T) {
 	if short.Level != Warn || !strings.Contains(short.Text, "6 GB of swap") || !strings.Contains(short.Text, "16 GB of RAM") {
 		t.Errorf("short = %+v", short)
 	}
-	if len(short.Evidence) != 1 || !strings.Contains(short.Evidence[0], "Google Chrome ×2 (4 GB)") || !strings.Contains(short.Evidence[0], "claude (400 MB)") || !strings.Contains(short.Evidence[0], "Irie's sessions (300 MB)") {
+	if len(short.Evidence) != 1 || !strings.Contains(short.Evidence[0], "Google Chrome ×2 (4 GB)") || !strings.Contains(short.Evidence[0], "claude (400 MB)") || !strings.Contains(short.Evidence[0], brand.Name+"'s sessions (300 MB)") {
 		t.Errorf("what takes the most = %v", short.Evidence)
 	}
 	if well := memoryFinding(Memory{Total: 16 << 30}, ps, o); well.Level != OK || well.Text != "Memory: 16 GB of RAM, no pressure." {

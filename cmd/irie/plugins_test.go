@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/paths"
 )
 
@@ -20,7 +21,7 @@ func TestPluginsTurnsAPartAndThePluginOnAndOff(t *testing.T) {
 	if err := pluginsCmd(nil, &out); err != nil {
 		t.Fatal(err)
 	}
-	if s := out.String(); !strings.HasPrefix(s, "VPN plugin: on.") || !strings.Contains(s, "\nPrivacy plugin: on.") || !strings.Contains(s, "○ Bitwarden for agents: Not in Irie yet.") {
+	if s := out.String(); !strings.HasPrefix(s, "VPN plugin: on.") || !strings.Contains(s, "\nPrivacy plugin: on.") || !strings.Contains(s, "○ Bitwarden for agents: Not in "+brand.Name+" yet.") {
 		t.Errorf("irie plugins:\n%s", s)
 	}
 	out.Reset()

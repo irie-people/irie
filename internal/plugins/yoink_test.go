@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/yoink"
 )
@@ -38,7 +39,7 @@ func TestYoinkIsOffByDefault(t *testing.T) {
 	if x.Pane == nil || x.Pane.ID != "yoink.yoink" || x.Pane.Kind != PaneYoink || x.Pane.Title != "Yoink" || x.Pane.Store != "" {
 		t.Errorf("pane = %+v", x.Pane)
 	}
-	if why := Why(e.Config, Yoink); !strings.Contains(why, "irie plugins on yoink") {
+	if why := Why(e.Config, Yoink); !strings.Contains(why, brand.Slug+" plugins on yoink") {
 		t.Errorf("Why = %q", why)
 	}
 	if ed, err := Edits("yoink", "", true); err != nil || len(ed) != 1 || ed[0].Key != "plugins.yoink" || ed[0].Value != true {

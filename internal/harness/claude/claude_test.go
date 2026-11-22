@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/learn"
@@ -403,7 +404,8 @@ func TestTutorModeSetsTheStyleAndTipsGoUnderTheSpinner(t *testing.T) {
 	s.Tutor = config.TutorTeach
 	s.Tips = []learn.Tip{{ID: "irie.park", Text: "Park a session you have checked"}, {ID: "irie.red", Text: "A red card needs you"}}
 	_, _, files := launchSpawn(t, defaultProfile(), s)
-	golden(t, "settings-tutor.golden", files[SettingsFile])
+	// The golden is Irie's; a copy's tip label carries its own name.
+	golden(t, "settings-tutor.golden", bytes.ReplaceAll(files[SettingsFile], []byte(`"label": "`+brand.Name+` tip"`), []byte(`"label": "Irie tip"`)))
 
 	var got struct {
 		Style string `json:"outputStyle"`
@@ -422,7 +424,7 @@ func TestTutorModeSetsTheStyleAndTipsGoUnderTheSpinner(t *testing.T) {
 	if got.Style != "Learning" {
 		t.Errorf("outputStyle = %q, want Learning", got.Style)
 	}
-	if got.Tips == nil || got.Tips.Label != "Irie tip" || len(got.Tips.Tips) != 2 || got.Tips.Tips[0].ID != "irie.park" || got.Tips.Tips[0].Cooldown < 1 {
+	if got.Tips == nil || got.Tips.Label != brand.Name+" tip" || len(got.Tips.Tips) != 2 || got.Tips.Tips[0].ID != "irie.park" || got.Tips.Tips[0].Cooldown < 1 {
 		t.Errorf("spinnerTipsOverride = %+v", got.Tips)
 	}
 

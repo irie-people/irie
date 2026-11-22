@@ -50,6 +50,16 @@ func TestNamesAreWellFormed(t *testing.T) {
 // TestScriptAgrees: the build scripts read the same names through
 // tools/brand.sh.
 func TestScriptAgrees(t *testing.T) {
+	// The script reads brand.go from disk. A test of another name built
+	// with go test -overlay compiles a renamed brand.go, which the script
+	// can't see; a copy renamed on disk, as CI's, is checked in full.
+	src, err := os.ReadFile(filepath.Join(root, "internal", "brand", "brand.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := regexp.MustCompile(`(?m)^\tName = "([^"]*)"$`).FindSubmatch(src); m == nil || string(m[1]) != Name {
+		t.Skipf("built from another brand.go than the one on disk (go test -overlay), named %q", Name)
+	}
 	out, err := exec.Command("sh", filepath.Join(root, "tools", "brand.sh")).Output()
 	if err != nil {
 		t.Fatalf("tools/brand.sh: %v", err)

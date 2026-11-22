@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -257,7 +258,7 @@ func TestAMenuFitsAShortPane(t *testing.T) {
 	for _, h := range []int{6, 8, 12, 16, 30} {
 		m = send(m, tea.WindowSizeMsg{Width: 34, Height: h})
 		s := screen(t, m)
-		if len(s) != h || !strings.Contains(s[0], "Irie") || !strings.Contains(barText(t, m)[0], barPrompt) {
+		if len(s) != h || !strings.Contains(s[0], brand.Name) || !strings.Contains(barText(t, m)[0], barPrompt) {
 			t.Errorf("height %d:\n%s", h, strings.Join(s, "\n"))
 		}
 		painted(t, fmt.Sprintf("the menu at height %d", h), m)

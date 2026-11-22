@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 func TestFilesMakeAKeyOnceAndKeepIt(t *testing.T) {
@@ -46,9 +48,9 @@ func TestFilesMakeAKeyOnceAndKeepIt(t *testing.T) {
 }
 
 func TestDefaultKeepsTestsOutOfTheKeychain(t *testing.T) {
-	t.Setenv("IRIE_KEYCHAIN", "off")
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
 	if _, ok := Default(t.TempDir()).(Files); !ok {
-		t.Fatalf("IRIE_KEYCHAIN=off gave %T", Default(""))
+		t.Fatalf("%s=off gave %T", brand.Env("KEYCHAIN"), Default(""))
 	}
 }
 
