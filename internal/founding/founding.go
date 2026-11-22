@@ -35,8 +35,8 @@ type Document struct {
 	// year alone where the day isn't the point.
 	When string
 	// Kind is charter, statute, declaration, articles, ordinance,
-	// constitution, amendments, proclamation, address or covenant: for a
-	// graph to tell its nodes apart by.
+	// constitution, amendments, proclamation, address, covenant or
+	// convention: for a graph to tell its nodes apart by.
 	Kind string
 }
 
@@ -64,12 +64,16 @@ var Documents = []Document{
 	{ID: "emancipation", File: "emancipation-proclamation.md", Short: "Emancipation Proclamation", When: "1863-01-01", Kind: "proclamation"},
 	{ID: "gettysburg", File: "gettysburg-address.md", Short: "Gettysburg Address", When: "1863-11-19", Kind: "address"},
 	{ID: "udhr", File: "universal-declaration-of-human-rights.md", Short: "Universal Declaration", When: "1948-12-10", Kind: "declaration"},
+	{ID: "echr", File: "european-convention-on-human-rights.md", Short: "European Convention", When: "1950-11-04", Kind: "convention"},
 	{ID: "civil-rights", File: "civil-rights-act.md", Short: "Civil Rights Act", When: "1964-07-02", Kind: "statute"},
 	{ID: "voting-rights", File: "voting-rights-act.md", Short: "Voting Rights Act", When: "1965-08-06", Kind: "statute"},
+	{ID: "cerd", File: "convention-on-racial-discrimination.md", Short: "Racial Discrimination Convention", When: "1965-12-21", Kind: "convention"},
 	{ID: "foia", File: "freedom-of-information-act.md", Short: "FOIA", When: "1966-07-04", Kind: "statute"},
 	{ID: "iccpr", File: "international-covenant-on-civil-and-political-rights.md", Short: "Civil and Political Rights Covenant", When: "1966-12-16", Kind: "covenant"},
 	{ID: "icescr", File: "international-covenant-on-economic-social-and-cultural-rights.md", Short: "Economic and Social Rights Covenant", When: "1966-12-16", Kind: "covenant"},
 	{ID: "privacy", File: "privacy-act.md", Short: "Privacy Act", When: "1974-12-31", Kind: "statute"},
+	{ID: "cedaw", File: "convention-on-discrimination-against-women.md", Short: "Women's Rights Convention", When: "1979-12-18", Kind: "convention"},
+	{ID: "ada", File: "americans-with-disabilities-act.md", Short: "Disabilities Act", When: "1990-07-26", Kind: "statute"},
 	{ID: "uk-foia", File: "freedom-of-information-act-2000.md", Short: "UK Freedom of Information Act", When: "2000-11-30", Kind: "statute"},
 	{ID: "rti", File: "right-to-information-act.md", Short: "Right to Information Act", When: "2005-06-15", Kind: "statute"},
 }

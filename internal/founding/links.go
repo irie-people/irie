@@ -126,6 +126,9 @@ var Links = []Link{
 		Why: "Article 1's “All human beings are born free and equal in dignity and rights” carries the 1789 Declaration's “Men are born, and always continue, free and equal in respect of their rights” to everyone, as its drafters, Cassin among them, meant it to."},
 	{From: "udhr", To: "rights", How: DrewOn,
 		Why: "Articles 18 to 20 declare the First Amendment's freedoms of religion, expression and assembly for everyone; Article 5's “cruel, inhuman or degrading treatment or punishment” takes up the Eighth's “cruel and unusual punishments”; Articles 9 to 11 the Fifth and Sixth's fair trial."},
+	// The European Convention on Human Rights, November 1950.
+	{From: "echr", To: "udhr", How: DrewOn,
+		Why: "The Convention's preamble takes “the Universal Declaration of Human Rights proclaimed by the General Assembly of the United Nations on 10th December 1948” as what its parties will enforce collectively; its Article 10's freedom “to receive and impart information and ideas without interference by public authority and regardless of frontiers” is the Declaration's “to seek, receive and impart information and ideas through any media and regardless of frontiers” made binding."},
 	// The Civil Rights Act of 1964.
 	{From: "civil-rights", To: "constitution", How: Follows,
 		Why: "Title VI's “No person in the United States shall, on the ground of race, color, or national origin, be excluded from participation in, be denied the benefits of, or be subjected to discrimination under any program or activity receiving Federal financial assistance” enforces the Fourteenth Amendment's “nor deny to any person within its jurisdiction the equal protection of the laws”, under Congress's powers over commerce and the Amendment's own."},
@@ -136,6 +139,12 @@ var Links = []Link{
 		Why: "A year after the Civil Rights Act's Title I, “Voting Rights”, which only tightened the rules for registering, the Act strikes at the tests themselves: “No voting qualification or prerequisite to voting” may be applied to deny the vote on account of race or color."},
 	{From: "voting-rights", To: "constitution", How: Follows,
 		Why: "An Act “To enforce the fifteenth amendment to the Constitution of the United States”, whose “The right of citizens of the United States to vote shall not be denied or abridged by the United States or by any State on account of race, color, or previous condition of servitude” section 2 makes good against every “voting qualification or prerequisite to voting, or standard, practice, or procedure” that denies the vote on account of race or color."},
+	// The International Convention on the Elimination of All Forms of
+	// Racial Discrimination, December 1965.
+	{From: "cerd", To: "udhr", How: DrewOn,
+		Why: "The Convention's preamble takes the Declaration as its ground, that all human beings are “born free and equal in dignity and rights and that everyone is entitled to all the rights and freedoms set out therein, without distinction of any kind”, the Declaration's “All human beings are born free and equal in dignity and rights”, and binds its parties to end distinction by race."},
+	{From: "cerd", To: "civil-rights", How: Follows,
+		Why: "Eighteen months after the Act opened “any place of public accommodation” to all, Article 5 binds its parties to secure “The right of access to any place or service intended for use by the general public, such as transport, hotels, restaurants, cafés, theatres and parks” without distinction as to race."},
 	// The Freedom of Information Act, 1966.
 	{From: "foia", To: "constitution", How: Follows,
 		Why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552, which makes each agency's records available “to any person” unless one of its exemptions holds."},
@@ -157,11 +166,20 @@ var Links = []Link{
 		Why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552a, on the records agencies keep about individuals."},
 	{From: "privacy", To: "udhr", How: Follows,
 		Why: "Article 12 holds that “No one shall be subjected to arbitrary interference with his privacy”; the Act gives that right form for the records the government keeps on a person."},
+	// The Americans with Disabilities Act of 1990.
+	{From: "ada", To: "civil-rights", How: Follows,
+		Why: "Title I takes Title VII's form for disability: where the Act of 1964 holds that “It shall be an unlawful employment practice for an employer” to discriminate by race, colour, religion, sex or national origin, the Act of 1990 holds that “No covered entity shall discriminate against a qualified individual with a disability because of the disability of such individual in regard to job application procedures, the hiring, advancement, or discharge of employees”."},
 	// The United Kingdom's Freedom of Information Act 2000.
 	{From: "uk-foia", To: "foia", How: Follows,
 		Why: "Section 1's “Any person making a request for information to a public authority is entitled” to be told whether it holds the information and to have it, as FOIA's records go “to any person”; both set out what may be withheld and give an appeal, the United Kingdom's thirty-four years after the United States'."},
 	{From: "uk-foia", To: "iccpr", How: Follows,
 		Why: "An Act “to make provision for the disclosure of information held by public authorities”, in a country party to the Covenant since 1976, whose Article 19 holds the freedom “to seek, receive and impart information and ideas of all kinds”."},
+	// The Convention on the Elimination of All Forms of Discrimination
+	// against Women, December 1979.
+	{From: "cedaw", To: "udhr", How: DrewOn,
+		Why: "The Convention's preamble notes that the Declaration proclaims that “all human beings are born free and equal in dignity and rights and that everyone is entitled to all the rights and freedoms set forth therein, without distinction of any kind, including distinction based on sex”, the Declaration's “All human beings are born free and equal in dignity and rights”, and binds its parties to end distinction by sex."},
+	{From: "cedaw", To: "seneca", How: Follows,
+		Why: "A hundred and thirty-one years after Seneca Falls resolved “That woman is man's equal”, the Convention defines discrimination against women as whatever impairs their rights “on a basis of equality of men and women” and binds its parties to end it."},
 	// India's Right to Information Act, 2005.
 	{From: "rti", To: "udhr", How: Follows,
 		Why: "The Act's long title sets out “the practical regime of right to information for citizens to secure access to information under the control of public authorities”, giving form in law to Article 19's freedom “to seek, receive and impart information and ideas through any media and regardless of frontiers”."},

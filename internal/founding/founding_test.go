@@ -584,6 +584,115 @@ func TestTheVotingRightsAct(t *testing.T) {
 	}
 }
 
+// TestTheRacialDiscriminationConvention: the UN's text: its preamble,
+// then Parts I to III with Articles 1 to 25 in order under them.
+func TestTheRacialDiscriminationConvention(t *testing.T) {
+	c := docs(t)["cerd"]
+	if c.Title != "The International Convention on the Elimination of All Forms of Racial Discrimination" || !strings.Contains(c.About, "2106 (XX)") || !strings.Contains(c.About, "4 January 1969") {
+		t.Errorf("the Racial Discrimination Convention: %q, %q", c.Title, c.About)
+	}
+	var parts, articles []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, b.Text)
+		case "h3":
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case "text":
+			if len(parts) == 1 {
+				preamble++
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 25; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if strings.Join(parts, "|") != "Preamble|Part I|Part II|Part III" || !slices.Equal(articles, want) || preamble != 14 {
+		t.Errorf("the Racial Discrimination Convention: parts %v, %d articles, %d preamble paragraphs", parts, len(articles), preamble)
+	}
+}
+
+// TestTheWomensRightsConvention: the UN's text: its preamble, then Parts I
+// to VI with Articles 1 to 30 in order under them.
+func TestTheWomensRightsConvention(t *testing.T) {
+	c := docs(t)["cedaw"]
+	if c.Title != "The Convention on the Elimination of All Forms of Discrimination against Women" || !strings.Contains(c.About, "34/180") || !strings.Contains(c.About, "3 September 1981") {
+		t.Errorf("the Women's Rights Convention: %q, %q", c.Title, c.About)
+	}
+	var parts, articles []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, b.Text)
+		case "h3":
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case "text":
+			if len(parts) == 1 {
+				preamble++
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 30; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if strings.Join(parts, "|") != "Preamble|Part I|Part II|Part III|Part IV|Part V|Part VI" || !slices.Equal(articles, want) || preamble != 17 {
+		t.Errorf("the Women's Rights Convention: parts %v, %d articles, %d preamble paragraphs", parts, len(articles), preamble)
+	}
+}
+
+// TestTheEuropeanConvention: the Court's text: the Preamble with Article
+// 1, Sections I to III with Articles 2 to 59 in order, then the seven
+// Protocols the Court's edition carries, each with its own articles.
+func TestTheEuropeanConvention(t *testing.T) {
+	c := docs(t)["echr"]
+	if c.Title != "The European Convention on Human Rights" || !strings.Contains(c.About, "4 November 1950") || !strings.Contains(c.About, "Council of Europe") {
+		t.Errorf("the European Convention: %q, %q", c.Title, c.About)
+	}
+	var parts []string
+	var articles []string
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, strings.SplitN(b.Text, " ", 3)[0]+" "+strings.SplitN(b.Text+"  ", " ", 3)[1])
+		case "h3":
+			if len(parts) <= 4 {
+				articles = append(articles, strings.TrimPrefix(strings.SplitN(b.Text, " – ", 2)[0], "Article "))
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 59; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if len(parts) != 11 || !strings.HasPrefix(parts[1], "Section I") || !strings.HasPrefix(parts[4], "Protocol to") || !strings.HasPrefix(parts[10], "Protocol No.") || !slices.Equal(articles, want) || count(c, "h3", func(string) bool { return true }) != 116 {
+		t.Errorf("the European Convention: parts %v, %d articles of the Convention, %d articles in all", parts, len(articles), count(c, "h3", func(string) bool { return true }))
+	}
+}
+
+// TestTheDisabilitiesAct: the Act as enacted, from the Statutes at Large:
+// "An Act", the long title, the enacting words, its five titles under
+// their headings, and its fifty-eight sections.
+func TestTheDisabilitiesAct(t *testing.T) {
+	a := docs(t)["ada"]
+	if a.Title != "The Americans with Disabilities Act of 1990" || !strings.Contains(a.About, "Statutes at Large") || !strings.Contains(a.About, "July 26, 1990") {
+		t.Errorf("the Disabilities Act: %q, %q", a.Title, a.About)
+	}
+	var titles []string
+	for _, b := range a.Blocks {
+		if b.Kind == "h2" {
+			titles = append(titles, strings.TrimSuffix(strings.Fields(b.Text)[1], "."))
+		}
+	}
+	secs := count(a, "text", func(s string) bool { return strings.HasPrefix(s, "SEC. ") })
+	if !slices.Equal(titles, []string{"I", "II", "III", "IV", "V"}) || secs != 58 || len(a.Blocks) < 3 || a.Blocks[0].Text != "An Act" || !strings.HasPrefix(a.Blocks[1].Text, "To establish a clear and comprehensive prohibition of discrimination on the basis of disability") {
+		t.Errorf("the Disabilities Act: titles %v, %d sections, %+v", titles, secs, a.Blocks[:min(2, len(a.Blocks))])
+	}
+}
+
 // TestTheRightToInformationAct: India's Act, as India Code sets it out:
 // its number and date, its long title, its six chapters and two schedules
 // in order, its 31 sections in order, and India Code's footnotes as notes.
@@ -776,6 +885,7 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		"privacy": {"to the Director of the Congressional Budget Office", "required under section 552 of this title"},
 		// The print's own readings, where the Archives' transcript differs.
 		"civil-rights": {"subpena", "the chief judge of the circuit", "facilities, privileges, advantages, and accommodations", "school personnel inservice training"},
+		"ada":          {"No covered entity shall discriminate against a qualified individual with a disability", "Approved July 26, 1990."},
 		// The print's own readings, where the Archives' transcript modernizes.
 		"voting-rights": {"per centum", "suported", "section 5 of the fourteenth amendment", "No voting qualification or prerequisite to voting"},
 		// The enacted XML's readings, where the Queen's Printer's print differs.
@@ -783,6 +893,10 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		// The certified true copy's readings, where OHCHR's text differs.
 		"iccpr":  {"such legislative or other measures", "a lighter penalty", "sub-paragraph", "in accordance with the Universal Declaration of Human Rights"},
 		"icescr": {"conditions of work, which ensure", "legal guardians, to choose", "the right of everyone to education"},
+		"cerd":   {"the rights to participate", "shall be those nominees", "or in conventions"},
+		"cedaw":  {"connexion", "security, relaxation", "self-employment", "the equal right of men and women"},
+		// The Court's print's own slips, kept.
+		"echr": {"10th December 1948", "under paragraph1.", "the provisions of Article 1 to 6 of this Protocol", "the licensing of broadcasting, television or cinema enterprises"},
 		// India Code's own readings, where the 2005 Gazette differs.
 		"rti": {"all citizens shall have the right to information", "it is expendient", "suomotu", "information which relates to personal information;"},
 	} {
@@ -882,6 +996,10 @@ func TestFindAnySpelling(t *testing.T) {
 		"lawful judgment of his peers":                         "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
 		"securing the liberty of the subject":                  "habeas: ",
 		"all men and women are created equal":                  "seneca: ",
+		"qualified individual with a disability":               "ada: Title I. Employment",
+		"without interference by public authority":             "echr: Section I. Rights and freedoms › Article 10 – Freedom of expression",
+		"discrimination against women":                         "cedaw: Part I › Article 1",
+		"racial discrimination":                                "cerd: Part I › Article 1",
 		"equal employment opportunity":                         "civil-rights: Title VII. Equal Employment Opportunity",
 		"enforce the fifteenth amendment":                      "voting-rights: ",
 		"publishing their sentiments":                          "pennsylvania: XII.",
