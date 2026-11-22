@@ -1563,6 +1563,35 @@ Every change to how your sessions are organised is kept as a version, as git kee
 
 **Tests:** `internal/core`: one version per action, each naming the one before, and none for a boost, a park that changes nothing or a restart; an undo of a batch as one version; one state for two versions of one organisation; a version's name the SHA-512 of its canonical bytes; no host name, user name or home folder in any version; a restore of groups, pins, names and a space, with a closed card left closed and a new session left as it was, then undone and redone to the same rows; a version changed or cut short caught by `log`, `show`, `restore` and a restart, and a bad `HEAD` moved aside; a write that fails, shown while its action goes ahead; nothing on disk holding a word of the chain, and another key locking it, loudly, while the actions go on, until the right one opens it again. `internal/core` too: the vault's key never made over what it sealed, a key kept in a file moving into a store once there is one, and a store away, a key lost and a key wrong each refused with nothing changed; the first build's chain moved into its folder and the vault. `internal/keyring`: a Keychain that can't be asked (locked where no one may be asked, not there, refused, cancelled, or no login keychain) away, never a key lost, with no key made then; the Secret Service through a stand-in `secret-tool`; `Find` making no key, and `Put`. `internal/chain` (zen's, §4.22): RFC 8785's sorting example, SHA-512's "abc" vector, a changed version refused, and the vault's own tests.
 
+### 4.24 A/B against a gold build
+
+"Faster" and "nothing else changed" are claims, like "the tests pass" (§4.8), and an agent that rewrites code makes them often. `irie ab` checks them the way the maintainer of a long-lived tool checks its rewrite (PROVENANCE.md): against a frozen build that is trusted, gold, on the same input, run after run until the numbers hold.
+
+**`irie ab [-n RUNS] [--warmup N] [--ignore REGEXP]... [--stdin FILE] [--timeout D] [--json] GOLD NEW [-- ARG...]`.**
+- GOLD and NEW are two builds of one program: paths, or names on PATH. Both get the ARGs and, with `--stdin`, the same input.
+- They take turns, gold then new, then new then gold, so neither always runs on the cooler machine. `--warmup` runs of each (1) are compared but not timed; RUNS (10) are timed.
+- A run's standard output goes straight to a file, so reading it never slows the build being timed. It is read once the run is over.
+- Output is compared line by line. A Windows line ending counts as a plain one, and what each `--ignore` matches is blanked out, such as a version or a date. The exit status is compared too; standard error is not.
+
+**What it says.**
+- Whether new's output is the same as gold's. If not, where they part: the first line that differs with each build's line, or else the exit statuses.
+- When a build's own runs disagree, which build and from which run. While gold varies, a difference from new means nothing until an `--ignore` covers what changes.
+- For time, CPU (user and system) and peak resident memory: each build's median run, quickest and slowest, and how far new's median is from gold's. Memory is getrusage's `ru_maxrss`, which macOS gives in bytes and Linux in kilobytes.
+- Whether each difference is more than noise. It is when the medians are more than three standard errors apart and at least 1% apart. The standard error is √(π/2)·σ/√n, with σ read from the middle half of the runs (IQR/1.349), so a stray run counts for little and more runs show a smaller change. With fewer than 3 runs there is no noise to measure, so only a change of more than double counts.
+- Naming one build twice shows the noise on its own: the same `sort` on the same file moved 6–10% between its two names.
+- `--json` gives the same report for scripts and agents.
+- Exits 0 when the outputs are the same, 1 when they differ, 2 on a usage error, and 3 when a build could not run or ran past `--timeout` (10m).
+
+**`tools/live.sh` times itself the same way.** A finished install says how long it took and where the time went: the merge that restarted it, preparing, waiting for a place to test, the checks, the build, what was left of the app's build, the lock, the swap, the relaunch and the push. Phases under a second are left out. Each install adds a line of the same to `live.times` in Irie's data directory, and one that fails says which phase it stopped in.
+
+**Not yet.**
+- The jot dog does not read `irie ab`'s verdicts, so a report that says "faster" while its own last A/B said slower is not yet sent back (§4.8).
+- `irie ab` does not say when Gabriel holds its session back (§4.11). That slows both builds alike but widens their ranges.
+
+**Tests:**
+- `internal/ab`: the same output, `--ignore`, the first difference (a line, a missing line, a missing newline), exit statuses, Windows line endings, a gold that varies, standard input, turns, measures, a build that cannot run or times out, and `Compare` on a clear change, noise, a stray run, too few runs and a tiny change.
+- `cmd/irie/ab_test.go`: the report, the exit codes and JSON.
+
 ---
 
 ## 5. Data and config

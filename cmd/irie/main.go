@@ -52,6 +52,10 @@ const usage = `usage: ` + brand.Slug + ` [command]
   ` + brand.Slug + ` away [--for 10s] [--app NAME]... -- COMMAND
                           run COMMAND with each window it opens on a desktop
                           you are not looking at, never the one you work on
+  ` + brand.Slug + ` ab [-n RUNS] [--ignore REGEXP]... GOLD NEW [-- ARG...]
+                          check a rewrite: run two builds of a program on the
+                          same input, taking turns, and say whether the output
+                          is the same and which is faster (` + brand.Slug + ` ab --help)
   ` + brand.Slug + ` remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (` + brand.Slug + ` remote for help)
 ` + privacyUsage + writingUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
@@ -150,6 +154,8 @@ func run(args []string) int {
 		err = lidCmd(args)
 	case "away":
 		err = away(args)
+	case "ab":
+		err = abCmd(args, os.Stdout)
 	case "setup":
 		err = setup(args)
 	case "version":
