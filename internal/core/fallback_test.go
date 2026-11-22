@@ -39,6 +39,31 @@ failover = false
 // /model replaces and the switch puts back.
 const userSettings = "{\n  \"theme\": \"dark\",\n  \"model\": \"fable[1m]\"\n}\n"
 
+// After its limit, an agent that draws its prompt again only seconds later,
+// as Claude Code can on a busy machine, still switches: the switch waits
+// for the prompt rather than give the fallback up at its first look.
+func TestAFallbackWaitsForAPromptDrawnLate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(userSettings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := setupWith(t, fallbackConfig(t, dir))
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,limit:fable,sleep:3s,box", Profile: "fab"})
+	var fell event.Event
+	testutil.Eventually(t, 20*time.Second, "no route.fallback", func() bool {
+		for _, e := range c.events(s.ID) {
+			if e.Kind == event.RouteFallback {
+				fell = e
+				return true
+			}
+		}
+		return false
+	})
+	if fell.Str("to") != "claude-opus-5-5" || fell.Str("reason") != "" {
+		t.Errorf("route.fallback %v, want a switch to Opus", fell.Data)
+	}
+}
+
 // Fable's own usage limit stops a turn: Irie types /model into the agent,
 // which switches without asking although its prompt cache is warm, puts
 // the user's default back, and tells the agent to carry on, on Opus, in
