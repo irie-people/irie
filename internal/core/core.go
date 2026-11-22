@@ -895,6 +895,13 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.worktreesOp(peer, a)
+	case ipc.OpKeys:
+		// Keys answer a session's prompts, a permission prompt among them,
+		// and only the person answers those (DESIGN §4.11): never a caller
+		// in an agent's process tree, the agent or what it left running.
+		if c.fromAgent(peer) {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "An agent can't press keys in a session: keys answer its prompts, and those are yours to answer.")
+		}
 	}
 	return c.Call(op, raw)
 }
