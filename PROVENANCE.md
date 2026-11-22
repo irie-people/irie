@@ -927,6 +927,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_060_blitz_tools.md DRV-04a and spec_007_shell.md SH-22 | The idea, no code: the core refuses op keys from a caller in an agent's process tree, as Blitz refuses an approval from the agent's own commands |
 | 2026-11-22 | https://blog.joeware.net/2021/04/19/6068/ | A read that returns part of its data with a success code (msds-memberTransitive's 4,500-value cap, "no attributes returned and still a LDAP_SUCCESS"), and code that never checked that data came back: the journal says how many lines it cannot read instead of carrying on as if its record were whole (DESIGN §5.4). Ideas only |
 | 2026-11-22 | https://blog.joeware.net/2021/05/31/6095/ | Talking to the people who watch a tool rather than arguing with their scanners (AdFind's no-op -SOC switch): SECURITY.md's section for security and IT teams, which says what Irie runs, touches and listens on and how to tell an agent's commands apart. Ideas only |
+| 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_007_shell.md SH-14a and SH-22a | The idea, no code: Gabriel's guard turns away a search of the whole disk or the home folder, which makes macOS ask the user about each private folder |
 
 ## Third-party code
 

@@ -1065,11 +1065,188 @@ func openEffect(args []string, piped bool) windowEffect {
 	return inSight
 }
 
+// sweepNote is what an agent is told when Gabriel turns away a search of
+// the whole disk or the home folder.
+var sweepNote = "[" + brand.Name + "] Gabriel turned this call away: it searches the whole disk or your user's home folder, and macOS asks them about each private folder it reads (Documents, Desktop, Downloads, iCloud Drive, Mail…), a prompt in front of what they look at, while the search works the disk for minutes. Look where the thing should be: command -v NAME for a program, mdfind -name NAME for a file by name (Spotlight's index, which reads no folder), or a narrower folder, such as the repository, /opt/homebrew, /usr/local or ~/Library/Caches. find with -maxdepth 1 runs. If your user wants the whole search, say so in a line: it runs from the session they watch, with " + brand.Name + " in front."
+
+// sweepRoots are the folders a search may not start from: the whole disk,
+// every user's home, the other volumes, and the home folder and its
+// Library, which hold the folders macOS guards with a prompt.
+func sweepRoots(home string) []string {
+	roots := []string{"/", "/Users", "/home", "/Volumes", "/System/Volumes/Data", "~", "$HOME", "${HOME}", "~/Library", "$HOME/Library", "${HOME}/Library"}
+	if home = strings.TrimRight(home, "/"); home != "" {
+		roots = append(roots, home, home+"/Library")
+	}
+	return roots
+}
+
+// sweepsDisk reports whether a shell command searches every folder under
+// the whole disk or the home folder (sweepRoots): macOS then asks the user
+// about each private folder it reads, Documents, Desktop, Downloads and the
+// rest, and the search works the disk for minutes. Like windowOf it reads
+// the commands a person would see, and errs toward letting them run.
+func sweepsDisk(cmd, home string) bool {
+	roots := sweepRoots(home)
+	for _, ws := range commands(withoutText(cmd)) {
+		words, _ := command(ws)
+		if len(words) == 0 {
+			continue
+		}
+		base := filepath.Base(words[0])
+		switch {
+		case slices.Contains(shells, base):
+			for i, w := range words[1:] {
+				if strings.HasPrefix(w, "-") && !strings.HasPrefix(w, "--") && strings.HasSuffix(w, "c") {
+					if i+2 < len(words) && sweepsDisk(words[i+2], home) {
+						return true
+					}
+					break
+				}
+			}
+		case base == "eval":
+			if sweepsDisk(strings.Join(words[1:], " "), home) {
+				return true
+			}
+		case slices.ContainsFunc(searchedFrom(base, words[1:]), func(p string) bool { return sweepRoot(p, roots) }):
+			return true
+		}
+	}
+	return false
+}
+
+// searchedFrom is where the program base, run with args, searches every
+// folder below: find's, du's and tree's paths, fd's, rg's and grep -r's
+// after their pattern, ls -R's. Held to the folder itself (find -maxdepth 1,
+// tree -L 1, fd and rg with a depth of 1) it searches nothing below.
+func searchedFrom(base string, args []string) []string {
+	shallow := func(v string) bool { n, err := strconv.Atoi(v); return err == nil && n <= 1 }
+	has := func(opts map[string]string, names ...string) bool {
+		return slices.ContainsFunc(names, func(n string) bool { _, ok := opts[n]; return ok })
+	}
+	switch base {
+	case "find", "gfind":
+		// find [-H | -L | -P] [-EXdsx] [-f path] path ... [expression]
+		var paths []string
+		i := 0
+		for ; i < len(args); i++ {
+			if args[i] == "-f" && i+1 < len(args) {
+				i++
+				paths = append(paths, args[i])
+				continue
+			}
+			if len(args[i]) < 2 || args[i][0] != '-' || strings.Trim(args[i][1:], "HLPEXdsx") != "" {
+				break
+			}
+		}
+		for ; i < len(args) && !strings.HasPrefix(args[i], "-") && args[i] != "(" && args[i] != "!"; i++ {
+			paths = append(paths, args[i])
+		}
+		for ; i+1 < len(args); i++ {
+			if args[i] == "-maxdepth" && shallow(args[i+1]) {
+				return nil
+			}
+		}
+		return paths
+	case "fd", "fdfind":
+		opts, rest := argv(args, "dEetSxXjco", []string{"max-depth", "exact-depth", "exclude", "extension", "type", "size", "exec", "exec-batch", "threads", "color", "owner", "changed-within", "changed-before", "search-path", "base-directory", "ignore-file", "max-results", "path-separator", "format"})
+		if shallow(opts["-d"]) || shallow(opts["--max-depth"]) || shallow(opts["--exact-depth"]) || len(rest) == 0 {
+			return nil
+		}
+		return append(rest[1:], opts["--search-path"], opts["--base-directory"])
+	case "rg":
+		opts, rest := argv(args, "efgtTmABCjMdEr", []string{"regexp", "file", "glob", "iglob", "type", "type-not", "type-add", "max-count", "after-context", "before-context", "context", "threads", "max-columns", "max-depth", "replace", "encoding", "engine", "sort", "sortr", "max-filesize", "pre", "pre-glob", "color", "colors", "path-separator", "context-separator", "ignore-file"})
+		if shallow(opts["-d"]) || shallow(opts["--max-depth"]) {
+			return nil
+		}
+		if !has(opts, "-e", "-f", "--regexp", "--file", "--files") && len(rest) > 0 {
+			rest = rest[1:] // the pattern
+		}
+		return rest
+	case "grep", "egrep", "fgrep", "ggrep":
+		opts, rest := argv(args, "efmABCdD", []string{"regexp", "file", "max-count", "after-context", "before-context", "context", "directories", "devices", "label", "color", "colour"})
+		if !has(opts, "-r", "-R", "--recursive", "--dereference-recursive") && opts["-d"] != "recurse" && opts["--directories"] != "recurse" {
+			return nil
+		}
+		if !has(opts, "-e", "-f", "--regexp", "--file") && len(rest) > 0 {
+			rest = rest[1:] // the pattern
+		}
+		return rest
+	case "du", "gdu":
+		_, rest := argv(args, "dBtXI", []string{"block-size", "threshold", "exclude-from", "time-style", "files0-from"})
+		return rest
+	case "tree":
+		opts, rest := argv(args, "LPIoHT", []string{"filelimit", "timefmt", "charset", "sort", "infile"})
+		if shallow(opts["-L"]) {
+			return nil
+		}
+		return rest
+	case "ls", "gls":
+		opts, rest := argv(args, "", nil)
+		if !has(opts, "-R", "--recursive") {
+			return nil
+		}
+		return rest
+	}
+	return nil
+}
+
+// argv reads a command's arguments: its options, each with its value when
+// it takes one (the short options in takes, the long ones in long, or given
+// with =), and the rest in order. -- ends the options.
+func argv(args []string, takes string, long []string) (opts map[string]string, rest []string) {
+	opts = map[string]string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return opts, append(rest, args[i+1:]...)
+		case strings.HasPrefix(a, "--"):
+			name, val, set := strings.Cut(a[2:], "=")
+			if !set && slices.Contains(long, name) && i+1 < len(args) {
+				i++
+				val = args[i]
+			}
+			opts["--"+name] = val
+		case len(a) > 1 && a[0] == '-':
+			for j := 1; j < len(a); j++ {
+				if !strings.ContainsRune(takes, rune(a[j])) {
+					opts["-"+a[j:j+1]] = ""
+					continue
+				}
+				val := a[j+1:]
+				if val == "" && i+1 < len(args) {
+					i++
+					val = args[i]
+				}
+				opts["-"+a[j:j+1]] = val
+				break
+			}
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return opts, rest
+}
+
+// sweepRoot reports whether path, as written, names one of roots, with or
+// without a slash at its end, or everything in one (/*, ~/*).
+func sweepRoot(path string, roots []string) bool {
+	path = strings.TrimSuffix(path, "*")
+	if p := strings.TrimRight(path, "/"); p != "" {
+		path = p
+	} else if path != "" {
+		path = "/"
+	}
+	return path != "" && slices.Contains(roots, path)
+}
+
 // focusGuard says what to tell the agent when a Bash call it is about to
 // make would put a window where the user works: on the desktop they are on,
 // always, since nobody asked for a window behind them; in front, unless
 // they watch the session that makes it, with Irie in front, and may want
-// what it opens. "" lets the call run. It holds no lock when it is called.
+// what it opens. A search of the whole disk or the home folder is in front
+// too: macOS asks the user about each private folder it reads. "" lets the
+// call run. It holds no lock when it is called.
 func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Event) string {
 	g := c.cfg().Arch.Gabriel
 	if tool != "Bash" || !g.On || !g.Guard || gabrielOff() || !slices.ContainsFunc(evs, func(e event.Event) bool { return e.Kind == event.ToolStarted }) {
@@ -1081,21 +1258,26 @@ func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Ev
 	if json.Unmarshal(input, &in) != nil {
 		return ""
 	}
-	switch windowOf(in.Command) {
-	case inSight:
+	home, _ := os.UserHomeDir()
+	effect, sweep := windowOf(in.Command), sweepsDisk(in.Command, home)
+	switch {
+	case effect == inSight:
 		return focusNote
-	case inFront:
-		if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
-			c.mu.Lock()
-			watching := c.selected == id
-			c.mu.Unlock()
-			if watching {
-				return ""
-			}
+	case effect == outOfSight && !sweep:
+		return ""
+	}
+	if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
+		c.mu.Lock()
+		watching := c.selected == id
+		c.mu.Unlock()
+		if watching {
+			return ""
 		}
+	}
+	if effect == inFront {
 		return focusNote
 	}
-	return ""
+	return sweepNote
 }
 
 // installing is the sessions that run tools/live.sh: every session's work
