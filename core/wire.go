@@ -231,6 +231,7 @@ type (
 	ConfigResult      = ipc.ConfigResult
 	LearnArgs         = ipc.LearnArgs
 	LearnResult       = ipc.LearnResult
+	LearnTopic        = ipc.LearnTopic
 	ShowArgs          = ipc.ShowArgs
 	RenameArgs        = ipc.RenameArgs
 	RenameResult      = ipc.RenameResult

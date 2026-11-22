@@ -258,7 +258,7 @@ func chatCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 		do := map[string]string{"remove": ipc.ChatRemove, "test": ipc.ChatTest}[sub]
 		return say(ipc.ChatArgs{Do: do, Account: args[0]}, wait)
 	case "help", "-h", "--help":
-		fmt.Fprint(stdout, chatHelp)
+		fmt.Fprint(stdout, aligned(chatHelp))
 		return nil
 	}
 	return fmt.Errorf("unknown chat command %q\n\n%s", sub, chatHelp)

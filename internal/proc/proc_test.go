@@ -185,6 +185,30 @@ func TestReadSeesAStoppedChildInItsOwnGroup(t *testing.T) {
 	}
 }
 
+// InBackground follows this process into macOS's background state and out
+// again; where there is none, it is false.
+func TestInBackgroundSeesThisProcessesState(t *testing.T) {
+	if !CanBackground {
+		if InBackground() {
+			t.Error("InBackground is true where there is no background state")
+		}
+		return
+	}
+	if InBackground() {
+		t.Skip("the test already runs in the background state, as a held-back session's do")
+	}
+	if err := SetBackground(os.Getpid(), true); err != nil {
+		t.Fatal(err)
+	}
+	in := InBackground()
+	if err := SetBackground(os.Getpid(), false); err != nil {
+		t.Fatal(err)
+	}
+	if !in || InBackground() {
+		t.Errorf("in the background state: %v; after it: %v", in, InBackground())
+	}
+}
+
 func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 	if !CanBackground {
 		if err := SetBackground(os.Getpid(), true); err == nil {

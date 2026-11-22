@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Irie's theme of Claude Code's takes the palette's dark grounds for the
@@ -32,7 +34,7 @@ func TestIriesThemeIsThePalettesDarkGrounds(t *testing.T) {
 	}
 	want := map[string]string{"composerSidebarBackground": "#18221C", "userMessageBackground": "#1C2620",
 		"userMessageBackgroundHover": "#25322A", "selectionBg": "#2A3D31"}
-	if theme.Name != "Irie" || theme.Base != "dark" || len(theme.Overrides) != len(want) {
+	if theme.Name != brand.Name || theme.Base != "dark" || len(theme.Overrides) != len(want) {
 		t.Fatalf("theme %+v", theme)
 	}
 	for k, v := range want {
@@ -64,10 +66,10 @@ func TestASessionTakesIriesThemeOverTheDefault(t *testing.T) {
 		file string
 		want string
 	}{
-		{"", "custom:irie"},
-		{`{"model": "opus"}`, "custom:irie"},
-		{`{"theme": "dark"}`, "custom:irie"},
-		{`{"theme": "auto"}`, "custom:irie"},
+		{"", "custom:" + brand.Slug},
+		{`{"model": "opus"}`, "custom:" + brand.Slug},
+		{`{"theme": "dark"}`, "custom:" + brand.Slug},
+		{`{"theme": "auto"}`, "custom:" + brand.Slug},
 		{`{"theme": "light"}`, ""},
 		{`{"theme": "dark-daltonized"}`, ""},
 		{`{"theme": "custom:dracula"}`, ""},

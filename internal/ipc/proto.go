@@ -1754,6 +1754,19 @@ type LearnResult struct {
 	// (DESIGN §2.10). Both are empty from a core from before them.
 	Bar  string   `json:"bar,omitempty"`
 	Tips []string `json:"tips,omitempty"`
+	// Topics are what the session's project's own docs teach, in their
+	// order: the Teach tile lists them, and steps through them as a tour.
+	// None without a session, or from a core from before them.
+	Topics []LearnTopic `json:"topics,omitempty"`
+}
+
+// LearnTopic is one thing a project's docs teach: an item of a list in
+// them that leads with its name in bold, the file it is in, and the
+// heading it sits under.
+type LearnTopic struct {
+	Title   string `json:"title"`
+	File    string `json:"file"`
+	Heading string `json:"heading,omitempty"`
 }
 
 type ShowArgs struct {
@@ -1797,6 +1810,11 @@ type HookResult struct {
 	// Allow answers a PreModelSwitch: the switch is Irie's own, at a usage
 	// limit, and needs no confirmation (DESIGN §6.4).
 	Allow bool `json:"allow,omitempty"`
+	// Ask answers a PreToolUse with a reason to ask the user before the call
+	// runs, which the harness shows them in its permission prompt, as
+	// Mikael does before a change to what their own git runs (DESIGN §4.11).
+	// Deny wins over it.
+	Ask string `json:"ask,omitempty"`
 }
 
 // Frame types streamed after subscribe.

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 const testKey = "hcw_k3y0nlyth3t3stkn0ws0000000000"
@@ -250,7 +252,7 @@ func TestReportSaysWhatIsLeft(t *testing.T) {
 
 func TestStoreKeepsTheKeyPrivate(t *testing.T) {
 	s := Store{Dir: filepath.Join(t.TempDir(), "dms")}
-	if _, err := s.Key(); err == nil || !strings.Contains(err.Error(), "irie dms key --paste") {
+	if _, err := s.Key(); err == nil || !strings.Contains(err.Error(), brand.Slug+" dms key --paste") {
 		t.Errorf("no key: %v", err)
 	}
 	for _, bad := range []string{"", "two words", "a\nb"} {

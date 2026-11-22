@@ -57,10 +57,10 @@ func lidCmd(args []string) error {
 	}
 	if len(args) > 0 {
 		if args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-			fmt.Print(lidUsage)
+			fmt.Print(aligned(lidUsage))
 			return nil
 		}
-		fmt.Fprint(os.Stderr, lidUsage)
+		fmt.Fprint(os.Stderr, aligned(lidUsage))
 		return exitCode{2, errors.New("unknown lid command " + strconv.Quote(args[0]))}
 	}
 	cfg, p, err := load()

@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -70,7 +71,7 @@ func TestTheRepoViewGroupsByRepo(t *testing.T) {
 		"▾ code/irie", "irie-theme", "irie-tests",
 		"▾ forks/irie", "fork-docs",
 		"▾ Not in a repo", "scratch-notes",
-		"▾ Outside Irie", "outside-00",
+		"▾ Outside " + brand.Name, "outside-00",
 	}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("outline %q, want %q", got, want)
@@ -179,7 +180,7 @@ func TestParkedComesLast(t *testing.T) {
 		"▾ code/irie", "irie-theme", "irie-tests",
 		"▾ forks/irie", "fork-docs",
 		"▸ Parked",
-		"▾ Outside Irie", "outside-00",
+		"▾ Outside " + brand.Name, "outside-00",
 	}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("Repo view %q, want %q", got, want)
@@ -194,7 +195,7 @@ func TestParkedComesLast(t *testing.T) {
 		"▾ code/irie", "irie-theme", "irie-tests",
 		"▾ forks/irie", "fork-docs",
 		"▾ Parked", "scratch-notes", "web-copy",
-		"▾ Outside Irie", "outside-00",
+		"▾ Outside " + brand.Name, "outside-00",
 	}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("Repo view, Parked open: %q, want %q", got, want)
@@ -203,7 +204,7 @@ func TestParkedComesLast(t *testing.T) {
 	want = []string{
 		"web-fix", "irie-theme", "fork-docs", "irie-tests",
 		"▾ Parked", "scratch-notes", "web-copy",
-		"▾ Outside Irie", "outside-00",
+		"▾ Outside " + brand.Name, "outside-00",
 	}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("List view %q, want %q", got, want)
@@ -394,7 +395,7 @@ func TestSmallPanesFallBackToRows(t *testing.T) {
 			continue
 		}
 		lines := screen(t, m)
-		if len(lines) != c.h || !strings.Contains(lines[0], "Irie") {
+		if len(lines) != c.h || !strings.Contains(lines[0], brand.Name) {
 			t.Errorf("%d×%d: %d lines, header %q", c.w, c.h, len(lines), lines[0])
 		}
 		if m.listHeight() < 1 {
@@ -460,8 +461,8 @@ func TestAnotherMachinesSessionsHaveAGroupOfTheirOwn(t *testing.T) {
 		view listView
 		want []string
 	}{
-		{byRepo, []string{"▾ website", "web-fix", "▸ Parked", "▾ On Asahi", "fix the build", "write the docs", "▾ Outside Irie", "outside-00"}},
-		{byList, []string{"web-fix", "▸ Parked", "▾ On Asahi", "fix the build", "write the docs", "▾ Outside Irie", "outside-00"}},
+		{byRepo, []string{"▾ website", "web-fix", "▸ Parked", "▾ On Asahi", "fix the build", "write the docs", "▾ Outside " + brand.Name, "outside-00"}},
+		{byList, []string{"web-fix", "▸ Parked", "▾ On Asahi", "fix the build", "write the docs", "▾ Outside " + brand.Name, "outside-00"}},
 	} {
 		if m.view != c.view {
 			m = send(m, keyMsg("v"))

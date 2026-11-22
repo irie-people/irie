@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/route"
 )
@@ -366,7 +367,7 @@ func TestHeaderAndCommandBarArePinned(t *testing.T) {
 				t.Errorf("34×%d, %d rows: %d lines, want %d", h, n, len(lines), h)
 				continue
 			}
-			if !strings.Contains(lines[0], "☀ Irie") {
+			if !strings.Contains(lines[0], "☀ "+brand.Name) {
 				t.Errorf("34×%d, %d rows: first line %q is not the header", h, n, lines[0])
 			}
 			// The command bar's text, in its box when it has one, ends the pane.
@@ -1092,7 +1093,7 @@ func TestPlaceholderShowsTheMarkWhenThereIsRoom(t *testing.T) {
 		return ansiRE.ReplaceAllString(next.(placeholder).View().Content, "")
 	}
 	tall := view(80, 30)
-	for _, want := range []string{"( ☀ )", "～～～", "Irie", "[Ctrl+]]", "[Tab]", "[↑][↓]", "show it, stay in the sidebar"} {
+	for _, want := range []string{"( ☀ )", "～～～", brand.Name, "[Ctrl+]]", "[Tab]", "[↑][↓]", "show it, stay in the sidebar"} {
 		if !strings.Contains(tall, want) {
 			t.Errorf("80×30 placeholder lacks %q:\n%s", want, tall)
 		}

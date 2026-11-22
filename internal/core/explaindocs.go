@@ -3,11 +3,13 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/search"
 )
 
@@ -33,27 +35,75 @@ type passage struct {
 // files in its docs folder. Proposals are left out: they say what might be
 // built, and a card should say what is.
 func docsOf(dir string) []passage {
+	var out []passage
+	eachDoc(dir, func(name, text string) { out = append(out, passagesOf(name, text)...) })
+	return out
+}
+
+// eachDoc hands each of dir's docs to f, by its name in dir and its text:
+// README.md, then the docs folder's Markdown files by name.
+func eachDoc(dir string, f func(name, text string)) {
 	if dir == "" {
-		return nil
+		return
 	}
 	files := []string{filepath.Join(dir, "README.md")}
 	if more, err := filepath.Glob(filepath.Join(dir, "docs", "*.md")); err == nil {
 		slices.Sort(more)
 		files = append(files, more...)
 	}
-	var out []passage
-	for _, f := range files {
-		info, err := os.Stat(f)
+	for _, file := range files {
+		info, err := os.Stat(file)
 		if err != nil || info.Size() > docFileMost {
 			continue
 		}
-		b, err := os.ReadFile(f)
+		b, err := os.ReadFile(file)
 		if err != nil {
 			continue
 		}
-		rel, _ := filepath.Rel(dir, f)
-		out = append(out, passagesOf(filepath.ToSlash(rel), string(b))...)
+		rel, _ := filepath.Rel(dir, file)
+		f(filepath.ToSlash(rel), string(b))
 	}
+}
+
+// boldItem is an item of a list at its left edge that leads with its name
+// in bold, as "- **Your groups.** New Group in a card's menu…".
+var boldItem = regexp.MustCompile(`^[-*] \*\*([^*]{2,80})\*\*`)
+
+// The most topics one doc gives the Teach tile, and all of them.
+const (
+	topicsPerDoc = 120
+	topicsMost   = 400
+)
+
+// docTopics are what dir's docs teach, doc by doc, each in its order: each
+// item of a list that leads with its name in bold, its name without the
+// stop after it, once in a doc. The Teach tile lists them by doc, and steps
+// through one doc's as a tour; which doc is the guide, a person knows
+// better than a rule, so the tile asks.
+func docTopics(dir string) []ipc.LearnTopic {
+	var out []ipc.LearnTopic
+	eachDoc(dir, func(name, text string) {
+		heading := ""
+		seen := map[string]bool{}
+		n := 0
+		for _, l := range strings.Split(text, "\n") {
+			if t := strings.TrimSpace(l); strings.HasPrefix(t, "#") {
+				heading = strings.TrimSpace(strings.TrimLeft(t, "#"))
+				continue
+			}
+			m := boldItem.FindStringSubmatch(l)
+			if m == nil || n >= topicsPerDoc || len(out) >= topicsMost {
+				continue
+			}
+			title := strings.TrimRight(strings.TrimSpace(m[1]), ".:,;")
+			if title == "" || seen[strings.ToLower(title)] {
+				continue
+			}
+			seen[strings.ToLower(title)] = true
+			n++
+			out = append(out, ipc.LearnTopic{Title: title, File: name, Heading: heading})
+		}
+	})
 	return out
 }
 

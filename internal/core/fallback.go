@@ -182,6 +182,10 @@ func (c *Core) switchModel(id string, sw *modelSwitch) error {
 		// confirmation, and the new model would go unheard.
 		return fmt.Errorf("it started without the hooks a model switch needs: close and reopen it to give it them")
 	}
+	// After its limit Claude Code draws its prompt again, which a busy
+	// machine can hold up past a first look; continuable looks once, so
+	// the switch waits for the prompt rather than give the fallback up.
+	c.awaitPrompt(id, limitPromptWait)
 	// One switch at a time, so each puts back the user's own default and
 	// none the one another switch saved.
 	c.switchMu.Lock()
@@ -260,6 +264,31 @@ func (c *Core) noteFallback(id string, data map[string]any) bool {
 // fallbackNote is what the agent is told once its model has switched.
 func fallbackNote(from, to string) string {
 	return fmt.Sprintf("["+brand.Name+"] %s's own usage limit stopped your last turn, so this session now runs on %s. Carry on with your task from where you stopped.", from, to)
+}
+
+// limitPromptWait is how long a switch waits for the agent's prompt to
+// show again after its limit stopped it.
+const limitPromptWait = 10 * time.Second
+
+// awaitPrompt waits until session id's agent shows its prompt, or wait has
+// passed, looking every quarter second. A session gone, or a terminal that
+// can't be read, ends the wait: the switch then says why it can't type.
+// It holds no lock while it looks.
+func (c *Core) awaitPrompt(id string, wait time.Duration) {
+	for until := time.Now().Add(wait); ; time.Sleep(250 * time.Millisecond) {
+		c.mu.Lock()
+		pane := ""
+		if x := c.sessions[id]; x != nil {
+			pane = x.pane
+		}
+		c.mu.Unlock()
+		if pane == "" {
+			return
+		}
+		if _, shows, err := c.promptIn(pane); err != nil || shows || time.Now().After(until) {
+			return
+		}
+	}
 }
 
 // switchable says why session x cannot take /model now, if it cannot: it

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -95,16 +96,16 @@ func TestPlanRepairs(t *testing.T) {
 		snap Snapshot
 		want string
 	}{
-		{"no main session", drop(drop(s, "%1"), "%2"), "new-session -d -s irie"},
+		{"no main session", drop(drop(s, "%1"), "%2"), "new-session -d -s " + brand.Slug},
 		{"slot missing", drop(s, "%2"), "split-window -h -d -t %1"},
 		{"slot missing, placeholder elsewhere", lonePlaceholder, "join-pane -h -d -s %2 -t %1"},
 		{"sidebar missing", drop(s, "%1"), "split-window -h -b -d -t %2"},
 		{"sidebar dead", edit(s, "%1", func(p *Pane) { p.Dead = true }), "respawn-pane -k -t %1"},
 		{"sidebar too wide", edit(edit(s, "%1", func(p *Pane) { p.Width = 50 }), "%2", func(p *Pane) { p.Width = 29 }), "resize-pane -t %1 -x 34"},
 		{"agent window size differs", edit(s, "%3", func(p *Pane) { p.WindowWidth, p.WindowHeight, p.Width, p.Height = 80, 24, 80, 24 }), "resize-window -t @3 -x 45 -y 24"},
-		{"shown agent has no home", drop(shown(), "%2"), "new-window -d -t irie-agents: -n irie-home"},
+		{"shown agent has no home", drop(shown(), "%2"), "new-window -d -t " + brand.Slug + "-agents: -n " + brand.Slug + "-home"},
 		{"two placeholders", twoPlaceholders, "kill-pane -t %5"},
-		{"extra pane in irie:0", extraInMain, "break-pane -d -s %6 -t irie-agents:"},
+		{"extra pane in irie:0", extraInMain, "break-pane -d -s %6 -t " + brand.Slug + "-agents:"},
 		{"dead placeholder", edit(s, "%2", func(p *Pane) { p.Dead = true }), "respawn-pane -k -t %2"},
 	} {
 		got := first(Plan(c.snap, want))
@@ -343,7 +344,7 @@ func TestConfLoadsIntoTmux(t *testing.T) {
 		{"show-options -sv focus-events", "on"},
 		{"show-options -sv extended-keys", "on"},
 		{"show-options -gv set-titles", "on"},
-		{"show-options -gv set-titles-string", "Irie"},
+		{"show-options -gv set-titles-string", brand.Name},
 		{"show-options -sv escape-time", "10"},
 		{"show-options -gwv window-size", "latest"},
 	} {
@@ -360,11 +361,11 @@ func TestConfLoadsIntoTmux(t *testing.T) {
 			binding = line
 		}
 	}
-	if !strings.Contains(binding, "select-pane -t irie:0.1") || !strings.Contains(binding, "select-pane -t irie:0.0") ||
+	if !strings.Contains(binding, "select-pane -t "+brand.Slug+":0.1") || !strings.Contains(binding, "select-pane -t "+brand.Slug+":0.0") ||
 		!strings.Contains(binding, "window_zoomed_flag") || !strings.Contains(binding, "send-keys C-]") {
 		t.Errorf("focus key binding = %q", binding)
 	}
-	if got := run(t, r, "show-hooks", "-g", "window-resized"); !strings.Contains(got, "resize-pane -t irie:0.0 -x 34") || !strings.Contains(got, "window_zoomed_flag") {
+	if got := run(t, r, "show-hooks", "-g", "window-resized"); !strings.Contains(got, "resize-pane -t "+brand.Slug+":0.0 -x 34") || !strings.Contains(got, "window_zoomed_flag") {
 		t.Errorf("window-resized hook = %q", got)
 	}
 }
@@ -657,11 +658,11 @@ func TestPlanKeepsTheSplit(t *testing.T) {
 		snap Snapshot
 		want string
 	}{
-		{"the lead is in the slot", edit(shown(), "%3", func(p *Pane) {}), "swap-pane -d -s irie:0.1 -t %2"},
-		{"no view session", sound(), "new-session -d -s irie-view -x 45 -y 24 -- true"},
-		{"the lead's window is not linked", unlinked, "link-window -d -s @3 -t =irie-view:"},
-		{"another window is current", notCurrent, "select-window -t =irie-view:@3"},
-		{"another agent's window is linked", other, "unlink-window -t =irie-view:@7"},
+		{"the lead is in the slot", edit(shown(), "%3", func(p *Pane) {}), "swap-pane -d -s " + brand.Slug + ":0.1 -t %2"},
+		{"no view session", sound(), "new-session -d -s " + brand.Slug + "-view -x 45 -y 24 -- true"},
+		{"the lead's window is not linked", unlinked, "link-window -d -s @3 -t =" + brand.Slug + "-view:"},
+		{"another window is current", notCurrent, "select-window -t =" + brand.Slug + "-view:@3"},
+		{"another agent's window is linked", other, "unlink-window -t =" + brand.Slug + "-view:@7"},
 		{"the lead's window has a fixed size", manual, "set-option -w -t @3 window-size latest"},
 	} {
 		if got := first(Plan(c.snap, w)); got != c.want {
@@ -671,7 +672,7 @@ func TestPlanKeepsTheSplit(t *testing.T) {
 
 	// With no split the view session goes, and the lead takes the slot's
 	// size again.
-	if got := first(Plan(split(), want)); got != "kill-session -t =irie-view" {
+	if got := first(Plan(split(), want)); got != "kill-session -t ="+brand.Slug+"-view" {
 		t.Errorf("no split: plan starts %q", got)
 	}
 	gone := wide
@@ -681,7 +682,7 @@ func TestPlanKeepsTheSplit(t *testing.T) {
 	}
 	// A split of a pane that is not an agent's is no split.
 	w.Split = "%2"
-	if got := first(Plan(split(), w)); got != "kill-session -t =irie-view" {
+	if got := first(Plan(split(), w)); got != "kill-session -t ="+brand.Slug+"-view" {
 		t.Errorf("split of the placeholder: plan starts %q", got)
 	}
 }

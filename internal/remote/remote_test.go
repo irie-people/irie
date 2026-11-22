@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -401,7 +402,7 @@ func TestTheAppsFilesAreServed(t *testing.T) {
 	_, srv, _ := gateway(t)
 	setup := httptest.NewServer(srv.Setup())
 	defer setup.Close()
-	for path, want := range map[string]int{"/": 200, "/setup.js": 200, "/icon-180.png": 200, "/irie.mobileconfig": 200, "/setup.json": 200,
+	for path, want := range map[string]int{"/": 200, "/setup.js": 200, "/icon-180.png": 200, "/" + brand.Slug + ".mobileconfig": 200, "/setup.json": 200,
 		"/index.html": 404, "/app.js": 404, "/js/net.js": 404, "/api/info": 404} {
 		res, err := http.Get(setup.URL + path)
 		if err != nil {
@@ -524,7 +525,7 @@ func TestPairLinkCarriesWhatTheAppPins(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := u.Query()
-	if u.Scheme != "irie" || u.Host != "pair" || q.Get("u") != "https://studio.local:7387" || q.Get("c") != "482913" || len(q.Get("f")) != 64 || q.Get("n") != "Alice's Mac" {
+	if u.Scheme != brand.Slug || u.Host != "pair" || q.Get("u") != "https://studio.local:7387" || q.Get("c") != "482913" || len(q.Get("f")) != 64 || q.Get("n") != "Alice's Mac" {
 		t.Errorf("link %q parses as %v %v", link, u, q)
 	}
 	if _, err := QR(link); err != nil {

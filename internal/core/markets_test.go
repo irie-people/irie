@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -23,10 +24,10 @@ import (
 func TestTheMarketsOpSaysHowTheMapStands(t *testing.T) {
 	c := bareCore(t, config.Default())
 	r, err := c.marketsOp(ipc.MarketsArgs{})
-	if err != nil || r.State != ipc.PartPluginOff || !strings.Contains(r.Text, "irie plugins on markets") || r.Page != "" {
+	if err != nil || r.State != ipc.PartPluginOff || !strings.Contains(r.Text, brand.Slug+" plugins on markets") || r.Page != "" {
 		t.Fatalf("plugin off: %+v, %v", r, err)
 	}
-	if _, err := c.marketsOp(ipc.MarketsArgs{Task: &ipc.SpawnArgs{Task: "add the cloud market"}}); err == nil || !strings.Contains(err.Error(), "irie plugins on markets") {
+	if _, err := c.marketsOp(ipc.MarketsArgs{Task: &ipc.SpawnArgs{Task: "add the cloud market"}}); err == nil || !strings.Contains(err.Error(), brand.Slug+" plugins on markets") {
 		t.Errorf("a task with the plugin off: %v", err)
 	}
 	in, err := c.input(ipc.InputArgs{Text: ":markets"}, 0)

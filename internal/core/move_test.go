@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -205,7 +206,7 @@ func TestOutsideSessionsAreListedApartFromIriesRows(t *testing.T) {
 	// irie ctl list shows them under their own heading.
 	out, err := exec.Command(c.bin, "ctl", "list").CombinedOutput()
 	text := string(out)
-	head := strings.Index(text, "OUTSIDE IRIE")
+	head := strings.Index(text, "OUTSIDE "+strings.ToUpper(brand.Name))
 	if err != nil || head < 0 || strings.Index(text, a.ID) > head || !strings.Contains(text[head:], idleID) ||
 		!strings.Contains(text[head:], "outside-task") || !strings.Contains(text[head:], "flaky-test-fix") {
 		t.Errorf("ctl list: %v\n%s", err, out)
@@ -235,7 +236,7 @@ func TestMoveRefusesWhatItCannotTake(t *testing.T) {
 		{busyID, ipc.CodeBusy, "busy"},
 		{waitingID, ipc.CodeBusy, "permission prompt"},
 		{"12345678-1234-4234-8234-123456789012", ipc.CodeNotFound, "no Claude Code session"},
-		{a.VendorID, ipc.CodeBadArgs, "already runs in Irie"},
+		{a.VendorID, ipc.CodeBadArgs, "already runs in " + brand.Name},
 		{"", ipc.CodeBadArgs, "vendor_id"},
 	} {
 		_, err := c.move(x.id)
@@ -366,7 +367,7 @@ func TestAgentsDoNotInheritTheStartersIdentity(t *testing.T) {
 			t.Errorf("the agent inherits %s", k)
 		}
 	}
-	if !slices.Contains(names, "IRIE_TEST_KEEP") || !slices.Contains(names, "IRIE_SESSION") {
+	if !slices.Contains(names, "IRIE_TEST_KEEP") || !slices.Contains(names, brand.Env("SESSION")) {
 		t.Errorf("the agent lost its other variables: %v", names)
 	}
 }

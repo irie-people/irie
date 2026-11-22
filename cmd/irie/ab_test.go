@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/ab"
 )
 
 // abBuild writes a shell script that stands in for a build of a program.
@@ -75,6 +77,19 @@ func TestIrieABPrintsJSON(t *testing.T) {
 	}
 	if !r.Same || r.Runs != 1 || r.Time.Unit != "s" {
 		t.Errorf("got %+v", r)
+	}
+}
+
+func TestIrieABSaysWhenItsTimesMeasureTheMachine(t *testing.T) {
+	var out bytes.Buffer
+	printAB(&out, ab.Report{Gold: "gold", New: "new", Runs: 3, Same: true, HeldBack: true, RunQueue: 14.3, CPUs: 12})
+	for _, want := range []string{"note: this ran in macOS's background state", "note: 14.3 CPUs' worth of work waited on 12 CPUs", "with the same output"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the report lacks %q:\n%s", want, out.String())
+		}
+	}
+	if i, j := strings.Index(out.String(), "note:"), strings.Index(out.String(), "new is "); i > j {
+		t.Errorf("the notes come after the verdict:\n%s", out.String())
 	}
 }
 

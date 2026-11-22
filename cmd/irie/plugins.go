@@ -42,7 +42,7 @@ config folder: NAME.toml for each.
 
 func pluginsCmd(args []string, stdout io.Writer) error {
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(stdout, pluginsUsage)
+		fmt.Fprint(stdout, aligned(pluginsUsage))
 		return nil
 	}
 	cfg, p, err := load()

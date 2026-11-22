@@ -100,12 +100,76 @@ func exe(name, slug string) string {
 }
 
 // Text is one of Irie's own texts, such as a skill, an arch agent's words or
-// a page of the phone app, with the names in it made this product's: Irie,
-// a command in backquotes that starts with irie, and IRIE_ variables. The
-// texts keep Irie's names in the source, so they read as they are.
-func Text(s string) string {
-	if Name == "Irie" && Slug == "irie" && EnvPrefix == "IRIE" {
+// a page of the phone app, with the names in it made this product's: Irie;
+// irie as a word, which is the command (`irie up`, irie ctl dog, a line of a
+// code block) or a folder (~/.config/irie/, the irie/ branch prefix); IRIE_
+// variables; and the guide's address. irie joined to more by a full stop, a
+// hyphen or an underscore stays, as in an id (irie.park), a key
+// (irie-phone) or a tmux option (@irie_role), and so does a link other than
+// the guide's, such as the source's on github.com. The texts keep Irie's
+// names in the source, so they read as they are.
+func Text(s string) string { return text(s, Name, Slug, EnvPrefix, Site) }
+
+// guide is the guide's address as Irie's own texts have it.
+const guide = "https://irie-people.github.io/irie/"
+
+// text is Text for a product of these names, in one pass, so that no name
+// it writes is read again.
+func text(s, name, slug, env, site string) string {
+	if name == "Irie" && slug == "irie" && env == "IRIE" && site == guide {
 		return s
 	}
-	return strings.NewReplacer("Irie", Name, "`irie ", "`"+Slug+" ", "IRIE_", EnvPrefix+"_").Replace(s)
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		rest := s[i:]
+		switch {
+		case strings.HasPrefix(rest, guide):
+			b.WriteString(site)
+			i += len(guide)
+		case strings.HasPrefix(rest, "Irie") && !strings.HasSuffix(s[:i], "Sources/"):
+			// The Mac app's source folder, mac/Sources/Irie, keeps its name
+			// in every copy.
+			b.WriteString(name)
+			i += len("Irie")
+		case strings.HasPrefix(rest, "IRIE_"):
+			b.WriteString(env + "_")
+			i += len("IRIE_")
+		case strings.HasPrefix(rest, "irie") && commandWord(s, i):
+			b.WriteString(slug)
+			i += len("irie")
+		default:
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
+}
+
+// commandWord says whether the irie at s[i:] is the command or a folder: a
+// word of its own, not joined to more by a letter, digit, full stop, hyphen,
+// underscore or @, and not in a link's address or the command's source
+// folder (./cmd/irie), which keeps its name in every copy.
+func commandWord(s string, i int) bool {
+	part := func(c byte) bool {
+		return c == '_' || c == '.' || c == '-' || c == '@' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+	}
+	if i > 0 && part(s[i-1]) || i+4 < len(s) && part(s[i+4]) || strings.HasSuffix(s[:i], "cmd/") {
+		return false
+	}
+	// The address it sits in, if any: back to the last space, quote,
+	// backquote or bracket. A link has a scheme (https://) or starts with a
+	// host (github.com/…); a folder does neither (~/.config/…,
+	// $XDG_STATE_HOME/…).
+	start := strings.LastIndexAny(s[:i], " \t\r\n'\"`()<>[]{}") + 1
+	addr := s[start:i]
+	if strings.Contains(addr, "://") {
+		return false
+	}
+	host, _, found := strings.Cut(addr, "/")
+	if found {
+		if dot := strings.Index(host, "."); dot > 0 && dot < len(host)-1 && part(host[dot-1]) && part(host[dot+1]) {
+			return false
+		}
+	}
+	return true
 }

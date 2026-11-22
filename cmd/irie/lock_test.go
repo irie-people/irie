@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -59,7 +60,7 @@ func TestIrieLockPrintsALinePerPart(t *testing.T) {
 	got := b.String()
 	for _, want := range []string{
 		"fix the parser (s0123456789ab), locked at its spawn 2 hours ago",
-		"irie (irie)",
+		"irie (" + brand.Slug + ")",
 		"sha256:9f2c1a3b4c5d\n",
 		"harness      claude-code",
 		"npm @anthropic-ai/claude-code: 1 advisory, fixed in 2.1.251",
@@ -68,14 +69,14 @@ func TestIrieLockPrintsALinePerPart(t *testing.T) {
 		"permissions  acceptEdits",
 		"mcp          fake (user)",
 		"npm @example/fake-mcp: no known advisory",
-		"plugin       writing (irie)",
-		"skill        irie:present (irie)",
-		"hooks        irie hook (irie)",
+		"plugin       writing (" + brand.Slug + ")",
+		"skill        irie:present (" + brand.Slug + ")",
+		"hooks        irie hook (" + brand.Slug + ")",
 		"2 events",
 		"hook         PreToolUse Bash (user)",
 		"older work (s0123456789ac)\n  no lock: it started before",
 		"night work (Asahi/s0123456789ad), on Asahi, whose lock is there",
-		"OSV.dev was asked 1 hour ago; irie lock --check asks it now, sending only names and versions.",
+		"OSV.dev was asked 1 hour ago; " + brand.Slug + " lock --check asks it now, sending only names and versions.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("irie lock lacks %q:\n%s", want, got)
@@ -135,7 +136,7 @@ func TestPsCountsAdvisories(t *testing.T) {
 	var b bytes.Buffer
 	printProcs(&b, procsOf(rows, now))
 	got := b.String()
-	if !strings.Contains(got, "· 1 run a version with known advisories (irie lock)") || !strings.Contains(got, "ADV") {
+	if !strings.Contains(got, "· 1 run a version with known advisories ("+brand.Slug+" lock)") || !strings.Contains(got, "ADV") {
 		t.Errorf("ps:\n%s", got)
 	}
 	var adv []string

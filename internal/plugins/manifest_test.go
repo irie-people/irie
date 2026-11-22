@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -86,7 +87,7 @@ func TestNoFolderNoPluginsOfYourOwn(t *testing.T) {
 		t.Errorf("no folder: %v, %v", ps, bs)
 	}
 	if len(Status(e)) != len(All()) {
-		t.Errorf("status = %+v, want only %s's own", Status(e), "Irie")
+		t.Errorf("status = %+v, want only %s's own", Status(e), brand.Name)
 	}
 }
 
@@ -252,9 +253,9 @@ func TestAManifestThatDoesntReadSaysWhy(t *testing.T) {
 	manifest(t, e, "big.toml", "title = \"Big\"\n# "+strings.Repeat("x", maxManifestSize)+"\n")
 	for name, says := range map[string]string{
 		"broken":           "doesn't read as TOML",
-		"colour":           "keys Irie doesn't know: colour, panes.colour.shade",
+		"colour":           "keys " + brand.Name + " doesn't know: colour, panes.colour.shade",
 		"My Plugin.toml":   "isn't a manifest's name",
-		order[0] + ".toml": "name of one of Irie's own plugins",
+		order[0] + ".toml": "name of one of " + brand.Name + "'s own plugins",
 		"big":              "too big to be a manifest",
 	} {
 		p := mine(t, e, name)

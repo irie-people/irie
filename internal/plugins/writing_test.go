@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/variorum"
@@ -54,7 +55,7 @@ func TestWritingNeedsVariorumUntilItIsInstalled(t *testing.T) {
 	if why := SkillsLeft(e.Config)[variorumSkill]; !strings.Contains(why, "plugins.writing") {
 		t.Errorf("skill left out because %q", why)
 	}
-	if why := Why(e.Config, Variorum); !strings.Contains(why, "irie plugins on writing") {
+	if why := Why(e.Config, Variorum); !strings.Contains(why, brand.Slug+" plugins on writing") {
 		t.Errorf("Why = %q", why)
 	}
 
@@ -173,7 +174,7 @@ func TestTheVariorumTabNeedsBothSetups(t *testing.T) {
 	if x := tab(); x.State != ipc.PartPluginOff {
 		t.Errorf("plugin off: %+v", x)
 	}
-	if why := Why(e.Config, VariorumTab); !strings.Contains(why, "irie plugins on writing") {
+	if why := Why(e.Config, VariorumTab); !strings.Contains(why, brand.Slug+" plugins on writing") {
 		t.Errorf("Why = %q", why)
 	}
 	e.Config.Plugins.Writing = true
@@ -189,7 +190,7 @@ func TestTheVariorumTabNeedsBothSetups(t *testing.T) {
 	if x := tab(); x.State != ipc.PartOff || x.On || !strings.Contains(x.Detail, ":write sessions still get Variorum's door") {
 		t.Errorf("tab off: %+v", x)
 	}
-	if why := Why(e.Config, VariorumTab); !strings.Contains(why, "irie plugins on writing tab") {
+	if why := Why(e.Config, VariorumTab); !strings.Contains(why, brand.Slug+" plugins on writing tab") {
 		t.Errorf("Why with the tab off = %q", why)
 	}
 	if why := Why(e.Config, Variorum); why != "" {

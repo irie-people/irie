@@ -748,14 +748,17 @@ enum Snapshot {
             }),
             ("teach-tile-empty", false, false, {
                 store.teach.loadFixture(shown: true, asked: nil, in: nil, result: nil,
-                                        recent: [Fixture.teachQuestion, "What is a worktree?"])
+                                        recent: [Fixture.teachQuestion, "What is a worktree?"], topics: Fixture.teachTopics)
             }),
             // With the panes open beside the terminal: over the middle of
             // the terminal still, over the panes where it must be.
             ("teach-tile-panes", false, false, {
                 let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
                 store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
-                store.teach.loadFixture(shown: true, asked: Fixture.teachQuestion, in: (Fixture.selected, name), result: Fixture.teachCard)
+                // A step of a tour: Your groups, the third topic of the guide.
+                let groups = Fixture.teachTopics[2]
+                store.teach.loadFixture(shown: true, asked: TeachTile.question(groups), in: (Fixture.selected, name), result: Fixture.teachCard,
+                                        topics: Fixture.teachTopics, tour: groups)
             }),
         ]
         for (base, dark, reversed, set) in shots {
@@ -911,6 +914,18 @@ enum Fixture {
     /// What the Teach tile is asked in the snapshots, and the card a local
     /// model made for it, with each of the catalog's pictures.
     static let teachQuestion = "How does a kept card know it is out of date?"
+
+    /// What a project's docs teach, as the learn op gives it, for the tile's
+    /// tour: a guide's topics, then a design's.
+    static let teachTopics: [LearnTopic] = [
+        LearnTopic(title: "A card per session, in a list or a tree", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Cards that never move", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Your groups", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Spaces", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Drag to reorder", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Session", file: "docs/DESIGN.md", heading: "Terms"),
+        LearnTopic(title: "Hold", file: "docs/DESIGN.md", heading: "Terms"),
+    ]
     static var teachCard: MaterializeResult {
         let made = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-120))
         let json = """

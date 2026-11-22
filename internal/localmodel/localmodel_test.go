@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // fakeModel is one model of fakeServer.
@@ -495,7 +497,7 @@ func TestPreflight(t *testing.T) {
 	})
 	t.Run("missing model", func(t *testing.T) {
 		c := Preflight(ctx, serve(t, newServer()), "qwen3.5:27b", want(65536))
-		if c.OK() || !has(c.Problems, "no model qwen3.5:27b") || !has(c.Problems, "irie setup local --model qwen3.5:27b") {
+		if c.OK() || !has(c.Problems, "no model qwen3.5:27b") || !has(c.Problems, brand.Slug+" setup local --model qwen3.5:27b") {
 			t.Errorf("check = %+v", c)
 		}
 	})
@@ -543,7 +545,7 @@ func TestPreflight(t *testing.T) {
 		w := want(65536)
 		w.Machine = Machine{Total: 18 * GiB, Available: 5 * GiB}
 		c := Preflight(ctx, serve(t, f), "qwen3.5:9b", w)
-		if c.OK() || !has(c.Problems, "free, of which Irie leaves 2.1 GB") || !has(c.Problems, "--force") || f.loads != 0 {
+		if c.OK() || !has(c.Problems, "free, of which "+brand.Name+" leaves 2.1 GB") || !has(c.Problems, "--force") || f.loads != 0 {
 			t.Errorf("check = %+v, %d loads", c, f.loads)
 		}
 		// --force loads it anyway and says so.

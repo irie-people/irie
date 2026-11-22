@@ -37,7 +37,7 @@ they differ, 2 on a usage error and 3 when a build could not run.
 // whether it is faster (DESIGN §4.24).
 func abCmd(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("ab", flag.ContinueOnError)
-	fs.Usage = func() { fmt.Fprint(os.Stderr, abUsage) }
+	fs.Usage = func() { fmt.Fprint(os.Stderr, aligned(abUsage)) }
 	var o ab.Options
 	fs.IntVar(&o.Runs, "n", 10, "timed runs of each build")
 	fs.IntVar(&o.Warmup, "warmup", 1, "runs of each build before the timed ones, compared but not timed")
@@ -136,6 +136,14 @@ func printAB(w io.Writer, r ab.Report) {
 	row("cpu", r.CPU, secs)
 	row("memory", r.Memory, memOf)
 	tw.Flush()
+	// The times measure the machine as much as the builds when it holds
+	// them back: say so before the verdict.
+	if r.HeldBack {
+		fmt.Fprintf(w, "\nnote: this ran in macOS's background state, as when Gabriel holds a session back, so both builds ran slower and varied more (%s ctl gabriel says why)\n", brand.Slug)
+	}
+	if r.RunQueue > 0 {
+		fmt.Fprintf(w, "\nnote: %.1f CPUs' worth of work waited on %d CPUs, so the times varied more than the builds do\n", r.RunQueue, r.CPUs)
+	}
 	if r.Same {
 		verdict := "neither clearly faster nor slower"
 		switch r.Time.Change {

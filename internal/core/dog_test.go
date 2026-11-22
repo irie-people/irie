@@ -57,7 +57,7 @@ func TestTheDogSendsAJotBackWhileItsWorkIsNotCommitted(t *testing.T) {
 
 	// The agent was sent back once, told what is left, and then let stop.
 	said := c.sentOn(s.ID)
-	if len(said) != 1 || !strings.HasPrefix(said[0], "[Irie] The jot dog: this task is not through yet.") ||
+	if len(said) != 1 || !strings.HasPrefix(said[0], "["+brand.Name+"] The jot dog: this task is not through yet.") ||
 		!strings.Contains(said[0], "Not committed in "+s.Worktree+" (branch "+s.Branch+"): notes.md.") ||
 		strings.Contains(said[0], ".claude") {
 		t.Errorf("the dog said %q", said)
@@ -142,7 +142,7 @@ func TestTheDogHoldsAJotToItsWordOnItsTests(t *testing.T) {
 
 	// It was sent back once, told what its record shows, and then let stop.
 	said := c.sentOn(s.ID)
-	if len(said) != 1 || !strings.HasPrefix(said[0], "[Irie] The jot dog: your report says more than your work shows.") ||
+	if len(said) != 1 || !strings.HasPrefix(said[0], "["+brand.Name+"] The jot dog: your report says more than your work shows.") ||
 		!strings.Contains(said[0], "You said the tests pass, but the last test run, `go test ./...`, failed: --- FAIL: TestFake (0.00s).") ||
 		!strings.Contains(said[0], "Run the tests again before you say they pass") || strings.Contains(said[0], "commit your work") {
 		t.Errorf("the dog said %q", said)

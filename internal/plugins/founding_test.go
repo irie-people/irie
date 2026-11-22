@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/founding"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -37,7 +38,7 @@ func TestFoundingIsOffByDefault(t *testing.T) {
 	if x.Pane == nil || x.Pane.ID != "founding.founding" || x.Pane.Kind != PaneFounding || x.Pane.Title != "Charters" {
 		t.Errorf("pane = %+v", x.Pane)
 	}
-	if why := Why(e.Config, Founding); !strings.Contains(why, "irie plugins on founding") {
+	if why := Why(e.Config, Founding); !strings.Contains(why, brand.Slug+" plugins on founding") {
 		t.Errorf("Why = %q", why)
 	}
 	if left := SkillsLeft(e.Config)[founding.Skill]; !strings.Contains(left, "plugins.founding") {

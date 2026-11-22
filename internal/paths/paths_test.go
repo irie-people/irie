@@ -3,6 +3,8 @@ package paths
 import (
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 func lookup(env map[string]string) func(string) string {
@@ -23,19 +25,19 @@ func TestXDGOverridesAreHonoured(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ name, got, want string }{
-		{"config", p.Config, "/home/alice/xdg/config/irie"},
-		{"state", p.State, "/home/alice/xdg/state/irie"},
-		{"data", p.Data, "/home/alice/xdg/data/irie"},
-		{"cache", p.Cache, "/home/alice/xdg/cache/irie"},
-		{"runtime", p.Runtime, "/run/user/1000/irie"},
-		{"config file", p.ConfigFile(), "/home/alice/xdg/config/irie/config.toml"},
-		{"tmux.conf", p.TmuxConf(), "/home/alice/xdg/state/irie/tmux.conf"},
-		{"session", p.Session("s0k3j9x2m4a7q"), "/home/alice/xdg/state/irie/sessions/s0k3j9x2m4a7q"},
-		{"scratch", p.Scratch(), "/home/alice/xdg/data/irie/scratch"},
-		{"worktrees", p.Worktrees(), "/home/alice/xdg/data/irie/worktrees"},
-		{"journal", p.Journal(), "/home/alice/xdg/state/irie/journal"},
-		{"socket", p.Socket(), "/run/user/1000/irie/core.sock"},
-		{"lock", p.CoreLock(), "/run/user/1000/irie/core.lock"},
+		{"config", p.Config, "/home/alice/xdg/config/" + brand.Slug},
+		{"state", p.State, "/home/alice/xdg/state/" + brand.Slug},
+		{"data", p.Data, "/home/alice/xdg/data/" + brand.Slug},
+		{"cache", p.Cache, "/home/alice/xdg/cache/" + brand.Slug},
+		{"runtime", p.Runtime, "/run/user/1000/" + brand.Slug},
+		{"config file", p.ConfigFile(), "/home/alice/xdg/config/" + brand.Slug + "/config.toml"},
+		{"tmux.conf", p.TmuxConf(), "/home/alice/xdg/state/" + brand.Slug + "/tmux.conf"},
+		{"session", p.Session("s0k3j9x2m4a7q"), "/home/alice/xdg/state/" + brand.Slug + "/sessions/s0k3j9x2m4a7q"},
+		{"scratch", p.Scratch(), "/home/alice/xdg/data/" + brand.Slug + "/scratch"},
+		{"worktrees", p.Worktrees(), "/home/alice/xdg/data/" + brand.Slug + "/worktrees"},
+		{"journal", p.Journal(), "/home/alice/xdg/state/" + brand.Slug + "/journal"},
+		{"socket", p.Socket(), "/run/user/1000/" + brand.Slug + "/core.sock"},
+		{"lock", p.CoreLock(), "/run/user/1000/" + brand.Slug + "/core.lock"},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
@@ -52,11 +54,11 @@ func TestDefaultsFollowXDGOnEveryPlatform(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ name, got, want string }{
-		{"config", p.Config, "/home/alice/.config/irie"},
-		{"state", p.State, "/home/alice/.local/state/irie"},
-		{"data", p.Data, "/home/alice/.local/share/irie"},
-		{"cache", p.Cache, "/home/alice/.cache/irie"},
-		{"runtime", p.Runtime, "/var/folders/ab/cd/T/irie-501"},
+		{"config", p.Config, "/home/alice/.config/" + brand.Slug},
+		{"state", p.State, "/home/alice/.local/state/" + brand.Slug},
+		{"data", p.Data, "/home/alice/.local/share/" + brand.Slug},
+		{"cache", p.Cache, "/home/alice/.cache/" + brand.Slug},
+		{"runtime", p.Runtime, "/var/folders/ab/cd/T/" + brand.Slug + "-501"},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
@@ -69,8 +71,8 @@ func TestRuntimeFallsBackToTmp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Runtime != "/tmp/irie-501" {
-		t.Errorf("runtime = %q, want /tmp/irie-501", p.Runtime)
+	if p.Runtime != "/tmp/"+brand.Slug+"-501" {
+		t.Errorf("runtime = %q, want /tmp/"+brand.Slug+"-501", p.Runtime)
 	}
 }
 
@@ -84,10 +86,10 @@ func TestRelativeXDGValuesAreIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Config != "/home/alice/.config/irie" {
+	if p.Config != "/home/alice/.config/"+brand.Slug {
 		t.Errorf("config = %q", p.Config)
 	}
-	if p.Runtime != "/tmp/irie-501" {
+	if p.Runtime != "/tmp/"+brand.Slug+"-501" {
 		t.Errorf("runtime = %q", p.Runtime)
 	}
 }

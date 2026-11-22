@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // runDoor runs `irie variorum door` as a writing session's Claude Code
@@ -119,7 +121,7 @@ func TestTheDoorSaysWhatToDo(t *testing.T) {
 		t.Errorf("ping: %s", out[1])
 	}
 	m := decode(t, []byte(out[2]))
-	if m.ID != float64(0) || m.Error == nil || m.Error.Code != -32000 || m.Error.Message != noSessionsSetup || !strings.Contains(m.Error.Message, "pbpaste | irie variorum connect") {
+	if m.ID != float64(0) || m.Error == nil || m.Error.Code != -32000 || m.Error.Message != noSessionsSetup || !strings.Contains(m.Error.Message, "pbpaste | "+brand.Slug+" variorum connect") {
 		t.Errorf("initialize: %s", out[2])
 	}
 }
