@@ -145,7 +145,7 @@ func TestCloseKillsAnAgentThatIgnoresSIGTERM(t *testing.T) {
 		t.Fatal("the agent was killed without its time to exit")
 	}
 
-	c.waitGone(a.Pane, closeWait+5*time.Second)
+	c.waitGone(a.Pane, closeWait+patience(t, 5*time.Second))
 	if d := time.Since(start); d < closeWait {
 		t.Errorf("killed after %v, before %v", d, closeWait)
 	}
@@ -304,7 +304,7 @@ func TestClosingAFrozenSessionEndsItGently(t *testing.T) {
 	}
 	start := time.Now()
 	c.closeSession(a.ID)
-	c.waitGone(a.Pane, closeWait+5*time.Second)
+	c.waitGone(a.Pane, closeWait+patience(t, 5*time.Second))
 	if d := time.Since(start); d >= closeWait {
 		t.Errorf("it took %v to end, so it was killed", d)
 	}
