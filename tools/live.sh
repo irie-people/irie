@@ -49,6 +49,39 @@ appstamp=$data/bin/app.commit
 
 say() { echo "live: $*" >&2; }
 
+# Where an install's time goes, phase by phase, so that a slow one names its
+# own bottleneck: the tests, the build, or a wait for another install. A
+# phase runs from `phase NAME` to the next; phases under a second are left
+# out. IRIE_LIVE_T0 carries the start across the restart after a catch-up's
+# merge, and the runs before it count as "merge". The finished install says
+# its times and keeps them as a line of live.times in Irie's data directory.
+start=$(date +%s)
+took=
+if [ -n "${IRIE_LIVE_T0:-}" ]; then
+	took=" merge=$((start - IRIE_LIVE_T0))"
+else
+	IRIE_LIVE_T0=$start
+	export IRIE_LIVE_T0
+fi
+phase_name=prepare
+phase_start=$start
+phase() {
+	t=$(date +%s)
+	if [ $((t - phase_start)) -gt 0 ]; then took="$took $phase_name=$((t - phase_start))"; fi
+	phase_name=$1
+	phase_start=$t
+}
+# span prints seconds as 41s, 4m31s or 1h02m.
+span() {
+	if [ "$1" -ge 3600 ]; then
+		printf '%dh%02dm' $(($1 / 3600)) $(($1 % 3600 / 60))
+	elif [ "$1" -ge 60 ]; then
+		printf '%dm%02ds' $(($1 / 60)) $(($1 % 60))
+	else
+		printf '%ds' "$1"
+	fi
+}
+
 # app_in_front says whether the app is the one in front, by its name as
 # Launch Services lists it.
 app_in_front() { lsappinfo list 2>/dev/null | grep -F "\"$BRAND_NAME\" ASN:" | grep -q '(in front)'; }
@@ -92,6 +125,10 @@ tmpbin=
 macpid=
 work=$(mktemp -d "${TMPDIR:-/tmp}/irie-live.XXXXXX")
 cleanup() {
+	st=$?
+	if [ "$st" -ne 0 ] && [ "$phase_name" != done ]; then
+		say "stopped during $phase_name, $(span $(($(date +%s) - IRIE_LIVE_T0))) in"
+	fi
 	if [ -n "$locked" ]; then
 		rm -f "$lock/pid"
 		rmdir "$lock" 2>/dev/null || true
@@ -256,7 +293,10 @@ if [ -n "$live" ] && git diff --quiet "$live" HEAD -- . ':(exclude)docs' ':(excl
 	code=
 fi
 
-if [ -n "$code" ]; then take_slot; fi
+if [ -n "$code" ]; then
+	phase slot
+	take_slot
+fi
 
 # Irie.app builds while the tests run, not after them.
 newapp=
@@ -279,6 +319,7 @@ if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || [ -n "$(app_pids)
 	fi
 fi
 
+phase checks
 if [ -z "$code" ]; then
 	say "only docs changed since the live build, so the tests are skipped"
 	sh tools/provenance.sh check
@@ -321,6 +362,7 @@ fi
 # Built beside the install, not at $bin.new: other installs build at the same
 # time, and only the swap below holds the lock.
 if [ -n "$gonew" ]; then
+	phase build
 	tmpbin=$bin.new.$$
 	go build -tags "$BRAND_TAGS" -o "$tmpbin" ./cmd/irie
 	# For this Mac alone: no hardened runtime or timestamp, which only
@@ -331,6 +373,8 @@ if [ -n "$gonew" ]; then
 	fi
 fi
 if [ -n "$macpid" ]; then
+	# The app builds alongside the tests; this is only what is left of it.
+	phase app
 	if ! wait "$macpid"; then
 		macpid=
 		cat "$work/mac.log" >&2
@@ -348,7 +392,9 @@ if [ -n "$slot" ]; then
 fi
 # IRIE_LIVE_WAIT, in seconds, bounds the wait: an hour, as an install that
 # holds the lock for its whole run, as before this script, takes half that.
+phase lock
 take_lock "${IRIE_LIVE_WAIT:-3600}"
+phase swap
 # Another install may have landed while this one tested: the swap must not
 # drop it. Its merge leaves the tests it did not touch cached.
 live=$(git rev-parse -q --verify refs/heads/live || true)
@@ -399,6 +445,7 @@ if [ -n "$inuse" ]; then
 	newapp=
 fi
 if [ -n "$newapp" ]; then
+	phase relaunch
 	rm -rf "$app.next" "$appstamp.next"
 	# The app keeps no state of its own (docs/MAC.md), so it is stopped, not
 	# asked to quit. Launch Services would bring back an Irie that is still
@@ -462,6 +509,7 @@ fi
 # makes a missing login fail instead of wait.
 remote=$(git config --get irie.push || true)
 if [ -n "$remote" ]; then
+	phase push
 	strangers=$(git log --format='%h %ae %ce' "$head" --not --remotes="$remote" |
 		awk '{ for (i = 2; i <= 3; i++) if ($i !~ /@users\.noreply\.github\.com$/ && $i != "noreply@github.com") { print $1 " " $i; next } }')
 	if [ -n "$strangers" ]; then
@@ -482,3 +530,10 @@ if [ -n "$remote" ]; then
 		esac
 	fi
 fi
+
+phase done
+total=$(($(date +%s) - IRIE_LIVE_T0))
+summary=
+for p in $took; do summary="$summary, ${p%%=*} $(span "${p#*=}")"; done
+say "took $(span "$total")${summary:+: ${summary#, }}"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $(git rev-parse --short HEAD) total=$total$took" >>"$data/live.times" 2>/dev/null || true
