@@ -711,6 +711,13 @@ enum Snapshot {
                 store.teach.loadFixture(shown: true, asked: nil, in: nil, result: nil,
                                         recent: [Fixture.teachQuestion, "What is a worktree?"])
             }),
+            // With the panes open beside the terminal: over the middle of
+            // the terminal still, over the panes where it must be.
+            ("teach-tile-panes", false, false, {
+                let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
+                store.teach.loadFixture(shown: true, asked: Fixture.teachQuestion, in: (Fixture.selected, name), result: Fixture.teachCard)
+            }),
         ]
         for (base, dark, reversed, set) in shots {
             store.reversed = reversed

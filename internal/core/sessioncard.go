@@ -63,6 +63,12 @@ func (c *Core) sessionCardArgs(a ipc.MaterializeArgs) (ipc.MaterializeArgs, erro
 // state and what it is doing, then its messages and steps, oldest first.
 // When they run past what a model reads, the newest are kept.
 func sessionContext(row ipc.Session, conv ipc.Conversation) string {
+	return sessionContextIn(row, conv, genui.MaxContext)
+}
+
+// sessionContextIn is sessionContext in at most budget bytes, the newest
+// kept.
+func sessionContextIn(row ipc.Session, conv ipc.Conversation, budget int) string {
 	var head strings.Builder
 	fmt.Fprintf(&head, "Session: %s\nState: %s", row.Name, row.State)
 	if row.Detail != "" {
@@ -81,7 +87,7 @@ func sessionContext(row ipc.Session, conv ipc.Conversation) string {
 	if conv.Needs != nil {
 		lines = append(lines, "Waits on the person: "+cleanText(conv.Needs.Text, 400))
 	}
-	budget := genui.MaxContext - head.Len() - len(leftOut)
+	budget -= head.Len() + len(leftOut)
 	start := len(lines)
 	for start > 0 && budget >= len(lines[start-1])+1 {
 		start--
