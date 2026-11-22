@@ -376,6 +376,12 @@ func Run(o Options) error {
 		return fmt.Errorf("journal: %w", err)
 	}
 	defer c.journal.Close()
+	// Lines a crash or a full disk cut short are skipped by every read, so
+	// what the core derives from the journal lacks their events: it says
+	// so, rather than carry on as if its record were whole.
+	if n, first := c.journal.Unreadable(); n > 0 {
+		c.log.Warn("journal: lines that cannot be read, whose events are missing", "lines", n, "first", first)
+	}
 	c.loadHistory()
 	c.loadRecent()
 	c.loadLocal()

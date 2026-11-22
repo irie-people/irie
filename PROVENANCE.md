@@ -918,6 +918,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-22 | Office of the United Nations High Commissioner for Human Rights, Convention on the Rights of Persons with Disabilities, the Secretary-General's certified true copy (PDF), https://www.ohchr.org/sites/default/files/Ch_IV_15.pdf | The founding documents plugin: checking the Disabilities Convention against the certified true copy, its English pages rendered and read by text recognition |
 | 2026-11-22 | Organization of American States, General Secretariat, Terms and Conditions, https://www.oas.org/en/terms_conditions.asp, and the Inter-American Commission on Human Rights' disclaimer, https://www.cidh.oas.org/disclaimer.htm | The founding documents plugin: why the American Declaration of the Rights and Duties of Man is held out (docs/proposals/founding-documents.md) |
 | 2026-11-22 | https://docs.ollama.com/capabilities/structured-outputs | Ollama's structured outputs: a JSON schema as /api/chat's format holds the reply to it (localmodel.ChatOptions.Schema), which genui uses so a small model's card parts always carry a type from the catalog |
+| 2026-11-22 | https://blog.joeware.net/2021/04/19/6068/ | A read that returns part of its data with a success code (msds-memberTransitive's 4,500-value cap, "no attributes returned and still a LDAP_SUCCESS"), and code that never checked that data came back: the journal says how many lines it cannot read instead of carrying on as if its record were whole (DESIGN §5.4). Ideas only |
 
 ## Third-party code
 
