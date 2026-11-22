@@ -1,6 +1,7 @@
 package core
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -67,10 +68,21 @@ func keepGuards(before, after config.Config) error {
 	if g0.On && g0.Guard && !g1.On {
 		lowered = append(lowered, "arch.gabriel.on")
 	}
-	if len(lowered) == 0 {
-		return nil
+	if len(lowered) > 0 {
+		return ipc.Errorf(ipc.CodeBadArgs, "An agent can't turn off or reword an arch agent's guard (%s): only you can, in %s's Settings › Arch Agents or from a terminal of your own.", strings.Join(lowered, ", "), brand.Name)
 	}
-	return ipc.Errorf(ipc.CodeBadArgs, "An agent can't turn off or reword an arch agent's guard (%s): only you can, in %s's Settings › Arch Agents or from a terminal of your own.", strings.Join(lowered, ", "), brand.Name)
+	// A plugin of yours goes on only at your word, as the plugins op
+	// says: one can run programs of yours and give agents its tools.
+	var turned []string
+	for _, name := range slices.Sorted(maps.Keys(after.Plugins.Manifests)) {
+		if after.Plugins.Manifests[name] && !before.Plugins.Manifests[name] {
+			turned = append(turned, "plugins.manifests."+name)
+		}
+	}
+	if len(turned) > 0 {
+		return ipc.Errorf(ipc.CodeBadArgs, "An agent can't turn a plugin on (%s): a plugin can run programs of yours and give every agent its tools, so that is yours to do, in %s's Settings › Plugins or from a terminal of your own.", strings.Join(turned, ", "), brand.Name)
+	}
+	return nil
 }
 
 // configure edits the config file and swaps in the config it then holds,

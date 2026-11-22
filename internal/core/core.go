@@ -908,6 +908,17 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 		if c.fromAgent(peer) {
 			return nil, ipc.Errorf(ipc.CodeBadArgs, "An agent can't press keys in a session: keys answer its prompts, and those are yours to answer.")
 		}
+	case ipc.OpPlugins:
+		// A plugin of yours can run a program of yours and give every
+		// agent its tools, so turning one on is the person's alone (DESIGN
+		// §4.17): an agent that wrote a manifest can't also switch it on.
+		var a ipc.PluginsArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.On != nil && *a.On && c.fromAgent(peer) {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "An agent can't turn a plugin on: a plugin can run programs of yours and give every agent its tools, so that is yours to do, in %s's Settings › Plugins or from a terminal of your own. Turning one off works.", brand.Name)
+		}
 	}
 	return c.Call(op, raw)
 }
