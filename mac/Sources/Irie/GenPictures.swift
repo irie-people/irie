@@ -4,7 +4,7 @@ import SwiftUI
 // drawn in Irie's own look from the data a model gave, which never holds a
 // style, a colour or markup. A Diagram is links alone: Irie lays it out.
 
-/// Steps in order, joined by arrows: across, for up to three that fit,
+/// Steps in order, joined by arrows: across, for up to four that fit,
 /// else down, as a line of numbered steps.
 struct GenFlowView: View {
     let steps: [GenItem]
@@ -14,7 +14,7 @@ struct GenFlowView: View {
     var body: some View {
         let shown = Array(steps.prefix(Self.most))
         VStack(alignment: .leading, spacing: 4) {
-            if shown.count <= 3 {
+            if shown.count <= 4 {
                 ViewThatFits(in: .horizontal) {
                     across(shown)
                     down(shown)

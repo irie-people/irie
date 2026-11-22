@@ -99,19 +99,78 @@ struct MaterializedCardView: View {
 }
 
 /// A card's title over its parts, at most eight of them, as the session's
-/// card and the Teach tile draw it.
+/// card and the Teach tile draw it. Wide, the parts go in two columns, each
+/// to the one that is shorter so far, in order, so the first, the picture a
+/// card that explains begins with, is at the top left.
 struct GenCardBody: View {
     let card: GenCard
     var spacing: CGFloat = 7
+    var wide = false
 
     var body: some View {
+        let parts = Array(card.body.prefix(8))
         VStack(alignment: .leading, spacing: spacing) {
             Text(card.title)
                 .font(Theme.font(12.5, .bold))
                 .foregroundStyle(Theme.ink)
-            ForEach(Array(card.body.prefix(8).enumerated()), id: \.offset) { _, part in
+            if wide, parts.count > 1 {
+                let (left, right) = Self.columns(parts)
+                HStack(alignment: .top, spacing: 20) {
+                    column(left)
+                    column(right)
+                }
+            } else {
+                column(parts)
+            }
+        }
+    }
+
+    private func column(_ parts: [GenPart]) -> some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
                 GenPartView(part: part)
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    /// The parts shared between two columns: each, in order, to the one
+    /// that is shorter so far, by about how tall it draws.
+    static func columns(_ parts: [GenPart]) -> ([GenPart], [GenPart]) {
+        var left: [GenPart] = [], right: [GenPart] = []
+        var l: CGFloat = 0, r: CGFloat = 0
+        for p in parts {
+            if l <= r {
+                left.append(p)
+                l += height(p)
+            } else {
+                right.append(p)
+                r += height(p)
+            }
+        }
+        return (left, right)
+    }
+
+    /// About how tall a part draws, in points: enough to share parts out.
+    static func height(_ p: GenPart) -> CGFloat {
+        switch p.type {
+        case "Flow":
+            let n = min(p.items?.count ?? 0, GenFlowView.most)
+            return n <= 4 ? 130 : CGFloat(n) * 44
+        case "Diagram":
+            let rows = GenGraph(p.links ?? []).layers.count
+            return CGFloat(rows) * (GenDiagramView.boxHeight + GenDiagramView.rowGap)
+        case "Compare":
+            let sides = p.sides ?? []
+            let most = sides.map { min($0.points?.count ?? 0, 6) }.max() ?? 0
+            return (40 + CGFloat(most) * 20) * (sides.count == 4 ? 2 : 1)
+        case "Code":
+            return 30 + CGFloat(min((p.text ?? "").split(separator: "\n").count, GenCodeView.most)) * 15
+        case "List": return 8 + CGFloat(min(p.items?.count ?? 0, 6)) * 22
+        case "Facts": return CGFloat(min(p.facts?.count ?? 0, 8)) * 19
+        case "Table": return 20 + CGFloat(min(p.rows?.count ?? 0, 6)) * 19
+        case "Text": return 18 * CGFloat((p.text ?? "").count / 70 + 1)
+        default: return 20
         }
     }
 }

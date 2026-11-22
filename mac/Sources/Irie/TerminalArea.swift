@@ -12,6 +12,9 @@ struct TerminalArea: View {
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
     /// The right sidebar's width while a drag of its edge asks for another.
     @State private var sideGuide: Double?
+    /// The terminal's frame (or the conversation's) in the window, which the
+    /// Teach tile sits over the middle of (TeachTile.swift).
+    @State private var mainFrame: CGRect?
 
     private var selected: Session? { store.selectedRow }
 
@@ -74,6 +77,7 @@ struct TerminalArea: View {
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
                         .background { PlaceProbe { r.mainProbe = $0 } }
+                        .background(GeometryReader { g in Color.clear.preference(key: MainFrame.self, value: g.frame(in: .global)) })
                         .environment(\.layoutDirection, .leftToRight)
                         .padding(.trailing, side + r.kept(fit, behind: behind))
                         // Over the wheel while it has the keyboard, under the
@@ -155,6 +159,16 @@ struct TerminalArea: View {
                     }
                 }
                 .environment(\.layoutDirection, flip ? .rightToLeft : .leftToRight)
+                .onPreferenceChange(MainFrame.self) { mainFrame = $0 }
+                // The Teach tile (TeachTile.swift): over the middle of the
+                // terminal, and over the panes when it must, never over the
+                // right sidebar, even as it slides in; the left sidebar is
+                // another column, which it cannot reach.
+                .overlay {
+                    TeachTileView(tile: store.teach, term: mainFrame,
+                                  side: store.side.open && zen == nil ? width : 0, flip: flip)
+                        .environment(\.layoutDirection, .leftToRight)
+                }
                 // Each session's terminal size, beside its panes or not, for
                 // the core to keep its agent's window at (PaneSizes.swift).
                 .onChange(of: [room, fit, geo.size.height, r.open ? 1 : 0, r.folded ? 1 : 0, store.fontSize], initial: true) {
@@ -468,6 +482,12 @@ struct TerminalArea: View {
 
 /// A quiet page, laid out as ConversationNote is: the two take turns in the
 /// same place.
+/// The terminal's frame, or the conversation's, in the window.
+private struct MainFrame: PreferenceKey {
+    static var defaultValue: CGRect? = nil
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
+}
+
 private struct Placeholder: View {
     let title: String
     let text: String
