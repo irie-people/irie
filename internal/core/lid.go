@@ -13,6 +13,9 @@ package core
 
 import (
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
@@ -79,6 +82,41 @@ func (c *Core) lidAdopt() {
 	if s.Off {
 		c.lid.worked = time.Now()
 	}
+}
+
+// lidRefreshAgent moves the launchd agent an older `irie setup lid` wrote
+// onto its launcher (lid.Refresh), and has launchd load it again, so that
+// an install, which replaces the binary the agent ran, no longer raises
+// macOS's "Background Items Added" alert. macOS announces the move once.
+func (c *Core) lidRefreshAgent() {
+	if !lid.Supported() || lidOff() {
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	changed, err := lid.Refresh(home, c.paths.Data, c.paths.LidFile())
+	if err != nil {
+		c.log.Warn("lid: the launchd agent", "err", err)
+		return
+	}
+	if !changed {
+		return
+	}
+	target := "gui/" + strconv.Itoa(os.Getuid())
+	exec.Command("/bin/launchctl", "bootout", target+"/"+lid.Label).Run()
+	// launchd may still be letting the old job go: the agent is the lid's
+	// safety net, so it is loaded again until it takes.
+	var out []byte
+	for try := 0; try < 5; try++ {
+		if out, err = exec.Command("/bin/launchctl", "bootstrap", target, lid.AgentPath(home)).CombinedOutput(); err == nil {
+			c.log.Info("lid: the launchd agent runs its launcher now", "launcher", lid.LauncherPath(c.paths.Data))
+			return
+		}
+		time.Sleep(time.Second)
+	}
+	c.log.Warn("lid: load the launchd agent again; it loads at the next login", "err", err, "out", strings.TrimSpace(string(out)))
 }
 
 // lidWork reports whether a session has work under way that a closed lid

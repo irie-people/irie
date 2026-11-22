@@ -86,6 +86,7 @@ type Core struct {
 	awake        *exec.Cmd   // what keeps the Mac awake for the trod bot, while it does
 
 	lidSweeping atomic.Bool // the lid's look runs (lid.go)
+	alertsMu    sync.Mutex  // one keep of macOS's alert styles at a time (alerts.go)
 	lidMu       sync.Mutex  // guards lid; taken after mu and awakeMu
 	lid         lidHold     // what the core did to the Mac's sleep, for a closed lid
 
@@ -431,6 +432,8 @@ func Run(o Options) error {
 	go c.trodSweep()
 	c.lidAdopt()
 	go c.lidSweep()
+	go c.lidRefreshAgent()
+	go c.alertsStart()
 	if err := c.loadPeers(); err != nil {
 		c.log.Warn("peers", "err", err)
 	}

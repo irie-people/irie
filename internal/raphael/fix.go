@@ -19,6 +19,7 @@ const (
 	fixTrash     = "trash"     // a folder of caches goes to the Trash
 	fixStop      = "stop"      // a process is asked to stop
 	fixLaunchOff = "launchoff" // a launch agent of the person's own is turned off
+	fixNCStyle   = "ncstyle"   // one of macOS's own senders shows its notices in another style (alerts.go)
 )
 
 // DoInput is what a fix needs to check, right before it runs, that it is
@@ -26,6 +27,9 @@ const (
 type DoInput struct {
 	Home string
 	UID  int
+	// State is the core's state folder, where a fix keeps a copy of what
+	// it changes; "" for the system's temporary folder.
+	State string
 	// Wait is how long a tool's fix waits for the tool to be free, such as
 	// every Go build and test to end; 0 for 30 minutes.
 	Wait time.Duration
@@ -55,8 +59,43 @@ func Do(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 		return doStop(ctx, f)
 	case fixLaunchOff:
 		return doLaunchOff(ctx, r, f, in)
+	case fixNCStyle:
+		return doNCStyle(ctx, r, f, in)
 	}
 	return "", errors.New("Raffi has no such fix")
+}
+
+// doNCStyle has one of macOS's own senders show its notices in the style
+// the fix names, keeping a copy of the settings as they were.
+func doNCStyle(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
+	dir := NCBackupDir(in.State)
+	changed, err := SetStyle(ctx, r, f.ident, f.path, dir)
+	if err != nil {
+		return "", err
+	}
+	if !changed {
+		return fmt.Sprintf("macOS already shows %s’s notices as %s.", notifierName(f.ident), f.path), nil
+	}
+	return fmt.Sprintf("macOS shows %s’s notices as %s now. Your notification settings as they were are in %s.", notifierName(f.ident), f.path, tildePath(dir, in.Home)), nil
+}
+
+// Style is what a fix that sets the style of one of macOS's senders of
+// notices sets: the sender's id and the style; ok is false for any other
+// fix.
+func (f Fix) Style() (id, style string, ok bool) {
+	if f.kind != fixNCStyle {
+		return "", "", false
+	}
+	return f.ident, f.path, true
+}
+
+// NCBackupDir is where the copies of macOS's notification settings go,
+// under the state folder.
+func NCBackupDir(state string) string {
+	if state == "" {
+		state = os.TempDir()
+	}
+	return filepath.Join(state, "ncprefs")
 }
 
 // doTool waits until the tool is free, then has it clear its cache, and

@@ -515,7 +515,7 @@ type RaphaelResult struct {
 // RaphaelFinding is one thing Raphael found.
 type RaphaelFinding struct {
 	ID       string      `json:"id"`
-	Area     string      `json:"area"`  // processes, memory, disk, caches, startup or protection
+	Area     string      `json:"area"`  // processes, memory, disk, caches, startup, protection or alerts
 	Level    string      `json:"level"` // ok, note or warn
 	Text     string      `json:"text"`
 	Advice   string      `json:"advice,omitempty"`
