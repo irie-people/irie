@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 )
 
@@ -299,10 +300,10 @@ func TestAgentPlistRunsTheLauncher(t *testing.T) {
 	if got := Program(p); got != "/home/alice/.local/share/irie/lid/irie-lid" {
 		t.Errorf("Program = %q", got)
 	}
-	if got := AgentPath("/home/alice"); got != "/home/alice/Library/LaunchAgents/io.github.irie-hq.irie.lid.plist" {
+	if got := AgentPath("/home/alice"); got != "/home/alice/Library/LaunchAgents/"+brand.BundleID+".lid.plist" {
 		t.Errorf("AgentPath = %q", got)
 	}
-	if got := LauncherPath("/home/alice/.local/share/irie"); got != "/home/alice/.local/share/irie/lid/irie-lid" {
+	if got := LauncherPath("/home/alice/.local/share/irie"); got != "/home/alice/.local/share/irie/lid/"+brand.Slug+"-lid" {
 		t.Errorf("LauncherPath = %q", got)
 	}
 }
@@ -318,7 +319,7 @@ func TestTheLauncherRunsTheInstalledCheckWithItsArguments(t *testing.T) {
 		t.Skip("sh")
 	}
 	dir := t.TempDir()
-	bin := filepath.Join(dir, "it's here", "irie")
+	bin := filepath.Join(dir, "it's here", brand.Slug)
 	os.MkdirAll(filepath.Dir(bin), 0o755)
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\nprintf '%s|' \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -338,7 +339,7 @@ func TestTheLauncherRunsTheInstalledCheckWithItsArguments(t *testing.T) {
 
 func TestAgentWritesOnlyWhatChanged(t *testing.T) {
 	home, data := t.TempDir(), t.TempDir()
-	bin, state := filepath.Join(data, "bin", "irie"), "/home/alice/.local/state/irie/lid.json"
+	bin, state := filepath.Join(data, "bin", brand.Slug), "/home/alice/.local/state/irie/lid.json"
 	changed, err := Agent(home, data, bin, state)
 	if err != nil || !changed {
 		t.Fatalf("first write: changed %v, %v", changed, err)
@@ -374,7 +375,7 @@ func TestAgentWritesOnlyWhatChanged(t *testing.T) {
 
 func TestRefreshMovesAnOldAgentOntoTheLauncherOnce(t *testing.T) {
 	home, data := t.TempDir(), t.TempDir()
-	bin, state := filepath.Join(data, "bin", "irie"), filepath.Join(home, "state", "lid.json")
+	bin, state := filepath.Join(data, "bin", brand.Slug), filepath.Join(home, "state", "lid.json")
 	if changed, err := Refresh(home, data, state); err != nil || changed {
 		t.Fatalf("with no agent set up: changed %v, %v", changed, err)
 	}

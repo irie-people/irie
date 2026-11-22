@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/remote"
 	"github.com/irie-people/irie/internal/testutil/peertest"
@@ -105,7 +106,7 @@ func TestAClientTrustsOnlyTheAuthorityItPinned(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if _, err := cl.Info(ctx); err == nil || !strings.Contains(err.Error(), "not from the Irie authority") {
+	if _, err := cl.Info(ctx); err == nil || !strings.Contains(err.Error(), "not from the "+brand.Name+" authority") {
 		t.Errorf("info under another authority: %v", err)
 	}
 	if _, err := New("http://127.0.0.1:1", "", g.Fingerprint); err == nil {

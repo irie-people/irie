@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -80,7 +81,7 @@ func TestTheSlotPaneDrawsTheShownConversation(t *testing.T) {
 	c.show(s.ID, true)
 	var screen string
 	testutil.Eventually(t, 10*time.Second, "the slot never drew the conversation", func() bool {
-		screen, _ = c.TryTmux("capture-pane", "-p", "-t", "irie:0.1")
+		screen, _ = c.TryTmux("capture-pane", "-p", "-t", brand.Slug+":0.1")
 		return strings.Contains(screen, "add the phrasebook page") && strings.Contains(screen, "Claude") &&
 			strings.Contains(screen, "Ran the tests")
 	})

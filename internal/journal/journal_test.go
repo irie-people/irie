@@ -56,6 +56,41 @@ func lines(t *testing.T, path string) []string {
 	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
 }
 
+// A write cut short, as on a full disk, leaves part of a line. The events
+// after it stand alone instead of running on into it, and a journal opened
+// afresh says how many lines it cannot read, and where the first is.
+func TestAWriteCutShortLosesOnlyItsOwnEvent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "journal")
+	c := &clock{time.Date(2026, 11, 22, 14, 35, 0, 0, time.UTC)}
+	j := open(t, dir, c, 30)
+	first := appendKinds(t, j, event.SpawnRequested)
+	file := filepath.Join(dir, "2026-11-22.ndjson")
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(`{"v":1,"seq":2,"ts":"2026-11-22T14:35`)
+	f.Close()
+	j.f.Close() // the journal's own write then fails, as on a full disk
+	if _, err := j.Append(ev(event.SessionStarted)); err == nil {
+		t.Fatal("a write to a file that failed under it went through")
+	}
+	last := appendKinds(t, j, event.TurnEnded)
+	got, err := Read(dir, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Seq != first[0].Seq || got[1].Seq != last[0].Seq || got[1].Kind != event.TurnEnded {
+		t.Fatalf("read %+v, want the first event and the last, whole", got)
+	}
+	if n, where := open(t, dir, c, 30).Unreadable(); n != 1 || where != "2026-11-22.ndjson:2" {
+		t.Errorf("unreadable %d at %q, want 1 at 2026-11-22.ndjson:2", n, where)
+	}
+	if n, _ := j.Unreadable(); n != 0 {
+		t.Errorf("a journal that opened before the cut counted %d", n)
+	}
+}
+
 func TestAppendStampsAndWritesPrivateDailyFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "journal")
 	c := &clock{time.Date(2026, 10, 26, 14, 2, 11, 408_000_000, time.UTC)}

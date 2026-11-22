@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
@@ -24,7 +25,7 @@ import (
 
 func TestArchForFollowsTheConfig(t *testing.T) {
 	// Gabriel's part is below.
-	t.Setenv("IRIE_GABRIEL", "off")
+	t.Setenv(brand.Env("GABRIEL"), "off")
 	cfg := config.Default()
 	cfg.Arch.Mikael.Good = []string{"Give credit where it is due."}
 	c := &Core{}
@@ -61,7 +62,7 @@ func TestArchForFollowsTheConfig(t *testing.T) {
 		t.Errorf("Mikael off, +mikael: %+v", got)
 	}
 	// Gabriel goes with every session where he can work.
-	t.Setenv("IRIE_GABRIEL", "")
+	t.Setenv(brand.Env("GABRIEL"), "")
 	cfg = config.Default()
 	c.useConfig(cfg)
 	got := c.archFor(claude, "claude-code")
@@ -92,13 +93,13 @@ func TestArchWordGoesToSessionsAndSubagentsThatStart(t *testing.T) {
 	}
 	took("s1", harness.Arch{With: []string{"mikael"}, OnCall: true, Door: true, Good: []string{"Be honest with clients."}})
 	w := c.archWord("s1", start)
-	for _, want := range []string{"[Irie] Mikael, the first of Irie's arch agents, is with you", "ask the mikael agent", "never work around him", "- Be honest with clients."} {
+	for _, want := range []string{"[" + brand.Name + "] Mikael, the first of " + brand.Name + "'s arch agents, is with you", "ask the mikael agent", "never work around him", "- Be honest with clients."} {
 		if !strings.Contains(w, want) {
 			t.Errorf("the word to a session does not say %q:\n%s", want, w)
 		}
 	}
 	// A subagent hears it too, but cannot call on him.
-	if w := c.archWord("s1", sub("Explore")); !strings.Contains(w, "Mikael, the first of Irie's arch agents, is with you") || strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "never work around him") {
+	if w := c.archWord("s1", sub("Explore")); !strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") || strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "never work around him") {
 		t.Errorf("the word to a subagent:\n%s", w)
 	}
 	// Mikael called as a subagent hears nothing from himself.
@@ -202,10 +203,10 @@ arch = "mikael"
 	}
 
 	// The session and its subagent hear his word as they start.
-	if w := hookStdout(c, s.ID, "SessionStart"); !strings.Contains(w, "Mikael, the first of Irie's arch agents, is with you") || !strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "Give credit where it is due.") {
+	if w := hookStdout(c, s.ID, "SessionStart"); !strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") || !strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "Give credit where it is due.") {
 		t.Errorf("SessionStart answered %q", w)
 	}
-	if w := hookStdout(c, s.ID, "SubagentStart"); !strings.Contains(w, "Mikael, the first of Irie's arch agents, is with you") || strings.Contains(w, "ask the mikael agent") {
+	if w := hookStdout(c, s.ID, "SubagentStart"); !strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") || strings.Contains(w, "ask the mikael agent") {
 		t.Errorf("SubagentStart answered %q", w)
 	}
 
@@ -217,7 +218,7 @@ arch = "mikael"
 	if i := slices.Index(spec.Argv, "--agent"); i < 0 || i+1 >= len(spec.Argv) || spec.Argv[i+1] != "mikael" {
 		t.Errorf("+helper argv = %q", spec.Argv)
 	}
-	if w := hookStdout(c, helper.ID, "SessionStart"); strings.Contains(w, "Mikael, the first of Irie's arch agents, is with you") {
+	if w := hookStdout(c, helper.ID, "SessionStart"); strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") {
 		t.Errorf("+helper heard Mikael's word: %q", w)
 	}
 	if d := settingsDoors(t, c, helper.ID); len(d) != 0 {

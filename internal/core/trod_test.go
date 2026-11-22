@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -95,7 +96,7 @@ func TestTheTrodBotTellsAnAgentThatAsksToDecideItself(t *testing.T) {
 
 	// The turn went on once, with the note, and then ended.
 	said := c.sentOn(s.ID)
-	if len(said) != 1 || !strings.HasPrefix(said[0], "[Irie] The trod bot: the user is away and can’t answer you.\nDon’t wait for them") ||
+	if len(said) != 1 || !strings.HasPrefix(said[0], "["+brand.Name+"] The trod bot: the user is away and can’t answer you.\nDon’t wait for them") ||
 		!hasRulesAndGuidelines(said[0]) {
 		t.Errorf("the trod bot said %q", said)
 	}
@@ -135,7 +136,7 @@ func TestTheTrodBotTurnsAQuestionAway(t *testing.T) {
 			reasons = append(reasons, r)
 		}
 	}
-	if len(reasons) != 1 || !strings.HasPrefix(reasons[0], "[Irie] The trod bot: the user is away and can’t answer you.") ||
+	if len(reasons) != 1 || !strings.HasPrefix(reasons[0], "["+brand.Name+"] The trod bot: the user is away and can’t answer you.") ||
 		!strings.Contains(reasons[0], "- Never touch production.") || strings.Contains(reasons[0], "guidelines") ||
 		strings.Contains(reasons[0], config.TrodRules()[0]) {
 		t.Errorf("denied with %q", reasons)
@@ -208,7 +209,7 @@ func TestTheTrodBotTriesATurnAgainAfterAnAPIError(t *testing.T) {
 		t.Errorf("night.sent = %+v", sent)
 	}
 	typed := c.typedTo(s.ID)
-	if len(typed) != 1 || !strings.HasPrefix(typed[0], "[Irie] The trod bot: your last turn stopped on an API error (server_error). The user is away, so carry on") ||
+	if len(typed) != 1 || !strings.HasPrefix(typed[0], "["+brand.Name+"] The trod bot: your last turn stopped on an API error (server_error). The user is away, so carry on") ||
 		strings.Contains(typed[0], "\n") || !hasRulesAndGuidelines(typed[0]) {
 		t.Errorf("typed %q", typed)
 	}
@@ -241,7 +242,7 @@ func TestTheTrodBotSendsAJotOnUntilItsWorkLands(t *testing.T) {
 		}
 	}
 	typed := c.typedTo(s.ID)
-	if len(typed) == 0 || !strings.HasPrefix(typed[0], "[Irie] The trod bot: your task is not through yet. Not committed in "+s.Worktree+" (branch "+s.Branch+"): notes.md.") {
+	if len(typed) == 0 || !strings.HasPrefix(typed[0], "["+brand.Name+"] The trod bot: your task is not through yet. Not committed in "+s.Worktree+" (branch "+s.Branch+"): notes.md.") {
 		t.Errorf("typed %q", typed)
 	}
 	// Two is the most a night: the report says so, and nothing more comes.
@@ -509,7 +510,7 @@ func TestARunStartedByHandGoesOnUntilNothingIsLeft(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(cv.Pending) != 1 || cv.Pending[0].From != "trod" ||
-		!strings.HasPrefix(cv.Pending[0].Text, "[Irie] The trod bot: your last turn stopped on an API error (server_error). The user wants you to keep going without them, so carry on") {
+		!strings.HasPrefix(cv.Pending[0].Text, "["+brand.Name+"] The trod bot: your last turn stopped on an API error (server_error). The user wants you to keep going without them, so carry on") {
 		t.Errorf("pending = %+v", cv.Pending)
 	}
 	c.waitState(s.ID, ipc.StateDone)
@@ -587,7 +588,7 @@ func TestTheTrodBotWaitsWhileYouAreAtTheMac(t *testing.T) {
 	if sent := c.trodSends(s.ID); len(sent) != 1 || sent[0].Str("reason") != "question" || sent[0].Str("how") != "typed" {
 		t.Errorf("night.sent = %+v", sent)
 	}
-	if typed := c.typedTo(s.ID); len(typed) != 1 || !strings.HasPrefix(typed[0], "[Irie] The trod bot: you asked the user something, but they are away and can’t answer.") {
+	if typed := c.typedTo(s.ID); len(typed) != 1 || !strings.HasPrefix(typed[0], "["+brand.Name+"] The trod bot: you asked the user something, but they are away and can’t answer.") {
 		t.Errorf("typed %q", typed)
 	}
 	if r := c.trodReport(); !r.Works || r.IdleSeconds == nil || *r.IdleSeconds != 16*60 {
@@ -799,7 +800,7 @@ func TestTheTrodBotsChoices(t *testing.T) {
 	if s := hand.shiftAt(now); !s.in || !s.hand || !s.away || !s.works() || !s.from.Equal(now.Add(-time.Minute)) || !s.until.IsZero() {
 		t.Errorf("by hand: %+v", s)
 	}
-	if note := trodNote(hand.shiftAt(now), trodQuestion, trodAtStop, "", true); !strings.HasPrefix(note, "[Irie] The trod bot: the user wants you to keep going without them, and won’t answer you.") {
+	if note := trodNote(hand.shiftAt(now), trodQuestion, trodAtStop, "", true); !strings.HasPrefix(note, "["+brand.Name+"] The trod bot: the user wants you to keep going without them, and won’t answer you.") {
 		t.Errorf("note by hand: %q", note)
 	}
 	hand.trodHand.Until = now.Add(-time.Second)
@@ -834,7 +835,7 @@ func TestTheTrodBotKeepsItsHoursAndYourRules(t *testing.T) {
 		t.Fatalf("shift = %+v", s)
 	}
 	note := trodNote(s, trodLimit, trodTyped, "", true)
-	want := "[Irie] The trod bot: the usage limit that stopped you has reset. The user is away until 07:00, so carry on with your task from where you stopped. " +
+	want := "[" + brand.Name + "] The trod bot: the usage limit that stopped you has reset. The user is away until 07:00, so carry on with your task from where you stopped. " +
 		"The user’s rules for the night, which you must follow: 1. Never touch production. 2. Keep to the docs folder. " +
 		"Their guidelines, for when you decide: 1. Prefer small commits. " +
 		"Leave for the user only what needs them: a login or password, an approval in their browser or on their phone, or a permission prompt, and say in one line what you left them and why. If nothing is left that you can do, say so in one line and stop."

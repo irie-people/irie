@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ctxgit"
 	"github.com/irie-people/irie/internal/ipc"
@@ -153,7 +154,7 @@ func TestContextsAreStoredAndForkedAtATurnsCode(t *testing.T) {
 			if !resumes {
 				t.Fatalf("argv: %v", argv)
 			}
-			if !strings.HasPrefix(last, "[Irie] This conversation is a fork of") || !strings.HasSuffix(last, "try a gallery instead") {
+			if !strings.HasPrefix(last, "["+brand.Name+"] This conversation is a fork of") || !strings.HasSuffix(last, "try a gallery instead") {
 				t.Fatalf("the fork's prompt: %q", last)
 			}
 			break

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
@@ -30,7 +31,7 @@ func (c *coreEnv) withOldHosts() {
 	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
 		c.t.Fatal(err)
 	}
-	c.t.Setenv("IRIE_BIN", wrapper)
+	c.t.Setenv(brand.Env("BIN"), wrapper)
 }
 
 func (c *coreEnv) hostPID(s ipc.Session) int {
@@ -574,6 +575,16 @@ func slow(t *testing.T) bool {
 	}
 	t.Logf("not timed: %.1f CPUs' worth of work waiting on %d CPUs", l.RunQueue, l.CPUs)
 	return true
+}
+
+// patience is how long a test waits for something that must happen: d,
+// or four times d when slow says the scheduler sets the time. Unlike a
+// bound skipped when slow, the thing must still happen.
+func patience(t *testing.T, d time.Duration) time.Duration {
+	if slow(t) {
+		return 4 * d
+	}
+	return d
 }
 
 // skipIfDemoted skips a test that looks for processes out of the

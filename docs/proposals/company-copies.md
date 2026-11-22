@@ -1,6 +1,6 @@
 # Company copies: product requirements
 
-Date: 2026-11-14, with R20 (the company's VPN) added the same day. Status: requirements, with what is built and what is next. An agent (Claude Code) wrote it, from `live` at `6410c2f`, after the owner asked to port Irie for use inside a company: a copy under the company's own name, with Irie's personal plugins left out and its core running on the company's servers. It draws on Irie's own code and docs only, so PROVENANCE.md gains no rows.
+Date: 2026-11-14, with R20 (the company's VPN) added the same day, and R16, R21 and R22 from a test copy, Pesto, on 2026-11-22. Status: requirements, with what is built and what is next. An agent (Claude Code) wrote it, from `live` at `6410c2f`, after the owner asked to port Irie for use inside a company: a copy under the company's own name, with Irie's personal plugins left out and its core running on the company's servers. It draws on Irie's own code and docs only, so PROVENANCE.md gains no rows.
 
 **In short.** A company may run Irie as a product of its own. Its copy renames Irie by changing one file, carries none of the plugins that are personal, fits its own name wherever the name shows, greets people with tips rather than Irie's cheer, and runs its core on a Linux server as well as on a Mac. The first five are built (DESIGN §2.10, §4.17); running on a server is the next work, in the order of §3.
 
@@ -13,7 +13,8 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day. Status: requi
 | Bitwarden in a copy | Held, inside the privacy plugin | The Bitwarden plugin stays in a copy, so a company on Bitwarden fills its people's sign-ins in their panes too; `nobitwarden` leaves it out |
 | A long name | Pushed the title bar's counts out, wrapped buttons | Up to 30 characters fit: it shrinks, trails off or is left out of a tight button |
 | The strip under the terminal | Irie's phrases of encouragement | `Bar = "tips"`: tips for those new to it |
-| Two copies on one Mac | Shared folders, socket, tmux server and variables | Each has its own |
+| Two copies on one Mac | Shared folders, socket, tmux server and variables | Each has its own; a few parts of a core still reach the other's agents (R21) |
+| Testing a copy | A rename by hand, and about 40 tests that fail under another name | `tools/rebrand.sh` renames a clone; every test passes under another name, and CI runs them all as Pesto |
 
 ## 1. Who and why
 
@@ -41,10 +42,12 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day. Status: requi
 | R13 | In a container, memory and CPU come from its cgroup limits, not the host's totals, for local models and placement | Next | §3, 3 |
 | R14 | Only the person, not any process of theirs, changes the config or starts and steers sessions: a caller check or a token on those ops of the socket | Next | §3, 4 |
 | R15 | Parts that are only for a Mac in front of a person stay quiet on a server: Gabriel's focus guard checks the OS, and the trod bot doesn't read a missing `ioreg` as the person being away | Next | §3, 5 |
-| R16 | A renamed copy's own test suite passes: the tests that expect Irie's names take them from the brand | Next | §3, 6 |
+| R16 | A renamed copy's own test suite passes: the tests that expect Irie's names take them from the brand, and a copy's test cores stay off the machine | Built | §5 |
 | R17 | The iPhone app takes its name from the same file | Next | §3, 7 |
 | R18 | Irie ships neutral defaults that a copy keeps as they are: no owner's preference among `spawn.preferences` | Next | §3, 8; open question 2 |
 | R19 | The icon comes from the brand: a copy draws its own mark without editing `tools/mkicon` | Later | |
+| R21 | Two copies side by side leave each other's agents alone: no part of one core slows, lists as its own, moves, stops or speaks for the other's sessions, and their servers keep apart | Next | §3, 6 |
+| R22 | The Mac app takes the strip's default, cheer or tips, from the brand until the core answers, and its snapshots draw a copy's own plugins and VPN | Later | |
 
 ## 3. Next, in order
 
@@ -53,7 +56,7 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day. Status: requi
 3. **Containers (R13).** `sysload` and `localmodel` read `/proc/meminfo`, `/proc/loadavg` and the CPU count; read cgroup v2's `memory.max` and `cpu.max` first.
 4. **Who may call (R14).** `core.sock` is mode 0600 with no token: any process of the user, agents included, may call every op. The caller is already known (`LOCAL_PEERPID`, `SO_PEERCRED`) and checked for the VPN's and Raphael's ops; extend that to `config`, `spawn`, `send`, `close` and `keys` where the caller is an agent, or give the clients a token. The command VPN (R20) makes this more pressing: its `vpn.status`, `vpn.connect` and `vpn.disconnect` are programs the core runs, and today an agent can set them through the `config` op, though it could run the same programs from its own shell. The check has to tell an agent from a setup session such as `:setup vpn`, which also runs in a pane of its own.
 5. **Quiet on a server (R15).** The focus guard refuses `open` and `osascript` in a Mac's words on Linux too; the trod bot reads a missing `ioreg` as the person away and has no `caffeinate`.
-6. **Tests (R16).** Renamed to "Acme Agent Workbench Pro" and built without the plugins, the copy printed no "Irie" anywhere, but about 40 tests in 11 of 17 packages failed: they expect `~/.config/irie`, the `irie/` branch prefix, "Outside Irie" and the like, and `internal/hook`'s set `IRIE_SESSION` by hand and wait out their time.
+6. **Side by side (R21).** Pesto, a copy installed beside Irie on the owner's Mac to test it (2026-11-22), showed where one core still reaches the other's sessions. Gabriel takes any busy process outside its own sessions for an app outside it, the other copy's agents and core included, and slows them (`internal/core/gabriel.go`); a copy beside another sets `arch.gabriel.outside = false` meanwhile. The list of sessions outside shows the other copy's agents, and a Move ends one there (`outside.go` drops only its own). Raphael offers to stop the other's busy processes. An agent of one copy counts as the person to the other's caller checks (`caller.go`). The lid's `pmset` is the whole Mac's. Both copies default `local.port` to 11435 and `local.llama_port` to 11436, so one's local models chat on the other's server; Pesto moves to 11445 and 11446. A copy started from a terminal of the other's session carries its `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN` into its own agents (`host.go`, `up.go`). Each part should know every copy's sessions, by their hosts or by a mark each copy's host leaves on its tree, and a copy's default ports should differ by its slug.
 7. **The iPhone app (R17)** on `brand.go`, as the Mac app's `Brand.swift` is.
 8. **Defaults (R18).** `config.Preferences()` holds the owner's own wish that texts read at a glance on a phone; it belongs in the owner's config.toml, and Irie's default empty.
 
@@ -70,4 +73,8 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day. Status: requi
 - `internal/plugins`: every package builds with `-tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat,noobsidian,nofounding,nojammin`, and that `irie` links none of `internal/vpn`, `anon`, `browser`, `dms`, `htmltext`, `mcp`, `mail`, `extension`, `terms`, `yoink`, `chat`, `obsidian`, `founding` and `jammin`, nor the mail plugin's IMAP and MIME libraries; a copy's own tags, `noprivacy,nowriting,nomarkets,nomail,noterms,noextension,noyoink,nofounding,nojammin`, build `irie` with `internal/vpn`, `internal/chat` and `internal/obsidian` and none of the others. A copy that wants Mail drops `nomail` from `Tags`, and one that wants Terms in short, the browser extension, Yoink or Jammin `noterms`, `noextension`, `noyoink` or `nojammin`; one that wants no vault of notes adds `noobsidian`. `tools/check.sh` vets every package with both sets.
 - `internal/vpn` and `internal/config`: the VPNs a copy names are VPNs Irie knows, and the config refuses a `vpn.provider` the copy doesn't offer.
 - `internal/config`: `ui.bar`.
+- `internal/brand`: `brand.Text` renames Irie, the command as a word, folders, `IRIE_` variables and the guide's address, and keeps ids, keys, tmux options, the source folders and others' links (`TestText`); each text names the command where the rewrite can tell (`TestTextsTellTheCommand`).
+- `cmd/irie`: the help lines up for a command of any length (`TestHelpLinesUpForAnyName`); `internal/plugins`: a company's copy offers no card of a plugin it leaves out.
+- Every test passes under another name (R16): `internal/testutil` switches a test core's Gabriel, Raphael, Raguel, lid and Keychain off by the brand's variables and writes its config to the brand's folder, and each test that expects a name takes it from `internal/brand`. CI's `copy` job renames the checkout to Pesto with `tools/rebrand.sh` and runs `tools/check.sh` on Linux. One package as a copy, without copying the tree: `GOFLAGS=-overlay=O.json go test ./internal/PKG`, where O.json swaps in a renamed `brand.go`. Before 2026-11-22 a renamed copy's test cores ran with Gabriel, the Keychain and the rest on, and without their config, so they started the real `claude`: never run an older copy's tests.
+- A copy installed beside Irie: `tools/rebrand.sh` in a clone of its own (it refuses a checkout that pushes to Irie's repository, and so does `tools/live.sh` for a renamed one), then `tools/live.sh` there. Pesto, the owner's, keeps its own script and notes in its clone (`PESTO.md`).
 - By hand, before a release of a copy: build a renamed copy with its tags, run `help`, `config print`, `plugins`, `skills`, `ctl` and `setup --check` in an empty home, and look for Irie's name and the plugins' words; draw the Mac app with `mac/snapshot.sh` and look at the title bar and the welcome.

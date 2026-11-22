@@ -34,7 +34,7 @@ only, with ` + brand.Name + `.app installed.
 // and the exit status are the command's.
 func away(args []string) error {
 	fs := flag.NewFlagSet("away", flag.ContinueOnError)
-	fs.Usage = func() { fmt.Fprint(os.Stderr, awayUsage) }
+	fs.Usage = func() { fmt.Fprint(os.Stderr, aligned(awayUsage)) }
 	wait := 10 * time.Second
 	fs.Func("for", "how long to watch for windows after COMMAND ends, such as 30s or 30 (default 10s)", func(s string) error {
 		d, err := time.ParseDuration(s)

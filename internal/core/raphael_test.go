@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
@@ -50,7 +51,7 @@ func (f *fixRunner) lines() []string {
 func raphCore(t *testing.T) (*Core, *fixRunner) {
 	t.Helper()
 	c, _ := dogCore(t)
-	t.Setenv("IRIE_RAPHAEL", "")
+	t.Setenv(brand.Env("RAPHAEL"), "")
 	f := &fixRunner{}
 	c.raph.runner = f
 	fs := findingsWithFix(t)
@@ -237,7 +238,7 @@ func TestRaphaelsArchRow(t *testing.T) {
 
 func TestRaphaelRestartsACoreWhoseLoopStandsStill(t *testing.T) {
 	c, _ := dogCore(t)
-	t.Setenv("IRIE_RAPHAEL", "")
+	t.Setenv(brand.Env("RAPHAEL"), "")
 	cfg := config.Default()
 	cfg.Arch.Raphael.Core = time.Minute
 	c.useConfig(cfg)
@@ -342,9 +343,9 @@ func TestRaphaelForceQuitsASidebarThatStopsAnswering(t *testing.T) {
 		c.fdog.allow("app", time.Now())
 	}
 	f.mu.Lock()
-	f.procs[701] = proc.Proc{PID: 701, Start: 7010, Name: "irie"}
+	f.procs[701] = proc.Proc{PID: 701, Start: 7010, Name: brand.Slug}
 	f.mu.Unlock()
-	t.Setenv("IRIE_RAPHAEL", "")
+	t.Setenv(brand.Env("RAPHAEL"), "")
 	ch := watchFor(t, c, 701, "")
 	t0 := time.Now()
 	c.lookAtWindows(t0)
@@ -376,9 +377,9 @@ func TestRaphaelForceQuitsASidebarThatStopsAnswering(t *testing.T) {
 
 func TestATestCoreNeverRestartsASidebar(t *testing.T) {
 	c, f := dogCore(t)
-	t.Setenv("IRIE_RAPHAEL", "off")
+	t.Setenv(brand.Env("RAPHAEL"), "off")
 	f.mu.Lock()
-	f.procs[702] = proc.Proc{PID: 702, Start: 7020, Name: "irie"}
+	f.procs[702] = proc.Proc{PID: 702, Start: 7020, Name: brand.Slug}
 	f.mu.Unlock()
 	ch := watchFor(t, c, 702, "")
 	t0 := time.Now()

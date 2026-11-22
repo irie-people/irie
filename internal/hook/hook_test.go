@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
@@ -73,7 +74,7 @@ func run(t *testing.T, sock, stdin string) (string, time.Duration) {
 	t.Helper()
 	var out bytes.Buffer
 	start := time.Now()
-	code := Run(strings.NewReader(stdin), &out, env(map[string]string{"IRIE_SOCKET": sock, "IRIE_SESSION": session}))
+	code := Run(strings.NewReader(stdin), &out, env(map[string]string{brand.Env("SOCKET"): sock, brand.Env("SESSION"): session}))
 	if code != 0 {
 		t.Errorf("exit code %d, want 0", code)
 	}
@@ -197,7 +198,7 @@ func TestAFrozenSessionsToolCallWaitsForTheThaw(t *testing.T) {
 	defer func(d time.Duration) { holdPoll = d }(holdPoll)
 	holdPoll = 10 * time.Millisecond
 	state := t.TempDir()
-	dir := filepath.Join(state, "irie", "sessions", session)
+	dir := filepath.Join(state, brand.Slug, "sessions", session)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +208,7 @@ func TestAFrozenSessionsToolCallWaitsForTheThaw(t *testing.T) {
 	}
 	c := &core{reply: ipc.HookResult{Context: "[Irie] noted"}}
 	for _, sock := range []string{serve(t, c), filepath.Join(testutil.ShortDir(t), "none.sock")} {
-		vars := env(map[string]string{"IRIE_SOCKET": sock, "IRIE_SESSION": session, "HOME": "/home/alice", "XDG_STATE_HOME": state})
+		vars := env(map[string]string{brand.Env("SOCKET"): sock, brand.Env("SESSION"): session, "HOME": "/home/alice", "XDG_STATE_HOME": state})
 		var out bytes.Buffer
 		done := make(chan struct{})
 		go func() {
@@ -246,7 +247,7 @@ func TestATeammateWaitsWhileItsSessionIsFrozen(t *testing.T) {
 	defer func(d time.Duration) { holdPoll = d }(holdPoll)
 	holdPoll = 10 * time.Millisecond
 	state := t.TempDir()
-	dir := filepath.Join(state, "irie", "sessions", session)
+	dir := filepath.Join(state, brand.Slug, "sessions", session)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +256,7 @@ func TestATeammateWaitsWhileItsSessionIsFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &core{got: make(chan ipc.HookArgs, 4), reply: ipc.HookResult{Context: "[Irie] noted"}}
-	vars := env(map[string]string{"IRIE_SOCKET": serve(t, c), "IRIE_TEAM_OF": session, "HOME": "/home/alice", "XDG_STATE_HOME": state})
+	vars := env(map[string]string{brand.Env("SOCKET"): serve(t, c), brand.Env("TEAM_OF"): session, "HOME": "/home/alice", "XDG_STATE_HOME": state})
 	var out bytes.Buffer
 	done := make(chan struct{})
 	go func() {
@@ -277,11 +278,11 @@ func TestATeammateWaitsWhileItsSessionIsFrozen(t *testing.T) {
 		t.Errorf("a teammate's hook printed %q and called the core %d times", out.String(), len(c.got))
 	}
 	// A name that is not a session's waits for nothing.
-	bad := env(map[string]string{"IRIE_TEAM_OF": "../../etc", "HOME": "/home/alice", "XDG_STATE_HOME": state})
+	bad := env(map[string]string{brand.Env("TEAM_OF"): "../../etc", "HOME": "/home/alice", "XDG_STATE_HOME": state})
 	start := time.Now()
 	Run(strings.NewReader(preToolUse), &bytes.Buffer{}, bad)
 	if d := time.Since(start); d > time.Second {
-		t.Errorf("a bad IRIE_TEAM_OF waited %v", d)
+		t.Errorf("a bad "+brand.Env("TEAM_OF")+" waited %v", d)
 	}
 }
 
@@ -310,9 +311,9 @@ func TestFailsOpen(t *testing.T) {
 		{"core never answers", silent, preToolUse, nil},
 		{"not JSON", failing, "not json", nil},
 		{"empty stdin", failing, "", nil},
-		{"no session", failing, preToolUse, map[string]string{"IRIE_SESSION": ""}},
+		{"no session", failing, preToolUse, map[string]string{brand.Env("SESSION"): ""}},
 	} {
-		vars := map[string]string{"IRIE_SOCKET": c.sock, "IRIE_SESSION": session}
+		vars := map[string]string{brand.Env("SOCKET"): c.sock, brand.Env("SESSION"): session}
 		for k, v := range c.env {
 			vars[k] = v
 		}
@@ -347,7 +348,7 @@ func TestStoppedCoreCostsUnder300ms(t *testing.T) {
 
 	for _, sock := range []string{filepath.Join(dir, "missing.sock"), stale} {
 		cmd := exec.Command(bin, "hook")
-		cmd.Env = append(os.Environ(), "IRIE_SOCKET="+sock, "IRIE_SESSION="+session)
+		cmd.Env = append(os.Environ(), brand.Env("SOCKET")+"="+sock, brand.Env("SESSION")+"="+session)
 		cmd.Stdin = strings.NewReader(preToolUse)
 		var stdout bytes.Buffer
 		cmd.Stdout = &stdout
@@ -361,7 +362,7 @@ func TestStoppedCoreCostsUnder300ms(t *testing.T) {
 			t.Errorf("%s: printed %q", sock, stdout.String())
 		}
 		if d > 300*time.Millisecond && !slow(t) {
-			t.Errorf("%s: irie hook took %v, want under 300 ms", sock, d)
+			t.Errorf("%s: hook took %v, want under 300 ms", sock, d)
 		}
 	}
 }
@@ -392,7 +393,7 @@ func slow(t *testing.T) bool {
 // core down too, and leaves every other session's alone (DESIGN §4.16).
 func TestAnAnonymousSessionsShellTakesItsExit(t *testing.T) {
 	state := t.TempDir()
-	dir := filepath.Join(state, "irie", "sessions", session)
+	dir := filepath.Join(state, brand.Slug, "sessions", session)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -404,14 +405,14 @@ func TestAnAnonymousSessionsShellTakesItsExit(t *testing.T) {
 	os.WriteFile(envFile, []byte("export A=1\n"), 0o600)
 	none := filepath.Join(testutil.ShortDir(t), "none.sock")
 	start := `{"hook_event_name":"SessionStart","session_id":"v","source":"startup"}`
-	vars := env(map[string]string{"IRIE_SOCKET": none, "IRIE_SESSION": session, "HOME": "/home/alice", "XDG_STATE_HOME": state, "CLAUDE_ENV_FILE": envFile})
+	vars := env(map[string]string{brand.Env("SOCKET"): none, brand.Env("SESSION"): session, "HOME": "/home/alice", "XDG_STATE_HOME": state, "CLAUDE_ENV_FILE": envFile})
 	Run(strings.NewReader(start), io.Discard, vars)
 	if b, _ := os.ReadFile(envFile); string(b) != "export A=1\n"+exports {
 		t.Errorf("CLAUDE_ENV_FILE = %q", b)
 	}
 	// Not at another event, and not for a session with no compartment.
 	Run(strings.NewReader(preToolUse), io.Discard, vars)
-	other := env(map[string]string{"IRIE_SOCKET": none, "IRIE_SESSION": "s0000000000ab", "HOME": "/home/alice", "XDG_STATE_HOME": state, "CLAUDE_ENV_FILE": envFile})
+	other := env(map[string]string{brand.Env("SOCKET"): none, brand.Env("SESSION"): "s0000000000ab", "HOME": "/home/alice", "XDG_STATE_HOME": state, "CLAUDE_ENV_FILE": envFile})
 	Run(strings.NewReader(start), io.Discard, other)
 	if b, _ := os.ReadFile(envFile); string(b) != "export A=1\n"+exports {
 		t.Errorf("CLAUDE_ENV_FILE grew: %q", b)
@@ -425,14 +426,14 @@ func TestAnAnonymousSessionsShellTakesItsExit(t *testing.T) {
 // a turn still does.
 func TestAnEventNoCoreTakesIsKeptForIt(t *testing.T) {
 	state := t.TempDir()
-	dir := filepath.Join(state, "irie", "sessions", session)
+	dir := filepath.Join(state, brand.Slug, "sessions", session)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	missed := filepath.Join(dir, "missed.ndjson")
 	none := filepath.Join(testutil.ShortDir(t), "none.sock")
 	vars := func(sock, id string) func(string) string {
-		return env(map[string]string{"IRIE_SOCKET": sock, "IRIE_SESSION": id, "HOME": "/home/alice", "XDG_STATE_HOME": state})
+		return env(map[string]string{brand.Env("SOCKET"): sock, brand.Env("SESSION"): id, "HOME": "/home/alice", "XDG_STATE_HOME": state})
 	}
 	stopFailure := `{"session_id":"6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f","hook_event_name":"StopFailure","error":"server_error","last_assistant_message":"API Error: The response stopped arriving"}`
 	read := func() []Missed {
@@ -476,7 +477,7 @@ func TestAnEventNoCoreTakesIsKeptForIt(t *testing.T) {
 		t.Errorf("a core that answers: %d kept, want the 2 from before", n)
 	}
 	runWith(t, vars(none, "s0000000000zz"), preToolUse)
-	if _, err := os.Stat(filepath.Join(state, "irie", "sessions", "s0000000000zz")); err == nil {
+	if _, err := os.Stat(filepath.Join(state, brand.Slug, "sessions", "s0000000000zz")); err == nil {
 		t.Error("a session with no folder got one")
 	}
 

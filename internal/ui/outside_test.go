@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -60,7 +61,7 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 		if len(lines) != h {
 			t.Fatalf("34×%d: %d lines", h, len(lines))
 		}
-		if bar := barText(t, m); !strings.Contains(lines[0], "☀ Irie") || !strings.Contains(bar[0], barPrompt) {
+		if bar := barText(t, m); !strings.Contains(lines[0], "☀ "+brand.Name) || !strings.Contains(bar[0], barPrompt) {
 			t.Errorf("34×%d: header %q, bar %q", h, lines[0], bar)
 		}
 		for i, l := range lines {
@@ -75,7 +76,7 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 			t.Errorf("34×%d: the last row is not on screen:\n%s", h, all)
 		}
 		if m.listHeight() >= 6 {
-			head, first, last := strings.Index(all, "Outside Irie 2"), strings.Index(all, "task-002"), strings.Index(all, "outside-00")
+			head, first, last := strings.Index(all, "Outside "+brand.Name+" 2"), strings.Index(all, "task-002"), strings.Index(all, "outside-00")
 			if head < 0 || first < 0 || last < 0 || !(first < head && head < last) {
 				t.Errorf("34×%d: want the sessions, the header, then its rows:\n%s", h, all)
 			}
@@ -87,7 +88,7 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 	m = send(m, keyMsg("tab"))
 	busy := m.look(ipc.Session{State: ipc.StateWorking}).glyph
 	idle := m.look(ipc.Session{State: ipc.StateIdle}).glyph
-	want := []string{"▾ Not in a repo 1", busy + " task-000 1m", "Working", "▾ Outside Irie 2", idle + " outside-00 2h", busy + " outside-01 1h"}
+	want := []string{"▾ Not in a repo 1", busy + " task-000 1m", "Working", "▾ Outside " + brand.Name + " 2", idle + " outside-00 2h", busy + " outside-01 1h"}
 	if got := listText(t, m); !reflect.DeepEqual(got, want) {
 		t.Errorf("list %q, want %q", got, want)
 	}
@@ -127,25 +128,26 @@ func TestEnterOnAnOutsideRowExplains(t *testing.T) {
 	if len(b.shows) != 0 {
 		t.Errorf("shows = %+v, want none for a session outside Irie", b.shows)
 	}
-	if !strings.Contains(m.status, "runs outside Irie") || !strings.Contains(m.status, "m moves it in") || m.statusErr {
+	if !strings.Contains(m.status, "runs outside "+brand.Name) || !strings.Contains(m.status, "m moves it in") || m.statusErr {
 		t.Errorf("status = %q", m.status)
 	}
 	m = click(m, 5, lineOf(t, m, "outside-01"))
-	if len(b.shows) != 0 || selectedName(m) != "outside-01" || !strings.Contains(m.status, "outside-01 runs outside Irie") || !strings.Contains(m.status, "busy") {
+	if len(b.shows) != 0 || selectedName(m) != "outside-01" || !strings.Contains(m.status, "outside-01 runs outside "+brand.Name) || !strings.Contains(m.status, "busy") {
 		t.Errorf("click: shows %+v, selection %s, status %q", b.shows, selectedName(m), m.status)
 	}
 }
 
-// The Outside Irie group folds like any other.
+// The Outside group folds like any other. The pane is as much wider than 34
+// as the brand's name is longer than Irie, so the folded header still fits.
 func TestTheOutsideGroupFolds(t *testing.T) {
-	m, _ := withOutside(t, 34, 24, 1, 3)
+	m, _ := withOutside(t, 34+len(brand.Name)-len("Irie"), 24, 1, 3)
 	waiting := outsideSessions(3)
 	waiting[2].Status, waiting[2].WaitingFor = ipc.StatusWaiting, "a permission prompt"
 	m = send(m, outsideFrame(waiting, ""))
-	m = selectNamed(t, m, "Outside Irie")
+	m = selectNamed(t, m, "Outside "+brand.Name)
 	m = send(m, keyMsg("enter"))
 	list := listText(t, m)
-	if last := list[len(list)-1]; last != "▸ Outside Irie 3 · 1 needs you" || strings.Contains(strings.Join(list, "\n"), "outside-00") {
+	if last := list[len(list)-1]; last != "▸ Outside "+brand.Name+" 3 · 1 needs you" || strings.Contains(strings.Join(list, "\n"), "outside-00") {
 		t.Errorf("folded: %q", list)
 	}
 	m = send(m, keyMsg("space"))
@@ -157,7 +159,7 @@ func TestTheOutsideGroupFolds(t *testing.T) {
 func TestMMovesAnIdleOutsideSessionIn(t *testing.T) {
 	m, b := withOutside(t, 120, 24, 1, 2)
 	m = send(m, keyMsg("m")) // on an Irie row it only explains
-	if len(b.moves) != 0 || !strings.Contains(m.status, "Outside Irie") {
+	if len(b.moves) != 0 || !strings.Contains(m.status, "Outside "+brand.Name) {
 		t.Errorf("m on an Irie row: moves %v, status %q", b.moves, m.status)
 	}
 	m = send(m, keyMsg("end")) // the busy one
@@ -171,7 +173,7 @@ func TestMMovesAnIdleOutsideSessionIn(t *testing.T) {
 	if want := []string{"00000000-0000-4000-8000-000000000000"}; !reflect.DeepEqual(b.moves, want) {
 		t.Fatalf("moves = %v, want %v", b.moves, want)
 	}
-	if !strings.Contains(m.status, "moved outside-00 into Irie") {
+	if !strings.Contains(m.status, "moved outside-00 into "+brand.Name) {
 		t.Errorf("status = %q", m.status)
 	}
 	// The core then drops it from the group and adds its row, which is
@@ -225,7 +227,7 @@ func TestColonMoveInTheBar(t *testing.T) {
 	m.bar.Reset()
 	m = typeText(m, ":pause")
 	m = send(m, keyMsg("enter"))
-	if !strings.Contains(m.status, "Irie has no :pause") {
+	if !strings.Contains(m.status, brand.Name+" has no :pause") {
 		t.Errorf("status = %q", m.status)
 	}
 }
@@ -316,7 +318,7 @@ func TestOneMMovesNothing(t *testing.T) {
 	if len(b.moves) != 0 {
 		t.Fatalf("one m moved %v", b.moves)
 	}
-	if !strings.Contains(m.status, "Press m again to move outside-02 into Irie") || !strings.Contains(m.status, "background stops") {
+	if !strings.Contains(m.status, "Press m again to move outside-02 into "+brand.Name) || !strings.Contains(m.status, "background stops") {
 		t.Errorf("status = %q", m.status)
 	}
 	// Another key cancels, so the next m asks again.

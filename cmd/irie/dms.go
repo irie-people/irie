@@ -52,7 +52,7 @@ folder, where only you can read them, and never print either.
 
 func dmsCmd(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Print(dmsUsage)
+		fmt.Print(aligned(dmsUsage))
 		return nil
 	}
 	_, p, err := load()

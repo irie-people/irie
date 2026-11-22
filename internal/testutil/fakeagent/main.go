@@ -596,7 +596,9 @@ func (a *agent) record(v map[string]any) {
 func (a *agent) run() int {
 	rawLines()
 	env := map[string]string{}
-	for _, k := range []string{"IRIE_SESSION", "IRIE_SOCKET", "IRIE_BIN", "TMUX", "TMUX_PANE"} {
+	// The product's own variables, by the brand's names (IRIE_SESSION for
+	// Irie, PESTO_SESSION for a copy called Pesto).
+	for _, k := range []string{brand.Env("SESSION"), brand.Env("SOCKET"), brand.Env("BIN"), "TMUX", "TMUX_PANE"} {
 		if v, ok := os.LookupEnv(k); ok {
 			env[k] = v
 		}

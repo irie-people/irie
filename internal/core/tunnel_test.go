@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -199,7 +200,7 @@ fake = 1.0
 			tunnels = append(tunnels, p)
 		}
 	}
-	if len(tunnels) != 1 || tunnels[0]["@irie_name"] != "Asahi" || tunnels[0]["session_name"] != "irie-agents" {
+	if len(tunnels) != 1 || tunnels[0]["@irie_name"] != "Asahi" || tunnels[0]["session_name"] != brand.Slug+"-agents" {
 		t.Fatalf("tunnel panes = %v", tunnels)
 	}
 	// The fake server answers before the tunnel's ssh has started, so its

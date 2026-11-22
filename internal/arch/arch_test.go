@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 func TestMikaelLeadsTheArchAgents(t *testing.T) {
@@ -162,7 +164,7 @@ func weighs(rules []string, command string) bool {
 func TestMikaelsWord(t *testing.T) {
 	m, _ := Get("mikael")
 	plain := m.Word(WordData{})
-	if !strings.HasPrefix(plain, "[Irie] Mikael, the first of Irie's arch agents, is with you") || !strings.Contains(plain, "never orders") {
+	if !strings.HasPrefix(plain, "["+brand.Name+"] Mikael, the first of "+brand.Name+"'s arch agents, is with you") || !strings.Contains(plain, "never orders") {
 		t.Errorf("word:\n%s", plain)
 	}
 	if strings.Contains(plain, "mikael agent") || strings.Contains(plain, "never work around him") || strings.Contains(plain, "The good your user wants") {
@@ -248,7 +250,7 @@ func TestGabrielWorksInTheCore(t *testing.T) {
 	if !ok || g.Call || g.Rank != 2 || g.Door != nil {
 		t.Fatalf("gabriel = %+v, %v; want rank 2, not called, no door", g, ok)
 	}
-	if w := g.Word(WordData{}); !strings.HasPrefix(w, "[Irie] Gabriel") || !strings.Contains(w, "ctl gabriel") {
+	if w := g.Word(WordData{}); !strings.HasPrefix(w, "["+brand.Name+"] Gabriel") || !strings.Contains(w, "ctl gabriel") {
 		t.Errorf("word:\n%s", w)
 	}
 	// Nobody calls him: he is left off --agents, and alone gives none.

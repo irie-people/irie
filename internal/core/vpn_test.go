@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
@@ -126,7 +127,7 @@ func TestTheVPNWhenOff(t *testing.T) {
 	off := config.Default()
 	off.VPN.On = false
 	c := bareCore(t, off)
-	if _, err := c.vpnOp(0, ipc.VPNArgs{}); err == nil || !strings.Contains(err.Error(), "irie setup vpn") || !strings.Contains(err.Error(), "irie plugins on vpn") {
+	if _, err := c.vpnOp(0, ipc.VPNArgs{}); err == nil || !strings.Contains(err.Error(), brand.Slug+" setup vpn") || !strings.Contains(err.Error(), brand.Slug+" plugins on vpn") {
 		t.Errorf("err = %v", err)
 	}
 	c.mu.Lock()
@@ -325,7 +326,7 @@ func TestUseAnotherVPN(t *testing.T) {
 		t.Errorf("from an agent: %v", err)
 	}
 	r, err := c.input(ipc.InputArgs{Text: ":vpn use command"}, 0)
-	if err != nil || r.Text != "Irie follows Custom VPN now." {
+	if err != nil || r.Text != brand.Name+" follows Custom VPN now." {
 		t.Fatalf("use: %+v, %v", r, err)
 	}
 	if v := c.cfg().VPN; v.Provider != "command" || !v.On || !c.cfg().Plugins.VPN {

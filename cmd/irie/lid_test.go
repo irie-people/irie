@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/lid"
 	"github.com/irie-people/irie/internal/paths"
@@ -48,7 +49,7 @@ func TestLidStatusSaysWhatToDoAndWhatIrieDid(t *testing.T) {
 	}
 	var b strings.Builder
 	lidStatus(&b, config.Default().Lid, p, lidFake(false, facts), time.Now())
-	for _, want := range []string{"lid.awake = work", "Not set up: run irie setup lid", "Irie has not kept it awake", "its lid is closed; on battery at 42%; heat moderate; sleep is off, but not by Irie."} {
+	for _, want := range []string{"lid.awake = work", "Not set up: run " + brand.Slug + " setup lid", brand.Name + " has not kept it awake", "its lid is closed; on battery at 42%; heat moderate; sleep is off, but not by " + brand.Name + "."} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("status lacks %q:\n%s", want, b.String())
 		}
@@ -60,12 +61,12 @@ func TestLidStatusSaysWhatToDoAndWhatIrieDid(t *testing.T) {
 	os.WriteFile(lid.AgentPath(home), []byte("plist"), 0o644)
 	b.Reset()
 	lidStatus(&b, config.Default().Lid, p, lidFake(true, facts), now)
-	for _, want := range []string{"Set up.", "Now: Irie keeps the Mac awake, since", "(sessions work)"} {
+	for _, want := range []string{"Set up.", "Now: " + brand.Name + " keeps the Mac awake, since", "(sessions work)"} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("status lacks %q:\n%s", want, b.String())
 		}
 	}
-	if strings.Contains(b.String(), "not by Irie") {
+	if strings.Contains(b.String(), "not by "+brand.Name) {
 		t.Errorf("sleep Irie turned off was called someone else's:\n%s", b.String())
 	}
 }

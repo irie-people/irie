@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -94,7 +95,7 @@ func TestGatherLocksAFakeHarnessAndServer(t *testing.T) {
 	claudeDir := filepath.Join(home, ".claude")
 	bin := filepath.Join(home, "bin", "claude")
 	write(t, bin, "#!/bin/sh\necho 2.1.250\n")
-	irie := filepath.Join(home, "bin", "irie")
+	irie := filepath.Join(home, "bin", brand.Slug)
 	write(t, irie, "irie\n")
 	// Claude Code's config: a server for every folder, with a secret in
 	// its arguments, and one for the session's folder alone.
@@ -153,7 +154,7 @@ func TestGatherLocksAFakeHarnessAndServer(t *testing.T) {
 	if want := []string{"irie-browser", "tools", "loose", "remote", "fake"}; !reflect.DeepEqual(names, want) {
 		t.Errorf("servers %v, want %v: Irie's first, then the folder's, the project's and the user's", names, want)
 	}
-	if s := servers["irie-browser"]; s.From != ipc.LockFromIrie || s.Version != in.Irie || s.Command != "irie browser mcp" || s.Package != nil {
+	if s := servers["irie-browser"]; s.From != ipc.LockFromIrie || s.Version != in.Irie || s.Command != brand.Slug+" browser mcp" || s.Package != nil {
 		t.Errorf("Irie's server = %+v", s)
 	}
 	if s := servers["fake"]; s.From != ipc.LockFromUser || s.Command != "npx @example/fake-mcp@1.2.3" || s.Version != "1.2.3" ||
@@ -173,7 +174,7 @@ func TestGatherLocksAFakeHarnessAndServer(t *testing.T) {
 		l.Plugins[1].From != ipc.LockFromUser || !strings.HasPrefix(l.Plugins[1].Hash, "sha256:") || l.Plugins[1].Hash == irieHash {
 		t.Errorf("plugins = %+v", l.Plugins)
 	}
-	if len(l.Skills) != 1 || l.Skills[0].Name != "irie:present" || l.Skills[0].From != ipc.LockFromIrie || !strings.HasPrefix(l.Skills[0].Hash, "sha256:") {
+	if len(l.Skills) != 1 || l.Skills[0].Name != brand.Slug+":present" || l.Skills[0].From != ipc.LockFromIrie || !strings.HasPrefix(l.Skills[0].Hash, "sha256:") {
 		t.Errorf("skills = %+v", l.Skills)
 	}
 	if len(l.Hooks) != 2 || l.Hooks[0].From != ipc.LockFromIrie || !reflect.DeepEqual(l.Hooks[0].Events, []string{"PreToolUse", "Stop"}) ||

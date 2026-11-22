@@ -123,7 +123,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	wantTree := Worktree{
 		Root:         "",
 		Base:         "",
-		BranchPrefix: "irie/",
+		BranchPrefix: brand.Slug + "/",
 		Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 		Submodules:   true,
 		Drop:         true,
@@ -131,7 +131,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if !reflect.DeepEqual(c.Worktree, wantTree) {
 		t.Errorf("worktree = %+v, want %+v", c.Worktree, wantTree)
 	}
-	if want := (Tmux{Path: "", Socket: "irie"}); c.Tmux != want {
+	if want := (Tmux{Path: "", Socket: brand.Slug}); c.Tmux != want {
 		t.Errorf("tmux = %+v, want %+v", c.Tmux, want)
 	}
 	if want := (Journal{KeepDays: 30, ToolInput: "summary"}); c.Journal != want {
@@ -572,10 +572,10 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[local]\nllama_port = 0\n", "local.llama_port"},
 		{"[local]\nllama_server = \"llama-server\"\n", "local.llama_server"},
 		{"[local]\nmodels = \"gguf\"\n", "local.models"},
-		{"[local]\nllama_args = [\"--port\", \"1\"]\n", "--port is Irie's to set"},
-		{"[local]\nllama_args = [\"-c=4096\"]\n", "-c is Irie's to set"},
+		{"[local]\nllama_args = [\"--port\", \"1\"]\n", "--port is " + brand.Name + "'s to set"},
+		{"[local]\nllama_args = [\"-c=4096\"]\n", "-c is " + brand.Name + "'s to set"},
 		{"[profiles.big]\nlocal = { runtime = \"llama-server\", min_context = 200000 }\n", "above local.context"},
-		{"[profiles.auto]\nmodel = \"x\"\n", "auto is Irie's router"},
+		{"[profiles.auto]\nmodel = \"x\"\n", "auto is " + brand.Name + "'s router"},
 		{"[route]\nprofiles = [\"nope\"]\n", "route.profiles: \"nope\" is not a profile"},
 		{"[profiles.mine]\nmodel = \"x\"\n\n[route]\nprofiles = [\"mine\"]\n", "needs route.accuracy.mine"},
 		{"[route]\nmin_accuracy = 0\n", "route.min_accuracy"},
@@ -710,7 +710,7 @@ func TestPrintRoundTrips(t *testing.T) {
 	if err := Default().Write(&buf); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "irie/"`, `submodules = true`, `runtime = "ollama"`, `kv_cache = "q8_0"`, `status_line = true`, `theme = "rosewater"`} {
+	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "` + brand.Slug + `"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "` + brand.Slug + `/"`, `submodules = true`, `runtime = "ollama"`, `kv_cache = "q8_0"`, `status_line = true`, `theme = "rosewater"`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("printed config lacks %s:\n%s", want, buf.String())
 		}
@@ -917,7 +917,7 @@ func TestASkillProfile(t *testing.T) {
 	for body, want := range map[string]string{
 		"[profiles.helper]\nskill = \"Chaos Monkey\"\n":                                      `profiles.helper.skill = "Chaos Monkey": not a skill's name`,
 		"[profiles.helper]\nharness = \"generic\"\ncommand = \"aider\"\nskill = \"chaos\"\n": "profiles.helper.skill: only the claude-code harness",
-		"[profiles.helper]\nskill = \"chaos\"\nskills = false\n":                             "profiles.helper.skill: a profile that starts on a skill takes Irie's skills",
+		"[profiles.helper]\nskill = \"chaos\"\nskills = false\n":                             "profiles.helper.skill: a profile that starts on a skill takes " + brand.Name + "'s skills",
 	} {
 		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v, want %q", body, err, want)

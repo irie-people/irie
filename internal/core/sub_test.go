@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
@@ -29,7 +30,7 @@ func TestStopTurnsAHelpersCallsAwayUntilItEnds(t *testing.T) {
 			reasons = append(reasons, r)
 		}
 	}
-	if len(reasons) != 2 || !strings.HasPrefix(reasons[0], "[Irie] The user stopped you from Irie.") {
+	if len(reasons) != 2 || !strings.HasPrefix(reasons[0], "["+brand.Name+"] The user stopped you from "+brand.Name+".") {
 		t.Errorf("the helper's calls were denied with %q, want both turned away", reasons)
 	}
 	stopped := false

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -19,10 +20,10 @@ import (
 func TestTheDockRunsTrustedControlsInTheSessionsWorktree(t *testing.T) {
 	testutil.IsolateGit(t)
 	repo := website(t, filepath.Join(t.TempDir(), "website"))
-	testutil.WriteFiles(t, repo, map[string]string{".irie/dock.json": `{"controls":[
+	testutil.WriteFiles(t, repo, map[string]string{"." + brand.Slug + "/dock.json": `{"controls":[
 		{"id":"where","title":"Where","command":"pwd > dock-where.txt; exec sleep 120"},
 		{"id":"page","title":"Page","type":"browser","url":"http://127.0.0.1:9/","chrome":false}]}`})
-	testutil.Git(t, repo, "add", ".irie/dock.json")
+	testutil.Git(t, repo, "add", "."+brand.Slug+"/dock.json")
 	testutil.Git(t, repo, "commit", "-q", "-m", "Add a Dock")
 	c := setupWith(t, agentConfig{})
 	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Repo: repo})
@@ -93,7 +94,7 @@ func TestTheDockRunsTrustedControlsInTheSessionsWorktree(t *testing.T) {
 	target := r.Controls[0].Target
 
 	// A changed file asks again before anything of it runs.
-	testutil.WriteFiles(t, s.Worktree, map[string]string{".irie/dock.json": `{"controls":[{"id":"where","command":"echo changed"}]}`})
+	testutil.WriteFiles(t, s.Worktree, map[string]string{"." + brand.Slug + "/dock.json": `{"controls":[{"id":"where","command":"echo changed"}]}`})
 	if r, err = dock(ipc.DockArgs{Ensure: true}); err != nil || r.Untrusted == nil || r.Controls[0].State != ipc.DockStateUntrusted {
 		t.Fatalf("after a change: %+v, %+v, %v; want it untrusted again", r.Untrusted, r.Controls, err)
 	}

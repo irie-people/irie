@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -24,12 +25,12 @@ func TestOnSkill(t *testing.T) {
 		task, want string
 	}{
 		{config.Profile{}, "break it", "break it"},
-		{chaos, "break the refund flow", "/irie:chaos break the refund flow"},
-		{chaos, "-v first, as a flag would", "/irie:chaos -v first, as a flag would"},
-		{chaos, "/irie:chaos break it", "/irie:chaos break it"},
-		{chaos, "/irie:chaos\nbreak it", "/irie:chaos\nbreak it"},
-		{chaos, "/irie:chaos", "/irie:chaos"},
-		{chaos, "/irie:chaosmonkey x", "/irie:chaos /irie:chaosmonkey x"},
+		{chaos, "break the refund flow", "/" + brand.Slug + ":chaos break the refund flow"},
+		{chaos, "-v first, as a flag would", "/" + brand.Slug + ":chaos -v first, as a flag would"},
+		{chaos, "/" + brand.Slug + ":chaos break it", "/" + brand.Slug + ":chaos break it"},
+		{chaos, "/" + brand.Slug + ":chaos\nbreak it", "/" + brand.Slug + ":chaos\nbreak it"},
+		{chaos, "/" + brand.Slug + ":chaos", "/" + brand.Slug + ":chaos"},
+		{chaos, "/" + brand.Slug + ":chaosmonkey x", "/" + brand.Slug + ":chaos /" + brand.Slug + ":chaosmonkey x"},
 	} {
 		if got := onSkill(tc.p, tc.task); got != tc.want {
 			t.Errorf("onSkill(%q, %q) = %q, want %q", tc.p.Skill, tc.task, got, tc.want)
@@ -45,7 +46,7 @@ func TestAChaosSessionSaysWhyItCannotStart(t *testing.T) {
 		cfg  func(*config.Config)
 		want string
 	}{
-		"all skills off": {func(c *config.Config) { c.Skills.Enabled = false }, "+chaos runs Irie's skill chaos, which is off here: skills are off (skills.enabled)"},
+		"all skills off": {func(c *config.Config) { c.Skills.Enabled = false }, "+chaos runs " + brand.Name + "'s skill chaos, which is off here: skills are off (skills.enabled)"},
 		"this one off":   {func(c *config.Config) { c.Skills.Disabled = []string{"chaos"} }, "turned off (skills.disabled)"},
 		"no such skill": {func(c *config.Config) {
 			p := c.Profiles["chaos"]
@@ -56,7 +57,7 @@ func TestAChaosSessionSaysWhyItCannotStart(t *testing.T) {
 			p := c.Profiles["chaos"]
 			p.Command = old
 			c.Profiles["chaos"] = p
-		}, "+chaos needs Claude Code to load Irie's skills"},
+		}, "+chaos needs Claude Code to load " + brand.Name + "'s skills"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := config.Default()
@@ -100,7 +101,7 @@ func TestAChaosSessionRunsTheSkill(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := slices.Index(spec.Argv, "--plugin-dir")
-	if spec.Profile != "chaos" || i < 0 || spec.Argv[len(spec.Argv)-1] != "/irie:chaos break the refund flow" || !slices.Contains(spec.Argv, "claude-opus-5-5") {
+	if spec.Profile != "chaos" || i < 0 || spec.Argv[len(spec.Argv)-1] != "/"+brand.Slug+":chaos break the refund flow" || !slices.Contains(spec.Argv, "claude-opus-5-5") {
 		t.Fatalf("spec = %+v", spec)
 	}
 	for _, f := range []string{"SKILL.md", "reference/faults.md", "reference/irie.md"} {
@@ -113,7 +114,7 @@ func TestAChaosSessionRunsTheSkill(t *testing.T) {
 
 	// The + list says what +chaos does.
 	var cr ipc.CompleteResult
-	if err := c.call("complete", ipc.CompleteArgs{Text: "+cha"}, &cr); err != nil || !slices.Equal(cr.Items, []string{"+chaos"}) || !strings.Contains(cr.Notes[0], "runs /irie:chaos") {
+	if err := c.call("complete", ipc.CompleteArgs{Text: "+cha"}, &cr); err != nil || !slices.Equal(cr.Items, []string{"+chaos"}) || !strings.Contains(cr.Notes[0], "runs /"+brand.Slug+":chaos") {
 		t.Errorf("complete +cha = %q %q, %v", cr.Items, cr.Notes, err)
 	}
 }

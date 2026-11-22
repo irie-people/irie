@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // A synthetic transcript in Claude Code's shape (DESIGN §4.7, PROVENANCE):
@@ -241,7 +243,7 @@ func TestARewindGoesOnFromTheOlderTurn(t *testing.T) {
 	if parent := gitIn(t, st.Dir(), "rev-parse", head+"^"); parent != turnOne {
 		t.Fatalf("the rewound turn's parent is %s, want turn one %s", parent, turnOne)
 	}
-	if kept := gitIn(t, st.Dir(), "for-each-ref", "--format=%(objectname)", "refs/irie/rewound/"); kept != turnTwo {
+	if kept := gitIn(t, st.Dir(), "for-each-ref", "--format=%(objectname)", "refs/"+brand.Slug+"/rewound/"); kept != turnTwo {
 		t.Fatalf("the old head was not kept: %q", kept)
 	}
 	lines, err := st.Transcript(head, "")

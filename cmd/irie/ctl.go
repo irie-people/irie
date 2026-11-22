@@ -17,6 +17,7 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/rebuild"
 )
 
@@ -55,7 +56,8 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
-  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...   the sessions, open or closed, most like
+  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...
+                                         the sessions, open or closed, most like
                                          WORDS by their names, their tasks and what
                                          their agents said last, by words and by
                                          meaning (route.embed's model): each with
@@ -119,10 +121,11 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          restart lost, one at a time, pinned,
                                          parked or frozen as it was
 ` + worktreesUsage + `  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
-  ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets,
-                                         mail, code or vault) beside SESSION, the one this runs
-                                         in by default, in the Mac app's panes;
-                                         the app alone reads what it shows
+  ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, code,
+                                         or a plugin's: ` + brand.Slug + ` ctl card lists them) beside
+                                         SESSION, the one this runs in by default, in
+                                         the Mac app's panes; the app alone reads what
+                                         it shows
   ` + brand.Slug + ` ctl open FILE[:LINE[:COL]] [SESSION]
                                          show a file in a code card beside SESSION,
                                          the one this runs in by default, in the
@@ -1093,7 +1096,7 @@ func ctlFlip(args []string) error {
 // beside it runs `irie ctl card mail`.
 func ctlCard(args []string) error {
 	if len(args) < 1 || len(args) > 2 {
-		return errors.New("usage: " + brand.Slug + " ctl card KIND [SESSION]: KIND is " + strings.Join(ipc.CardKinds, ", "))
+		return errors.New("usage: " + brand.Slug + " ctl card KIND [SESSION]: KIND is " + strings.Join(plugins.CardKinds(), ", "))
 	}
 	sock, err := socket()
 	if err != nil {

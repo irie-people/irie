@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // view is a list as a client would show it: a running session, a frozen
@@ -159,9 +161,9 @@ func TestReadRefusesInWords(t *testing.T) {
 		code, says             string
 	}{
 		{":rename x", "", "", CodeBadArgs, ":rename acts on the selected session"},
-		{":rename x", "v-1", "", CodeBadArgs, "select one of Irie's"},
+		{":rename x", "v-1", "", CodeBadArgs, "select one of " + brand.Name + "'s"},
 		{":rate good", "", "", CodeBadArgs, ":rate acts on the selected session"},
-		{":rate meh", "s1", "", CodeBadArgs, "Irie has no :rate"},
+		{":rate meh", "s1", "", CodeBadArgs, brand.Name + " has no :rate"},
 		{":close", "", "", CodeBadArgs, ":close acts on the selected session"},
 		{":freeze", "s2", "", CodeBadArgs, "must be running; or :freeze all"},
 		{":thaw", "s1", "", CodeBadArgs, "must be frozen; or :thaw all"},
@@ -171,10 +173,10 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":group", "", "", CodeBadArgs, ":group takes the selected session"},
 		{":ungroup", "s1", "", CodeBadArgs, "must be in a group"},
 		{":prio", "", "", CodeBadArgs, ":prio acts on the selected session"},
-		{":move", "s1", "", CodeBadArgs, "the selected session under Outside Irie, or one you name"},
-		{":move nothing-here", "", "", CodeNotFound, "No session outside Irie is called “nothing-here”"},
+		{":move", "s1", "", CodeBadArgs, "the selected session under Outside " + brand.Name + ", or one you name"},
+		{":move nothing-here", "", "", CodeNotFound, "No session outside " + brand.Name + " is called “nothing-here”"},
 		{":move bg02", "", "", CodeBusy, "web can't move yet: it is busy."},
-		{":bogus", "", "", CodeBadArgs, "Irie has no :bogus. The commands are :rename NAME, :move [NAME]"},
+		{":bogus", "", "", CodeBadArgs, brand.Name + " has no :bogus. The commands are :rename NAME, :move [NAME]"},
 		{":pause", "s1", "", CodeBadArgs, ":undo, :redo"},
 		{"+a +b fix it", "", "", CodeBadArgs, "Only one +profile per task."},
 		{"@web", "", "", CodeBadArgs, "Empty task: type what you want done after the @ or + words."},
@@ -199,7 +201,7 @@ func TestReadRefusesInWords(t *testing.T) {
 	// Two outside sessions with one name: the person picks.
 	v := view()
 	v.Outside = append(v.Outside, OutsideSession{VendorID: "v-3", Name: "api"})
-	if _, err := Read(InputArgs{Text: ":move api"}, v); err == nil || !strings.Contains(err.Error(), "2 sessions outside Irie are called “api”") {
+	if _, err := Read(InputArgs{Text: ":move api"}, v); err == nil || !strings.Contains(err.Error(), "2 sessions outside "+brand.Name+" are called “api”") {
 		t.Errorf(":move of a shared name: %v", err)
 	}
 }
@@ -369,7 +371,7 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 		{"ungroup", Step{Op: OpGroup, Args: GroupArgs{Do: GroupRemove}, Session: parser}, GroupResult{Sessions: []string{"s2"}}, nil,
 			InputResult{Did: InputRan, Op: OpGroup, Session: parser, Text: "Took parser out of its group. :undo puts it back."}},
 		{"move", Step{Op: OpMove, Outside: &v.Outside[0]}, MoveResult{Session: Session{ID: "s7", Name: "api"}}, nil,
-			InputResult{Did: InputRan, Op: OpMove, Session: &Session{ID: "s7", Name: "api"}, Text: "Moved api into Irie."}},
+			InputResult{Did: InputRan, Op: OpMove, Session: &Session{ID: "s7", Name: "api"}, Text: "Moved api into " + brand.Name + "."}},
 		{"markets", Step{Op: OpMarkets, Args: MarketsArgs{}}, MarketsResult{State: PartReady, Page: "/home/alice/maps/index.html", Text: "Your market map is ~/maps/index.html."}, nil,
 			InputResult{Did: InputAnswered, Op: OpMarkets, Text: "Your market map is ~/maps/index.html."}},
 		{"markets task", Step{Op: OpMarkets, Args: MarketsArgs{Task: &SpawnArgs{Task: "add it"}}}, MarketsResult{State: PartReady, Session: &started, Text: "Started flaky test in your market map's folder."}, nil,
@@ -452,7 +454,7 @@ func TestAPluginsWordStartsASession(t *testing.T) {
 		{":grants find arts grants\nclosing this winter", SpawnArgs{Task: "find arts grants\nclosing this winter", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
 		{":grants +sonnet what's due", SpawnArgs{Task: "what's due", Skill: "grants", Profile: "sonnet", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
 		{":grants @~/Documents draft an outline", SpawnArgs{Task: "draft an outline", Repo: "/home/alice/Documents", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
-		{":grants", SpawnArgs{Task: "/irie:grants", Name: "Grant work", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":grants", SpawnArgs{Task: "/" + brand.Slug + ":grants", Name: "Grant work", Skill: "grants", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
 		{":invoice bill the March work", SpawnArgs{Task: "bill the March work", Repo: "/home/alice/invoices", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
 	} {
 		in := menus

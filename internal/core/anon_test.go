@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/anon"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
@@ -22,10 +23,10 @@ import (
 
 func TestAnonymousResearchIsOffUntilSetUp(t *testing.T) {
 	c := bareCore(t, config.Default())
-	if _, _, err := c.prepareAnon("acme", ""); err == nil || !strings.Contains(err.Error(), "irie setup anon") {
+	if _, _, err := c.prepareAnon("acme", ""); err == nil || !strings.Contains(err.Error(), brand.Slug+" setup anon") {
 		t.Errorf("prepareAnon while off: %v", err)
 	}
-	if _, err := c.anonOp(ipc.AnonArgs{}); err == nil || !strings.Contains(err.Error(), "irie setup anon") {
+	if _, err := c.anonOp(ipc.AnonArgs{}); err == nil || !strings.Contains(err.Error(), brand.Slug+" setup anon") {
 		t.Errorf("anon op while off: %v", err)
 	}
 	cfg := config.Default()

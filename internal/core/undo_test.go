@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -498,7 +499,7 @@ func TestAStepOfAnUnknownKindCanOnlyBeSkipped(t *testing.T) {
 	c := historyCore(t)
 	c.steps.hist.push(action{ID: "a1", Kind: "teleport", Session: "s1", Name: "x", Label: `teleport "x"`})
 	r, err := c.undo(dirUndo, ipc.UndoArgs{})
-	if err != nil || r.Choice == nil || r.Choice.Question != `This version of Irie cannot undo teleport "x".` {
+	if err != nil || r.Choice == nil || r.Choice.Question != `This version of `+brand.Name+` cannot undo teleport "x".` {
 		t.Fatalf("undo = %+v, %v", r, err)
 	}
 	if len(r.Choice.Options) != 2 || r.Choice.Options[0].Key != ipc.ChoiceSkip || r.Choice.Options[1].Key != ipc.ChoiceCancel {
