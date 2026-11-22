@@ -1,5 +1,6 @@
 # tools/check.sh (gofmt, go vet, the tests and PROVENANCE.md's rows) on Linux and macOS, for every
-# push to main and every pull request, as tools/live.sh runs it before an install, and Irie for
+# push to main and every pull request, as tools/live.sh runs it before an install, again on Linux
+# with the checkout renamed to a company's copy, and Irie for
 # Windows and its wrapper on Windows. The Mac app (mac/) is not built here; mac/build.sh takes about ten
 # minutes and needs Xcode.
 name: test
@@ -40,6 +41,22 @@ jobs:
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
+      - run: sh tools/check.sh
+  # A company's copy under its own name (DESIGN §2.10, docs/proposals/company-copies.md R16): the
+  # checkout renamed to Pesto, a copy for testing, by tools/rebrand.sh, then the same checks. A test
+  # or a text that holds only under Irie's own names fails here rather than in a company's copy.
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: tmux
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q tmux
+          tmux -V
+      - run: sh tools/rebrand.sh --tagline "Fresh basil for your agents." Pesto
       - run: sh tools/check.sh
   # Irie for Windows (cmd/windows-app) and the wrapper (cmd/windows, docs/WINDOWS.md) on Windows
   # itself: their checks, then site/install.ps1 from a local mirror of the downloads, irie.exe's
