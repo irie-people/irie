@@ -576,6 +576,16 @@ func slow(t *testing.T) bool {
 	return true
 }
 
+// patience is how long a test waits for something that must happen: d,
+// or four times d when slow says the scheduler sets the time. Unlike a
+// bound skipped when slow, the thing must still happen.
+func patience(t *testing.T, d time.Duration) time.Duration {
+	if slow(t) {
+		return 4 * d
+	}
+	return d
+}
+
 // skipIfDemoted skips a test that looks for processes out of the
 // background once the test itself went there, as when the machine got busy
 // meanwhile and Gabriel put the test's session in the background (an
