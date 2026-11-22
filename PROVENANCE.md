@@ -930,6 +930,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_007_shell.md SH-14a and SH-22a | The idea, no code: Gabriel's guard turns away a search of the whole disk or the home folder, which makes macOS ask the user about each private folder |
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_007_shell.md SH-23b | The idea, no code: Mikael asks the user before an agent changes a repository's config, hooks or attributes, which their own git runs outside any sandbox |
 | 2026-11-22 | https://code.claude.com/docs/en/hooks.md (PreToolUse decision control) ; https://code.claude.com/docs/en/permission-modes.md (Protected paths) | permissionDecision ask: shown to the user in the permission prompt, auto mode's classifier does not decide it, a -p run denies it, deny wins; .git and .gitconfig as protected paths (DESIGN §3.3, §4.11) |
+| 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_048_harness_learning.md HE-02, HE-60 | The idea, no code: the journal keeps what a failed call's error said, and tools/habits.sh ranks what failed most with what worked next, evidence with no model call (DESIGN §5.2) |
 
 ## Third-party code
 

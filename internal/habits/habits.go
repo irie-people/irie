@@ -32,6 +32,7 @@ type Call struct {
 	At      time.Time // when it started
 	MS      float64   // how long it took; 0 when the journal has no end for it
 	Failed  bool      // it ended in tool.failed
+	Error   string    // what a failed call's error said, on one line (DESIGN §5.2)
 	Tests   string    // for a run of tests or checks, passed, failed or ran (DESIGN §4.8)
 }
 
@@ -46,6 +47,23 @@ type Report struct {
 	Waits    Kind   `json:"waits"`
 	Repeats  []Kind `json:"repeats"`
 	Tools    []Kind `json:"tools"`
+	// Failed is how many calls failed, and Failures what failed most.
+	Failed   int       `json:"failed"`
+	Failures []Failure `json:"failures"`
+}
+
+// Failure is a kind of call that failed, the lesson a run can teach: the
+// family and what its error said, with paths, numbers and quoted words
+// left out (FailureKind); how often, in how many sessions; an error as one
+// call gave it; and the family the agent's next call that did not fail was
+// most often, what worked next. A kind of failure that many sessions share
+// is worth a line in the instructions agents read, or a fix at its source.
+type Failure struct {
+	Kind     string `json:"kind"`
+	Calls    int    `json:"calls"`
+	Sessions int    `json:"sessions"`
+	Example  string `json:"example"`
+	Then     string `json:"then,omitempty"`
 }
 
 // Kind is a kind of call, a family: how many, in how many sessions, the
@@ -92,6 +110,7 @@ func Calls(evs []event.Event) []Call {
 			if i, ok := at[id]; ok {
 				out[i].MS, _ = e.Data["ms"].(float64)
 				out[i].Failed = e.Kind == event.ToolFailed
+				out[i].Error = e.Str("error")
 				out[i].Tests = e.Str("tests")
 			}
 		}
@@ -227,7 +246,89 @@ func Build(cs []Call, top int) Report {
 	if len(r.Repeats) > 10 {
 		r.Repeats = r.Repeats[:10]
 	}
+	r.Failed, r.Failures = failures(cs, order, byAgent)
 	return r
+}
+
+// failures counts the calls that failed, and ranks what failed most by
+// kind (FailureKind), each with what worked next: the family of the same
+// agent's next call that did not fail, the commonest.
+func failures(cs []Call, order []string, byAgent map[string][]int) (int, []Failure) {
+	failed := 0
+	kinds := map[string]*Failure{}
+	sessions := map[string]map[string]bool{}
+	shortest := map[string]int{}
+	then := map[string]map[string]int{}
+	for _, a := range order {
+		ix := byAgent[a]
+		for k, i := range ix {
+			c := cs[i]
+			if !c.Failed {
+				continue
+			}
+			failed++
+			if c.Error == "" {
+				continue
+			}
+			kind := FailureKind(c)
+			f := kinds[kind]
+			if f == nil {
+				f = &Failure{Kind: kind}
+				kinds[kind] = f
+				sessions[kind] = map[string]bool{}
+				then[kind] = map[string]int{}
+			}
+			f.Calls++
+			sessions[kind][c.Session] = true
+			if n, ok := shortest[kind]; !ok || len(c.Error) < n {
+				shortest[kind], f.Example = len(c.Error), Example(c.Error)
+			}
+			for _, j := range ix[k+1:] {
+				if !cs[j].Failed {
+					then[kind][cs[j].Family]++
+					break
+				}
+			}
+		}
+	}
+	var out []Failure
+	for kind, f := range kinds {
+		f.Sessions = len(sessions[kind])
+		best := 0
+		for fam, n := range then[kind] {
+			if n > best || n == best && fam < f.Then {
+				f.Then, best = fam, n
+			}
+		}
+		out = append(out, *f)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Calls != out[j].Calls {
+			return out[i].Calls > out[j].Calls
+		}
+		return out[i].Kind < out[j].Kind
+	})
+	return failed, out[:min(len(out), 15)]
+}
+
+var (
+	quotedRE = regexp.MustCompile("\"[^\"]*\"|'[^']*'|“[^”]*”|`[^`]*`")
+	pathRE   = regexp.MustCompile(`(?:~|\.{1,2}|\b[\w.-]+)?(?:/[\w.@+~-]+)+/?`)
+	numberRE = regexp.MustCompile(`\d+`)
+)
+
+// FailureKind is what kind of failure a failed call was: its family, and
+// what its error said with its quoted words, paths and numbers left out,
+// so that the same mistake made with other files counts as one.
+func FailureKind(c Call) string {
+	s := quotedRE.ReplaceAllString(c.Error, "'…'")
+	s = pathRE.ReplaceAllString(s, "PATH")
+	s = numberRE.ReplaceAllString(s, "N")
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > 100 {
+		s = string(r[:99]) + "…"
+	}
+	return c.Family + ": " + s
 }
 
 // work is the calls that change files or look things up, which a run of
@@ -329,6 +430,20 @@ func Print(w io.Writer, r Report) {
 		fmt.Fprintln(w, "\nThe repository's tools (calls, sessions):")
 		for _, f := range r.Tools {
 			fmt.Fprintf(w, "%7d %5d  %s\n", f.Calls, f.Sessions, f.Family)
+		}
+	}
+	if r.Failed > 0 {
+		pct := 100 * float64(r.Failed) / float64(max(r.Calls, 1))
+		if len(r.Failures) == 0 {
+			fmt.Fprintf(w, "\nCalls that failed: %d (%.1f%%). The journal keeps what their errors said from 22 Nov 2026 on, so what failed most shows in a later run.\n", r.Failed, pct)
+			return
+		}
+		fmt.Fprintf(w, "\nCalls that failed: %d (%.1f%%). What failed most (calls, sessions), and what the agent did next that worked:\n", r.Failed, pct)
+		for _, f := range r.Failures {
+			fmt.Fprintf(w, "%7d %5d  %s\n", f.Calls, f.Sessions, f.Kind)
+			if f.Then != "" {
+				fmt.Fprintf(w, "%15s then: %s\n", "", f.Then)
+			}
 		}
 	}
 }

@@ -130,6 +130,10 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 			kind = event.ToolFailed
 		}
 		data := map[string]any{"tool": tool}
+		// What the error said, for what failed most (tools/habits.sh).
+		if s := errorLine(tool, p.str("error"), p.flag("is_interrupt")); hook == "PostToolUseFailure" && s != "" {
+			data["error"] = s
+		}
 		if ms, ok := p.number("duration_ms"); ok {
 			data["ms"] = ms
 		}
@@ -313,6 +317,33 @@ func firstQuestion(input json.RawMessage) string {
 		return ""
 	}
 	return strings.Join(strings.Fields(in.Questions[0].Question), " ")
+}
+
+// errorLine is a failed call's error on one line, for the journal (DESIGN
+// §5.2): a shell command's exit code and the last line it wrote, else the
+// error's first line, cut to 200 characters. A call the user cut short has
+// none: it failed through no fault of its own.
+func errorLine(tool, err string, interrupted bool) string {
+	err = strings.TrimSpace(err)
+	if interrupted || err == "" {
+		return ""
+	}
+	lines := strings.Split(err, "\n")
+	line := strings.TrimSpace(lines[0])
+	if code, ok := strings.CutPrefix(line, "Exit code "); ok && tool == "Bash" {
+		line = "exit " + strings.TrimSpace(code)
+		for i := len(lines) - 1; i > 0; i-- {
+			if s := strings.TrimSpace(lines[i]); s != "" {
+				line += ": " + s
+				break
+			}
+		}
+	}
+	line = strings.Join(strings.Fields(line), " ")
+	if r := []rune(line); len(r) > 200 {
+		line = string(r[:199]) + "…"
+	}
+	return line
 }
 
 type hookSpecific struct {

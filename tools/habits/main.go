@@ -3,7 +3,8 @@
 // each call is a round trip that reads the agent's whole context again.
 // It also counts the habits the repository's tools are for, a grep and
 // then a read of what it found, and hand-written waits, so that a tool's
-// effect can be seen in the next run (AGENTS.md, "Stack"). The counting is
+// effect can be seen in the next run (AGENTS.md, "Stack"), and ranks what
+// failed most, with what the agent did next that worked. The counting is
 // internal/habits, which Raguel's tally shares; tools/habits.sh runs it.
 //
 //	tools/habits.sh [--days N] [--top N] [--json]
