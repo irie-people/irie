@@ -30,6 +30,18 @@ cd "$(git rev-parse --show-toplevel)"
 # IRIE unless a copy renamed it.
 eval "$(tools/brand.sh)"
 
+# A copy under another name never installs from a checkout that pushes to
+# Irie's own repository: the install would move Irie's live branch to the
+# rename and push it to Irie's main. A renamed copy installs from a clone
+# of its own (tools/rebrand.sh).
+if [ "$BRAND_SLUG" != irie ]; then
+	pushto=$(git config --get irie.push || true)
+	if [ -n "$pushto" ] && git remote get-url --push "$pushto" 2>/dev/null | grep -Eq 'irie-people/irie(\.git)?$'; then
+		echo "live: this checkout is renamed to $BRAND_NAME but pushes to Irie's own repository ($pushto, git config irie.push), so it installs nothing; install the copy from a clone of its own" >&2
+		exit 1
+	fi
+fi
+
 # Inside an Irie session IRIE_BIN names the build that started the session,
 # and `irie up` would start that one again instead of the new one.
 unset "${BRAND_ENV}_BIN"
