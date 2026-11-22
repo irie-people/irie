@@ -23,6 +23,11 @@
 //	stop:ask          Stop whose last message asks the user a question
 //	stop:asks         the same, asking again each time a Stop hook sends
 //	                  the turn on
+//	stop:faster       Stop whose last message says the change is faster,
+//	                  and stop:same one that says its output is unchanged,
+//	                  each saying so again when a Stop hook sends it on
+//	ab:<verdict>      a Bash call that runs `irie ab`, whose report says
+//	                  faster, slower, even (neither) or differs
 //	write:<file>      write a file in the agent's folder, as an edit does
 //	commit            git add -A and git commit in the agent's folder
 //	stopfail:<error>  StopFailure
@@ -121,6 +126,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 const defaultVersion = "2.1.300"
@@ -801,6 +808,8 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		a.tool(s.arg, sub)
 	case "test":
 		a.test(s.arg == "pass", sub)
+	case "ab":
+		a.ab(s.arg, sub)
 	case "permission":
 		a.permission(sub)
 	case "stop":
@@ -950,7 +959,9 @@ func loadStatusLine(value string) string {
 // that leaves a shell task running in the background, "ask" for one whose
 // last message asks the user something, "turn" for a teach-mode request
 // that the user write a part at a TODO(human), which ends in a full stop,
-// and "passes" for one that says the tests pass and keeps saying so.
+// "passes" for one that says the tests pass and keeps saying so, and
+// "faster" and "same" for one that says so of its change and keeps saying
+// so.
 func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
@@ -968,6 +979,10 @@ func (a *agent) stop(how string) {
 		msg = "Learn by doing\n\nThe notes file has its headings.\n\n**Your Task**: In notes.md, write the summary line under TODO(human).\n\nWeigh how short it can be and still be clear."
 	case "passes":
 		msg = "Done. All tests pass."
+	case "faster":
+		msg = "Done. The new build is 40% faster."
+	case "same":
+		msg = "Done. The output is unchanged."
 	}
 	for i := range 8 {
 		out := a.fire("Stop", "", map[string]any{"stop_hook_active": i > 0, "last_assistant_message": msg, "background_tasks": tasks, "session_crons": []any{}})
@@ -977,7 +992,7 @@ func (a *agent) stop(how string) {
 		}
 		a.record(map[string]any{"t": "continued", "context": more})
 		fmt.Println("↻ " + strings.SplitN(more, "\n", 2)[0])
-		if how != "asks" && how != "passes" {
+		if how != "asks" && how != "passes" && how != "faster" && how != "same" {
 			msg = "I stopped on purpose."
 		}
 	}
@@ -1111,6 +1126,38 @@ func (a *agent) test(pass bool, sub *subagent) {
 	a.fire("PostToolUseFailure", "Bash", sub.fields(map[string]any{
 		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 12, "is_interrupt": false,
 		"error": "Exit code 1\n--- FAIL: TestFake (0.00s)\n    fake_test.go:9: got 1, want 2\nFAIL\nFAIL\texample.com/fake\t0.012s\nFAIL",
+	}))
+}
+
+// ab runs `irie ab` with a Bash call (DESIGN §4.24), as Claude Code reports
+// one: a run whose outputs are the same ends with PostToolUse and its
+// report in tool_response, and one whose outputs differ exits 1, so with
+// PostToolUseFailure and the report in its error. verdict is faster,
+// slower, even or differs.
+func (a *agent) ab(verdict string, sub *subagent) {
+	id := a.toolID()
+	cmd := brand.Slug + " ab -n 10 ./gold ./new -- big.ldif"
+	input := map[string]any{"command": cmd, "description": "A/B the new build"}
+	fmt.Println("● Bash: " + cmd)
+	pre := a.fire("PreToolUse", "Bash", sub.fields(map[string]any{"tool_name": "Bash", "tool_input": input, "tool_use_id": id}))
+	if reason := denied(pre); reason != "" {
+		a.record(map[string]any{"t": "denied", "tool": "Bash", "reason": reason})
+		return
+	}
+	if verdict == "differs" {
+		a.fire("PostToolUseFailure", "Bash", sub.fields(map[string]any{
+			"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 30, "is_interrupt": false,
+			"error": "Exit code 1\noutput  differs at line 3:\n  gold  a\n  new   b\n" + brand.Slug + ": ab: new's output differs from gold's, so its times are for different work",
+		}))
+		return
+	}
+	words := "neither clearly faster nor slower"
+	if verdict == "faster" || verdict == "slower" {
+		words = verdict
+	}
+	a.fire("PostToolUse", "Bash", sub.fields(map[string]any{
+		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 30,
+		"tool_response": map[string]any{"stdout": "time   1.2s   1.5s   25% more\n\nnew is " + words + ", with the same output\n", "stderr": "", "interrupted": false, "isImage": false},
 	}))
 }
 

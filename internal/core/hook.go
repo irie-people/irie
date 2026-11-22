@@ -19,7 +19,7 @@ import (
 
 // toolInputKeys are the data a hook event takes from a tool's input, or
 // quotes from its output, which journal.tool_input = "none" leaves out.
-var toolInputKeys = []string{"summary", "question", "test_line"}
+var toolInputKeys = []string{"summary", "question", "test_line", "ab_line"}
 
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
 // Nothing holds a call yet. A session that starts may be told it can

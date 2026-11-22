@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/ab"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/testrun"
@@ -140,6 +141,11 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 					data["test_line"] = line
 				}
 			}
+			// And what an `irie ab` run said of its two builds (DESIGN §4.24).
+			if verdict, line := abRun(hook, p); verdict != "" {
+				data["ab"] = verdict
+				data["ab_line"] = line
+			}
 		}
 		return []event.Event{ev(kind, data)}, nil
 	case "PermissionRequest":
@@ -199,6 +205,32 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 		return []event.Event{ev(event.SessionEnded, with(map[string]any{}, "reason", p.str("reason")))}, nil
 	}
 	return nil, nil
+}
+
+// abRun is what a finished Bash call's `irie ab` run said (ab.Read): its
+// verdict and the line that says it, or "" when the command runs none, it
+// went to the background, or what it printed shows no verdict. A run whose
+// outputs differ exits 1, so its report is in the failure's error.
+func abRun(hook string, p object) (string, string) {
+	var in struct {
+		Command    string `json:"command"`
+		Background bool   `json:"run_in_background"`
+	}
+	json.Unmarshal(p["tool_input"], &in)
+	if !ab.Runs(in.Command) || in.Background {
+		return "", ""
+	}
+	if hook == "PostToolUseFailure" {
+		return ab.Read(p.str("error"))
+	}
+	var out struct {
+		Stdout string `json:"stdout"`
+		Stderr string `json:"stderr"`
+	}
+	if json.Unmarshal(p["tool_response"], &out) != nil {
+		out.Stdout = p.str("tool_response")
+	}
+	return ab.Read(out.Stdout + "\n" + out.Stderr)
 }
 
 // testRun is what a finished Bash call's tests showed (testrun.Read): ""

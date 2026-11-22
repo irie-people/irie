@@ -13,7 +13,10 @@ package core
 // work lands, however it lands. It also holds the agent to its word on its
 // tests: a last message that says the tests pass, while the latest test run
 // of the jot's agents failed as the hooks read it, sends the agent back
-// likewise, and stands on its row if the turn ends with it. A jot you close
+// likewise, and stands on its row if the turn ends with it. So does one
+// that says it made something faster while its latest `irie ab` run said
+// slower, or that the output is the same while that run said it differs
+// (DESIGN §4.24). A jot you close
 // is done: the dog never sends it back or brings it back, whatever it left,
 // and lists it only when commits of its work had not landed as it closed,
 // for a week after, so a close in a hurry still leaves a trail
@@ -30,6 +33,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/ab"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
@@ -78,6 +82,13 @@ type dogState struct {
 // failure, and its command.
 type testRun struct {
 	outcome, line, cmd string
+}
+
+// abRun is the latest `irie ab` run of a session's agents, as the hooks
+// read it (ab.Read): its verdict, the line of its output that says it, and
+// its command.
+type abRun struct {
+	verdict, line, cmd string
 }
 
 // dogStop is the dog's word at the end of a jot's turn.
@@ -276,7 +287,7 @@ func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 		c.mu.Unlock()
 		return dogStop{}
 	}
-	l, repos, nudged, teach, run := c.lookAt(x, true), c.knownRepos(), x.track.nudged, x.tutor == config.TutorTeach, x.track.test
+	l, repos, nudged, teach, run, abr := c.lookAt(x, true), c.knownRepos(), x.track.nudged, x.tutor == config.TutorTeach, x.track.test, x.track.ab
 	dear := c.dogDear(x, time.Now())
 	c.mu.Unlock()
 
@@ -288,8 +299,14 @@ func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 
 	e := evs[end]
 	st := dogStop{loose: loose}
-	if run.outcome == testrun.Failed && testrun.SaysPassed(e.Str("message")) {
+	msg := e.Str("message")
+	switch {
+	case run.outcome == testrun.Failed && testrun.SaysPassed(msg):
 		st.unproven = ipc.UnprovenTests
+	case abr.verdict == ab.Slower && ab.SaysFaster(msg):
+		st.unproven = ipc.UnprovenFaster
+	case abr.verdict == ab.Differs && ab.SaysSame(msg):
+		st.unproven = ipc.UnprovenSame
 	}
 	waiting, _ := e.Int("waiting")
 	switch {
@@ -307,7 +324,7 @@ func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 		// Its row says what is left, and you decide (usage.wake_most).
 		return st
 	}
-	st.note = unfinished(loose, st.unproven, run)
+	st.note = unfinished(loose, st.unproven, run, abr)
 	return st
 }
 
@@ -360,7 +377,7 @@ func asksUser(msg string) bool {
 
 // unfinished is what the dog tells an agent whose jot is not through, or
 // whose last message says what its record contradicts.
-func unfinished(loose []looseIn, unproven string, run testRun) string {
+func unfinished(loose []looseIn, unproven string, run testRun, abr abRun) string {
 	var b strings.Builder
 	if len(loose) > 0 {
 		b.WriteString("[" + brand.Name + "] The jot dog: this task is not through yet.")
@@ -370,18 +387,55 @@ func unfinished(loose []looseIn, unproven string, run testRun) string {
 	for _, l := range looseLines(loose) {
 		b.WriteString("\n- " + l)
 	}
-	if unproven == ipc.UnprovenTests {
+	switch unproven {
+	case ipc.UnprovenTests:
 		b.WriteString("\n- " + failedRun(run))
+	case ipc.UnprovenFaster, ipc.UnprovenSame:
+		b.WriteString("\n- " + abSaid(unproven, abr))
 	}
 	if len(loose) > 0 {
 		b.WriteString("\nFinish it now: commit your work, then land it the way this repo's AGENTS.md or CLAUDE.md says. " +
 			"If an install or another session holds you up, wait for it and try again. " +
 			"If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
 	}
-	if unproven == ipc.UnprovenTests {
+	switch unproven {
+	case ipc.UnprovenTests:
 		b.WriteString("\nRun the tests again before you say they pass, and report what they show: if some still fail, say which and why.")
+	case ipc.UnprovenFaster:
+		b.WriteString("\nMeasure it again with `" + brand.Slug + " ab` before you say it is faster, and report what it shows.")
+	case ipc.UnprovenSame:
+		b.WriteString("\nCompare it again with `" + brand.Slug + " ab` before you say the output is the same: say what differs, and whether it should.")
 	}
 	return b.String()
+}
+
+// abSaid says what the latest `irie ab` run said, against the agent's word.
+func abSaid(unproven string, abr abRun) string {
+	s := "You said it is faster"
+	if unproven == ipc.UnprovenSame {
+		s = "You said the output is the same"
+	}
+	s += ", but your last `" + brand.Slug + " ab` run"
+	if cmd := quoted(abr.cmd); cmd != "" {
+		s += ", `" + cmd + "`,"
+	}
+	if abr.line == "" {
+		return s + " said otherwise."
+	}
+	return s + " said: " + strings.TrimSuffix(abr.line, ".") + "."
+}
+
+// quoted is a command as the dog quotes it: its first cmdMax bytes.
+func quoted(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	if len(cmd) > cmdMax {
+		n := cmdMax
+		for n > 0 && !utf8.RuneStart(cmd[n]) {
+			n--
+		}
+		cmd = cmd[:n] + "…"
+	}
+	return cmd
 }
 
 // cmdMax is how much of a test run's command the dog quotes, in bytes.
@@ -390,14 +444,7 @@ const cmdMax = 100
 // failedRun says that the latest test run failed, against the agent's word.
 func failedRun(run testRun) string {
 	s := "You said the tests pass, but the last test run failed"
-	if cmd := strings.TrimSpace(run.cmd); cmd != "" {
-		if len(cmd) > cmdMax {
-			n := cmdMax
-			for n > 0 && !utf8.RuneStart(cmd[n]) {
-				n--
-			}
-			cmd = cmd[:n] + "…"
-		}
+	if cmd := quoted(run.cmd); cmd != "" {
 		s = "You said the tests pass, but the last test run, `" + cmd + "`, failed"
 	}
 	if run.line != "" {
