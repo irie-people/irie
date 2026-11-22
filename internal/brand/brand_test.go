@@ -87,6 +87,105 @@ func TestSwiftIsCurrent(t *testing.T) {
 	}
 }
 
+// pesto is text for a copy named Pesto.
+func pesto(s string) string { return text(s, "Pesto", "pesto", "PESTO", "https://pesto.example.com/") }
+
+// TestText: a copy's texts send its people and agents to its own command,
+// folders, variables and guide, and keep the ids, keys and links that are
+// data.
+func TestText(t *testing.T) {
+	for in, want := range map[string]string{
+		"Irie's sidebar":                                       "Pesto's sidebar",
+		"run `irie up` first":                                  "run `pesto up` first",
+		"type `irie`":                                          "type `pesto`",
+		"irie ctl dog lists them":                              "pesto ctl dog lists them",
+		"irie chat post acme:#news - <<'POST'":                 "pesto chat post acme:#news - <<'POST'",
+		"h('code', { text: 'irie remote pair' })":              "h('code', { text: 'pesto remote pair' })",
+		"goes through irie away":                               "goes through pesto away",
+		"in `~/.config/irie/config.toml`":                      "in `~/.config/pesto/config.toml`",
+		"in `$XDG_STATE_HOME/irie/chain`":                      "in `$XDG_STATE_HOME/pesto/chain`",
+		"a branch irie/fix-it":                                 "a branch pesto/fix-it",
+		"/irie:out-of-sight":                                   "/pesto:out-of-sight",
+		"$IRIE_BIN and IRIE_SESSION":                           "$PESTO_BIN and PESTO_SESSION",
+		`url = "https://irie-people.github.io/irie/keys.html"`: `url = "https://pesto.example.com/keys.html"`,
+		// Data, and links that are not the guide's, stay.
+		`id = "irie.park"`:                     `id = "irie.park"`,
+		"localStorage.getItem('irie.task')":    "localStorage.getItem('irie.task')",
+		"{ client: 'irie-phone' }":             "{ client: 'irie-phone' }",
+		"#{@irie_role}":                        "#{@irie_role}",
+		"https://github.com/irie-people/irie":  "https://github.com/irie-people/irie",
+		"go get github.com/irie-people/irie/x": "go get github.com/irie-people/irie/x",
+		"`irie up` or `go run ./cmd/irie`":     "`pesto up` or `go run ./cmd/irie`",
+		"see mac/Sources/Irie/Spaces.swift":    "see mac/Sources/Irie/Spaces.swift",
+		"fairies":                              "fairies",
+	} {
+		if got := pesto(in); got != want {
+			t.Errorf("text(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// Irie's own names leave a text as it is.
+	for _, s := range []string{"`irie up`, irie ctl, ~/.config/irie/, Irie, IRIE_BIN", guide + "keys.html"} {
+		if got := text(s, "Irie", "irie", "IRIE", guide); got != s {
+			t.Errorf("Irie's own text(%q) = %q", s, got)
+		}
+	}
+}
+
+// TestTextsTellTheCommand: every text that Text renames, the skills, the
+// arch agents' words, the tips and the phone app's pages, names the command
+// where Text can tell it from data, so a copy's texts never send its people
+// or agents to Irie's.
+func TestTextsTellTheCommand(t *testing.T) {
+	var files []string
+	for _, pat := range []string{
+		"internal/skills/bundled/*/*.md", "internal/skills/bundled/*/*/*.md",
+		"internal/arch/agents/*.md", "internal/learn/learn.toml",
+		"internal/remote/web/*", "internal/remote/web/*/*",
+	} {
+		m, err := filepath.Glob(filepath.Join(root, pat))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, m...)
+	}
+	if len(files) < 10 {
+		t.Fatalf("found %d texts: has a folder moved?", len(files))
+	}
+	for _, path := range files {
+		switch filepath.Ext(path) {
+		case ".md", ".toml", ".html", ".js", ".css", ".webmanifest", ".json":
+		default:
+			continue
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(b)
+		rel, _ := filepath.Rel(root, path)
+		line := func(i int) int { return 1 + strings.Count(s[:i], "\n") }
+		for i := 0; ; i++ {
+			j := strings.Index(s[i:], "irie")
+			if j < 0 {
+				break
+			}
+			i += j
+			starts := i == 0 || !strings.ContainsRune("_.-@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", rune(s[i-1]))
+			after := strings.TrimLeft(s[i+4:], " ")
+			switch {
+			// A sentence that ends on the command: Text keeps it, as it
+			// keeps an id such as irie.park.
+			case starts && strings.HasPrefix(s[i+4:], ".") && (i+5 == len(s) || strings.ContainsRune(" \t\r\n'\"`)", rune(s[i+5]))):
+				t.Errorf("%s:%d: a sentence ends on irie, which a copy keeps as it would an id: put the command in backquotes", rel, line(i))
+			// In a script, irie as a word is a variable, which a copy's
+			// rename would break.
+			case filepath.Ext(path) == ".js" && commandWord(s, i) && (strings.HasPrefix(after, "=") && !strings.HasPrefix(after, "==") || strings.HasPrefix(after, "(")):
+				t.Errorf("%s:%d: irie names something in the script, which a copy's rename would change: call it something else", rel, line(i))
+			}
+		}
+	}
+}
+
 // TestExe: a long name, or one with spaces or letters outside ASCII, still
 // makes an executable pgrep -x finds.
 func TestExe(t *testing.T) {
