@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -19,7 +20,7 @@ const leftoverUs = "/run/alice/irie/core.sock"
 
 func TestReadServerTellsAnIrieFromOtherServers(t *testing.T) {
 	uid := strconv.Itoa(os.Getuid())
-	ours := []string{"IRIE_SOCKET=" + leftoverUs, "IRIE_SESSION=s1", "TMUX_TMPDIR=/t"}
+	ours := []string{brand.Env("SOCKET") + "=" + leftoverUs, brand.Env("SESSION") + "=s1", "TMUX_TMPDIR=/t"}
 	for _, c := range []struct {
 		name string
 		argv []string
@@ -27,14 +28,14 @@ func TestReadServerTellsAnIrieFromOtherServers(t *testing.T) {
 		ok   bool
 		want tmuxServer
 	}{
-		{"an Irie an agent started", []string{"tmux", "-u", "-L", "irie-upcheck-1", "-f", "/s/irie/tmux.conf", "new-session", "-d", "-s", "irie-agents", "-n", "core", "-x", "80", "-y", "24", "--", "/x/irie", "core", "--supervise"}, ours,
-			true, tmuxServer{path: "/t/tmux-" + uid + "/irie-upcheck-1", socket: "irie-upcheck-1", irie: true, ours: true, session: "s1"}},
-		{"its team server", []string{"tmux", "-u", "-L", "irie-upcheck-1-teams", "-f", "/s/irie/tmux-teams.conf", "new-session", "-d", "-s", "s38x", "--", "sh"}, []string{"IRIE_SOCKET=" + leftoverUs, "TMUX_TMPDIR=/t"},
-			true, tmuxServer{path: "/t/tmux-" + uid + "/irie-upcheck-1-teams", socket: "irie-upcheck-1-teams", side: "-teams", ours: true}},
+		{"an Irie an agent started", []string{"tmux", "-u", "-L", brand.Slug + "-upcheck-1", "-f", "/s/irie/tmux.conf", "new-session", "-d", "-s", brand.Slug + "-agents", "-n", "core", "-x", "80", "-y", "24", "--", "/x/irie", "core", "--supervise"}, ours,
+			true, tmuxServer{path: "/t/tmux-" + uid + "/" + brand.Slug + "-upcheck-1", socket: brand.Slug + "-upcheck-1", irie: true, ours: true, session: "s1"}},
+		{"its team server", []string{"tmux", "-u", "-L", brand.Slug + "-upcheck-1-teams", "-f", "/s/irie/tmux-teams.conf", "new-session", "-d", "-s", "s38x", "--", "sh"}, []string{brand.Env("SOCKET") + "=" + leftoverUs, "TMUX_TMPDIR=/t"},
+			true, tmuxServer{path: "/t/tmux-" + uid + "/" + brand.Slug + "-upcheck-1-teams", socket: brand.Slug + "-upcheck-1-teams", side: "-teams", ours: true}},
 		{"a server an agent started for something else", []string{"tmux", "-L", "devserver", "new-session", "-d", "-s", "web", "while :; do sleep 1; done"}, ours,
 			true, tmuxServer{path: "/t/tmux-" + uid + "/devserver", socket: "devserver", ours: true, session: "s1"}},
-		{"another core's Irie, at a path", []string{"tmux", "-S", "/tmp/x/irie-demo", "new", "-d", "-s", "irie-agents"}, []string{"IRIE_SOCKET=/elsewhere.sock", "IRIE_SESSION=s1"},
-			true, tmuxServer{path: "/tmp/x/irie-demo", socket: "irie-demo", irie: true}},
+		{"another core's Irie, at a path", []string{"tmux", "-S", "/tmp/x/" + brand.Slug + "-demo", "new", "-d", "-s", brand.Slug + "-agents"}, []string{brand.Env("SOCKET") + "=/elsewhere.sock", brand.Env("SESSION") + "=s1"},
+			true, tmuxServer{path: "/tmp/x/" + brand.Slug + "-demo", socket: brand.Slug + "-demo", irie: true}},
 		{"a -teams name without the team conf", []string{"tmux", "-L", "my-teams", "new-session", "-d"}, nil,
 			true, tmuxServer{path: "/tmp/tmux-" + uid + "/my-teams", socket: "my-teams"}},
 		{"a client", []string{"tmux", "-S", "/private/tmp/tmux-501/irie", "attach-session", "-t", "irie"}, nil, false, tmuxServer{}},
@@ -51,8 +52,8 @@ func TestReadServerTellsAnIrieFromOtherServers(t *testing.T) {
 func TestLeftoverWhyStopsOnlyIriesWhoseRunIsOver(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	hour := func(h int) time.Time { return now.Add(-time.Duration(h) * time.Hour) }
-	test := tmuxServer{socket: "irie-test-0b18d93c", irie: true, started: hour(18)}
-	agent := tmuxServer{socket: "irie-upcheck-73820", irie: true, ours: true, session: "s1", started: hour(3)}
+	test := tmuxServer{socket: brand.Slug + "-test-0b18d93c", irie: true, started: hour(18)}
+	agent := tmuxServer{socket: brand.Slug + "-upcheck-73820", irie: true, ours: true, session: "s1", started: hour(3)}
 	open := map[string]bool{"s1": true}
 	for _, c := range []struct {
 		name  string
@@ -65,14 +66,14 @@ func TestLeftoverWhyStopsOnlyIriesWhoseRunIsOver(t *testing.T) {
 		{"a test run's, its binary may still run", leftoverLook{tests: []time.Time{hour(19)}}, test, open, false},
 		{"a test run's, binaries that started after it", leftoverLook{tests: []time.Time{hour(1), now}}, test, open, true},
 		{"a test run's, a binary's start unread", leftoverLook{blind: true}, test, open, false},
-		{"a test run's, a day old", leftoverLook{tests: []time.Time{hour(30)}}, tmuxServer{socket: "irie-test-1", started: hour(25)}, open, true},
-		{"a test run's, its start unread", leftoverLook{}, tmuxServer{socket: "irie-test-1"}, open, false},
+		{"a test run's, a day old", leftoverLook{tests: []time.Time{hour(30)}}, tmuxServer{socket: brand.Slug + "-test-1", started: hour(25)}, open, true},
+		{"a test run's, its start unread", leftoverLook{}, tmuxServer{socket: brand.Slug + "-test-1"}, open, false},
 		{"an agent's, its session open", leftoverLook{}, agent, open, false},
 		{"an agent's, its session closed", leftoverLook{}, agent, map[string]bool{}, true},
-		{"an agent's, a day old", leftoverLook{}, tmuxServer{socket: "irie-demo", irie: true, ours: true, session: "s1", started: hour(25)}, open, true},
-		{"another core's agent's", leftoverLook{}, tmuxServer{socket: "irie-demo", irie: true, session: "s1", started: hour(48)}, map[string]bool{}, false},
+		{"an agent's, a day old", leftoverLook{}, tmuxServer{socket: brand.Slug + "-demo", irie: true, ours: true, session: "s1", started: hour(25)}, open, true},
+		{"another core's agent's", leftoverLook{}, tmuxServer{socket: brand.Slug + "-demo", irie: true, session: "s1", started: hour(48)}, map[string]bool{}, false},
 		{"an agent's server that is no Irie", leftoverLook{}, tmuxServer{socket: "devserver", ours: true, session: "s1", started: hour(48)}, map[string]bool{}, false},
-		{"the user's own Irie", leftoverLook{}, tmuxServer{socket: "irie-mine", irie: true, started: hour(200)}, map[string]bool{}, false},
+		{"the user's own Irie", leftoverLook{}, tmuxServer{socket: brand.Slug + "-mine", irie: true, started: hour(200)}, map[string]bool{}, false},
 	} {
 		why := c.look.leftoverWhy(c.s, c.open, now)
 		if (why != "") != c.stops {
@@ -104,7 +105,7 @@ func TestLeftoversTakeSideServersAlong(t *testing.T) {
 	if want := []string{"/t/a", "/t/a-dock", "/t/a-teams", "/t/gone-teams"}; !slices.Equal(stopped, want) {
 		t.Errorf("stopped %v, want %v (%v)", stopped, want, got)
 	}
-	if !strings.HasPrefix(got["/t/a-teams"], "its Irie stops") || got["/t/gone-teams"] != "its Irie is gone" {
+	if !strings.HasPrefix(got["/t/a-teams"], "its "+brand.Name+" stops") || got["/t/gone-teams"] != "its "+brand.Name+" is gone" {
 		t.Errorf("reasons: %v", got)
 	}
 }
@@ -112,9 +113,9 @@ func TestLeftoversTakeSideServersAlong(t *testing.T) {
 func TestALeftoverTestServerStopsWithWhatItRuns(t *testing.T) {
 	bin := testutil.NeedTmux(t)
 	dir := testutil.ShortDir(t)
-	name := fmt.Sprintf("irie-test-left%d", os.Getpid())
-	cmd := exec.Command(bin, "-L", name, "-f", "/dev/null", "new-session", "-d", "-s", "irie-agents", "sleep 300")
-	cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+dir, "IRIE_SOCKET="+leftoverUs, "IRIE_SESSION=s1")
+	name := brand.Slug + fmt.Sprintf("-test-left%d", os.Getpid())
+	cmd := exec.Command(bin, "-L", name, "-f", "/dev/null", "new-session", "-d", "-s", brand.Slug+"-agents", "sleep 300")
+	cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+dir, brand.Env("SOCKET")+"="+leftoverUs, brand.Env("SESSION")+"=s1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("tmux: %v: %s", err, out)
 	}
@@ -129,7 +130,7 @@ func TestALeftoverTestServerStopsWithWhatItRuns(t *testing.T) {
 		}
 		return l.servers[i], true
 	}
-	l := lookForLeftovers(tb, []string{"irie", "irie-teams"}, leftoverUs, os.Getpid())
+	l := lookForLeftovers(tb, []string{brand.Slug, brand.Slug + "-teams"}, leftoverUs, os.Getpid())
 	s, ok := find(l)
 	if !ok {
 		t.Fatalf("the look did not find %s", name)

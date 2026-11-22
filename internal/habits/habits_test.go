@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 )
 
 func TestFamilyNamesTheCommandThatCounts(t *testing.T) {
 	for cmd, want := range map[string]string{
 		`cd /home/alice/irie && git -C /home/alice/irie log --oneline -5`:                   "git log",
-		`"$IRIE_BIN" ctl list 2>&1 | head -80`:                                              "irie ctl list",
+		`"$` + brand.Env("BIN") + `" ctl list 2>&1 | head -80`:                              brand.Slug + " ctl list",
 		"S=/tmp/x; python3 - \"$S/a\" <<'EOF'\nimport os\nos.system(\"git push\")\nEOF\nls": "python3",
 		`sed -n '1,20p' internal/core/dog.go`:                                               "sed -n",
 		`sed -i '' 's/a/b/' file.go`:                                                        "sed -i",

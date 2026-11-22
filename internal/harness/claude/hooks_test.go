@@ -389,6 +389,10 @@ func fakePluginCLI(t *testing.T, list string, code int, stderr string) string {
 	return path
 }
 
+// slugged puts the brand's slug where a plugin list names irie: the plugin a
+// session loads is called after the product.
+func slugged(s string) string { return strings.ReplaceAll(s, "irie", brand.Slug) }
+
 func TestProbeChecksThatAPluginLoads(t *testing.T) {
 	loads := `[{"id": "swift-lsp@claude-plugins-official", "scope": "user", "enabled": true},
 	           {"id": "irie@inline", "scope": "session", "enabled": true}]`
@@ -403,7 +407,7 @@ func TestProbeChecksThatAPluginLoads(t *testing.T) {
 		{"not loaded", `[{"id": "swift-lsp@claude-plugins-official", "enabled": true}]`, "", 0, "did not load a plugin"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			path := fakePluginCLI(t, c.list, c.code, c.stderr)
+			path := fakePluginCLI(t, slugged(c.list), c.code, c.stderr)
 			p := Harness{}.Probe(config.Profile{Command: path}, os.Environ())
 			joined := strings.Join(p.Warnings, "\n")
 			if c.want == "" {
@@ -412,7 +416,7 @@ func TestProbeChecksThatAPluginLoads(t *testing.T) {
 				}
 				return
 			}
-			if p.Flags["--plugin-dir"] || !strings.Contains(joined, "Irie's skills left out: ") || !strings.Contains(joined, c.want) {
+			if p.Flags["--plugin-dir"] || !strings.Contains(joined, brand.Name+"'s skills left out: ") || !strings.Contains(joined, slugged(c.want)) {
 				t.Errorf("probe = %+v, want no --plugin-dir and a warning with %q", p, c.want)
 			}
 		})
@@ -428,8 +432,8 @@ func TestPluginListSaysWhy(t *testing.T) {
 		{`[{"id": "irie@inline", "enabled": true}, {"id": "irie@skills-dir", "enabled": true}]`, "a plugin of your own is named irie (irie@skills-dir)"},
 		{`Warning: something`, "Claude Code's list of plugins could not be read"},
 	} {
-		if got := pluginList(c.out); got != c.want {
-			t.Errorf("pluginList(%s) = %q, want %q", c.out, got, c.want)
+		if got := pluginList(slugged(c.out)); got != slugged(c.want) {
+			t.Errorf("pluginList(%s) = %q, want %q", c.out, got, slugged(c.want))
 		}
 	}
 }

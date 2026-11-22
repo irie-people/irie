@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
@@ -338,7 +339,7 @@ func TestUndoOfWhatIsAlreadySoSettlesOrSkips(t *testing.T) {
 	})
 
 	ch := c.ask(dirUndo)
-	if ch.Question != `"ghost" is gone: Irie no longer has it, open or closed.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSkip, ipc.ChoiceCancel}) || !ch.Options[0].Recommended {
+	if ch.Question != `"ghost" is gone: `+brand.Name+` no longer has it, open or closed.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSkip, ipc.ChoiceCancel}) || !ch.Options[0].Recommended {
 		t.Errorf("question %+v", ch)
 	}
 	if r := c.answer(dirUndo, ch, ipc.ChoiceSkip); r.Did != ipc.DidSkip {

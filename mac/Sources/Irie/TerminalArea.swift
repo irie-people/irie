@@ -15,6 +15,9 @@ struct TerminalArea: View {
     /// The terminal's frame (or the conversation's) in the window, which the
     /// Teach tile sits over the middle of (TeachTile.swift).
     @State private var mainFrame: CGRect?
+    /// This side's frame in the window, whose part of the title bar holds
+    /// the session's name and buttons (SessionBarItems.titleWidth).
+    @State private var barFrame: CGRect?
 
     private var selected: Session? { store.selectedRow }
 
@@ -182,6 +185,8 @@ struct TerminalArea: View {
             }
             if zen == nil { PhraseBar() }
         }
+        .background(GeometryReader { g in Color.clear.preference(key: BarFrame.self, value: g.frame(in: .global)) })
+        .onPreferenceChange(BarFrame.self) { barFrame = $0 }
         .background(Theme.ground.ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
         // The window's own title. The bar hides it (IrieApp.showsTitle),
@@ -195,7 +200,7 @@ struct TerminalArea: View {
                 ToolbarItem(placement: .automatic) { TitleName() }
                 ToolbarItem(placement: .automatic) { Counts() }
             } else {
-                SessionBarItems.items(store: store, reversed: false)
+                SessionBarItems.items(store: store, reversed: false, titleWidth: SessionBarItems.titleWidth(in: barFrame))
             }
         }
     }
@@ -488,6 +493,12 @@ private struct MainFrame: PreferenceKey {
     static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
 }
 
+/// The terminal side's frame in the window, under its part of the title bar.
+private struct BarFrame: PreferenceKey {
+    static var defaultValue: CGRect? = nil
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
+}
+
 private struct Placeholder: View {
     let title: String
     let text: String
@@ -520,26 +531,55 @@ private struct Placeholder: View {
 /// is: ToolbarContent's own body is not.
 @MainActor
 enum SessionBarItems {
+    /// What the session's buttons after its name take of the bar: four,
+    /// each with the bar's gap after it, and the bar's end.
+    static let buttonsWidth: CGFloat = 4 * 44 + 16
+    /// Where the window's own buttons end, from the window's left edge: the
+    /// session's part of the bar holds them while the sidebar is folded
+    /// away.
+    static let windowButtonsEnd: CGFloat = 90
+    /// The least the name keeps, a few words of it, however narrow the bar.
+    static let minTitle: CGFloat = 120
+    /// The widest the name may be before the bar knows its room.
+    static let unmeasured: CGFloat = 320
+
+    /// The widest the session's name and subtitle may be, in its part of the
+    /// bar, which lies over `frame` (in the window): what is left once the
+    /// window's buttons over it and the session's own buttons have their
+    /// room. macOS's toolbar judges an item by its full width, so a title as
+    /// wide as a long subtitle pushed all four buttons into the overflow
+    /// menu (2026-11-22); kept to this, a long subtitle trails off instead
+    /// (Roots' principles §4.10), and a short one keeps its own width.
+    static func titleWidth(in frame: CGRect?) -> CGFloat {
+        guard let frame, frame.width > 0 else { return unmeasured }
+        let windowButtons = max(0, windowButtonsEnd - frame.minX)
+        return max(minTitle, frame.width - windowButtons - buttonsWidth - 8)
+    }
+
     @ToolbarContentBuilder
-    static func items(store: Store, reversed: Bool) -> some ToolbarContent {
+    static func items(store: Store, reversed: Bool, titleWidth: CGFloat = unmeasured) -> some ToolbarContent {
         let selected = store.selectedRow
         // The bar's only title: the name and subtitle centre on its
         // midline beside the button.
         ToolbarItem(placement: reversed ? .automatic : .principal) {
+            let subtitle = selected.map { TerminalArea.subtitle($0) } ?? "No session"
             VStack(alignment: .leading, spacing: 0) {
                 Text(selected?.name ?? "\(Brand.name)")
                     .font(.system(size: 13, weight: .semibold))
                 // Its state and the rest, in its agent's colour while it
                 // works, as its card and the terminal's frame.
-                Text(selected.map { TerminalArea.subtitle($0) } ?? "No session")
+                Text(subtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
             }
             .lineLimit(1)
-            // Beside the buttons rather than centred, it keeps to a width,
-            // so a long name never pushes them into the overflow menu.
-            .frame(idealWidth: reversed ? 300 : nil, maxWidth: reversed ? 360 : .infinity, maxHeight: .infinity, alignment: .leading)
+            // It keeps to a width, so a long name or subtitle trails off
+            // rather than push the buttons into the overflow menu: beside
+            // them, reversed, a set one; centred, what the bar leaves them.
+            .frame(idealWidth: reversed ? 300 : nil, maxWidth: reversed ? 360 : titleWidth, maxHeight: .infinity, alignment: .leading)
             .padding(.leading, reversed ? 6 : 0)
+            // All of it, cut short or not.
+            .help("\(selected?.name ?? "\(Brand.name)")\n\(subtitle)")
         }
         ToolbarItem(placement: reversed ? .automatic : .primaryAction) {
             // The session's helpers, in its Helpers card beside the

@@ -165,11 +165,11 @@ func run(args []string) int {
 	case "skills":
 		err = skillsCmd(args)
 	case "help", "-h", "--help":
-		fmt.Print(usage)
+		fmt.Print(aligned(usage))
 	default:
 		pc, ok := pluginCmds[name]
 		if !ok {
-			fmt.Fprintf(os.Stderr, brand.Slug+": unknown command %q\n\n%s", name, usage)
+			fmt.Fprintf(os.Stderr, brand.Slug+": unknown command %q\n\n%s", name, aligned(usage))
 			return 2
 		}
 		if pc.code != nil {
@@ -180,7 +180,8 @@ func run(args []string) int {
 		err = pc.run(args)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, brand.Slug+":", err)
+		// A usage error holds a help text, laid out for Irie's command.
+		fmt.Fprintln(os.Stderr, brand.Slug+":", aligned(err.Error()))
 		var ec exitCode
 		if errors.As(err, &ec) {
 			return ec.code

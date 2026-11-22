@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/tmux"
 )
@@ -55,7 +56,7 @@ func TestFirstRunWithoutTmuxSaysWhatIsMissingAndStops(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "tmux") {
 		t.Errorf("firstRun = %v", err)
 	}
-	for _, want := range []string{"Irie needs a few things", "✕ tmux", "not installed", "✕ Claude Code", "`irie setup`"} {
+	for _, want := range []string{brand.Name + " needs a few things", "✕ tmux", "not installed", "✕ Claude Code", "`" + brand.Slug + " setup`"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("no %q in:\n%s", want, out.String())
 		}
@@ -80,7 +81,7 @@ func TestFirstRunSignedOutStartsAnyway(t *testing.T) {
 	if err := firstRun(config.Default(), strings.NewReader(""), &out); err != nil {
 		t.Errorf("firstRun = %v", err)
 	}
-	if s := out.String(); !strings.Contains(s, "✕ Signed in") || !strings.Contains(s, "Starting Irie anyway") {
+	if s := out.String(); !strings.Contains(s, "✕ Signed in") || !strings.Contains(s, "Starting "+brand.Name+" anyway") {
 		t.Errorf("printed:\n%s", s)
 	}
 }
@@ -107,8 +108,8 @@ func TestSetupAddsTheLineToThePATHWithAYes(t *testing.T) {
 		t.Fatal(err)
 	}
 	script(t, lb, "claude", `case "$1" in --version) echo "2.1.316 (Claude Code)";; auth) echo '{"loggedIn": true}';; esac`)
-	script(t, lb, "irie", "")
-	t.Setenv("IRIE_BIN", filepath.Join(lb, "irie"))
+	script(t, lb, brand.Slug, "")
+	t.Setenv(brand.Env("BIN"), filepath.Join(lb, brand.Slug))
 	var out bytes.Buffer
 	if err := setupIrie([]string{"--yes"}, strings.NewReader(""), &out); err != nil {
 		t.Fatalf("setup = %v:\n%s", err, out.String())
@@ -117,7 +118,7 @@ func TestSetupAddsTheLineToThePATHWithAYes(t *testing.T) {
 	if !strings.Contains(string(b), `export PATH="$HOME/.local/bin:$PATH"`) {
 		t.Errorf(".zshrc =\n%s\nprinted:\n%s", b, out.String())
 	}
-	if !strings.Contains(out.String(), "Everything irie.") {
+	if !strings.Contains(out.String(), "Everything "+brand.Slug+".") {
 		t.Errorf("printed:\n%s", out.String())
 	}
 }
@@ -139,7 +140,7 @@ func TestSetupRunsAFixAndChecksAgain(t *testing.T) {
 	if len(ran) != 1 || ran[0][1] != "auth" || ran[0][2] != "login" {
 		t.Errorf("ran %q", ran)
 	}
-	if s := out.String(); !strings.Contains(s, "✓ Signed in") || !strings.Contains(s, "Everything irie.") {
+	if s := out.String(); !strings.Contains(s, "✓ Signed in") || !strings.Contains(s, "Everything "+brand.Slug+".") {
 		t.Errorf("printed:\n%s", s)
 	}
 }

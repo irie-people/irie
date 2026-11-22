@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
@@ -110,7 +111,7 @@ func prepare(t *testing.T, a agentConfig) *coreEnv {
 	bin := testutil.BuildIrie(t)
 	fake := testutil.BuildFakeAgent(t)
 	e := testutil.NewEnv(t)
-	t.Setenv("IRIE_BIN", bin)
+	t.Setenv(brand.Env("BIN"), bin)
 	e.WriteConfig(t, a.toml(fake))
 	p, err := paths.FromEnv()
 	if err != nil {
@@ -270,8 +271,8 @@ func TestUpReplacesACoreAndSidebarOfAnotherVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	version := strings.TrimPrefix(strings.TrimSpace(string(v)), "irie ")
-	t.Setenv("IRIE_BIN", other)
+	version := strings.TrimPrefix(strings.TrimSpace(string(v)), brand.Slug+" ")
+	t.Setenv(brand.Env("BIN"), other)
 	if out, err := exec.Command(other, "up").CombinedOutput(); err != nil {
 		t.Fatalf("irie up: %v\n%s", err, out)
 	}
@@ -538,7 +539,7 @@ func TestSidebarComesBackWithin2s(t *testing.T) {
 	})
 	testutil.Eventually(t, bound, "the new sidebar did not draw", func() bool {
 		out, _ := c.TryTmux("capture-pane", "-p", "-t", tmux.Sidebar)
-		return strings.Contains(out, "☀ Irie")
+		return strings.Contains(out, "☀ "+brand.Name)
 	})
 }
 
@@ -600,7 +601,7 @@ func TestTheSidebarSpawnsAndShows(t *testing.T) {
 
 	testutil.Eventually(t, 5*time.Second, "the sidebar and placeholder did not appear", func() bool {
 		s := screen()
-		return strings.Contains(s, "☀ Irie") && strings.Contains(s, "type a new task") && strings.Contains(s, "›")
+		return strings.Contains(s, "☀ "+brand.Name) && strings.Contains(s, "type a new task") && strings.Contains(s, "›")
 	})
 
 	dir := t.TempDir()

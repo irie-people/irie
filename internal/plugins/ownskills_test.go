@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/skills"
 )
@@ -70,7 +71,7 @@ run = ["`+server+`", "mcp", "--db", "~/grants.db"]
 	e.Config.Plugins.Manifests["grants-app"] = true
 	p = mine(t, e, "grants-app")
 	if x := part(t, p, "skills.grants"); !p.On || x.Title != "Grant work" || x.State != ipc.PartReady ||
-		x.Detail != "Sessions that start now get /irie:grants." || !reflect.DeepEqual(x.Brings, []string{"a skill for agents' sessions, /irie:grants"}) {
+		x.Detail != "Sessions that start now get /"+brand.Slug+":grants." || !reflect.DeepEqual(x.Brings, []string{"a skill for agents' sessions, /" + brand.Slug + ":grants"}) {
 		t.Errorf("on, the skill = %+v", x)
 	}
 	if x := part(t, p, "tools.grants"); x.Title != "Grants app" || x.State != ipc.PartReady ||
@@ -143,7 +144,7 @@ func TestASkillThatDoesntReadSaysWhy(t *testing.T) {
 	skillFolder(t, h, "present")
 	manifest(t, e, "grants-app.toml", "[skills.present]\npath = \"~/apps/grants/skills/present\"\n")
 	e.Config.Plugins.Manifests["grants-app"] = true
-	if x := part(t, mine(t, e, "grants-app"), "skills.present"); x.State != ipc.PartNeeds || !strings.Contains(x.Detail, "One of Irie's own skills is named present") {
+	if x := part(t, mine(t, e, "grants-app"), "skills.present"); x.State != ipc.PartNeeds || !strings.Contains(x.Detail, "One of "+brand.Name+"'s own skills is named present") {
 		t.Errorf("Irie's name: %+v", x)
 	}
 	all, st := SessionSkills(e, true)
@@ -201,7 +202,7 @@ func TestToolsThatDontReadSayWhy(t *testing.T) {
 		{"grants", `run = [" "]`, `run starts with an empty word: its first is the program, such as run = ["~/bin/grants", "mcp"].`},
 		{"grants", `run = ["bin/grants"]`, "isn't a name on your PATH or a full path"},
 		{"grants", `run = ["no-such-program-for-irie-tests"]`, "isn't a program on this computer, so sessions can't start its tools"},
-		{"irie-browser", `run = ["sh"]`, "Irie's own servers have names that start irie: give [tools.irie-browser] another name."},
+		{brand.Slug + "-browser", `run = ["sh"]`, brand.Name + "'s own servers have names that start " + brand.Slug + ": give [tools." + brand.Slug + "-browser] another name."},
 		{"Grants", `run = ["sh"]`, "isn't a server's name"},
 	} {
 		e := env(t)

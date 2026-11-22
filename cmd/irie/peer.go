@@ -41,7 +41,7 @@ app's gateway: ` + brand.Slug + ` remote on, there.
 
 func peerCmd(args []string) error {
 	if len(args) == 0 {
-		fmt.Print(peerUsage)
+		fmt.Print(aligned(peerUsage))
 		return nil
 	}
 	cfg, p, err := load()

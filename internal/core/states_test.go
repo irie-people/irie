@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -429,7 +430,7 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 		t.Fatalf("agent log = %v", log)
 	}
 	env, _ := log[0]["env"].(map[string]any)
-	for k, want := range map[string]string{"IRIE_SESSION": s.ID, "IRIE_SOCKET": c.paths.Socket(), "IRIE_BIN": c.bin} {
+	for k, want := range map[string]string{brand.Env("SESSION"): s.ID, brand.Env("SOCKET"): c.paths.Socket(), brand.Env("BIN"): c.bin} {
 		if env[k] != want {
 			t.Errorf("%s = %v, want %s", k, env[k], want)
 		}

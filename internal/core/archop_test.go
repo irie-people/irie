@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/arch"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
 )
 
 func TestArchListShowsEveryArchAgent(t *testing.T) {
-	t.Setenv("IRIE_GABRIEL", "")
+	t.Setenv(brand.Env("GABRIEL"), "")
 	cfg := config.Default()
 	cfg.Arch.Mikael.Good = []string{"Give credit where it is due."}
 	c := &Core{sessions: map[string]*session{}}
@@ -77,7 +78,7 @@ func TestArchListShowsEveryArchAgent(t *testing.T) {
 		c.useConfig(cfg)
 	}
 	// Gabriel off is said so, with nothing to do.
-	t.Setenv("IRIE_GABRIEL", "off")
+	t.Setenv(brand.Env("GABRIEL"), "off")
 	if g := c.archList().Agents[1]; g.On || len(g.Actions) != 0 || !strings.HasPrefix(g.Status, "Off") {
 		t.Errorf("Gabriel off: %+v", g)
 	}

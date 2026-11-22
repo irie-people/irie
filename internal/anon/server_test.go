@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/mcp"
 )
 
@@ -76,7 +77,7 @@ func TestSearchReadsSearXNG(t *testing.T) {
 		}
 	}
 	off := &server{c: Compartment{Name: "acme"}}
-	if text, isErr := call(t, off, "search", map[string]any{"query": "x"}); !isErr || !strings.Contains(text, "irie setup anon") {
+	if text, isErr := call(t, off, "search", map[string]any{"query": "x"}); !isErr || !strings.Contains(text, brand.Slug+" setup anon") {
 		t.Errorf("search with no SearXNG: %q", text)
 	}
 }

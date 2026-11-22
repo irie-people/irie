@@ -222,19 +222,22 @@ func TestTheFixKeepsWhatItChangesAcrossCores(t *testing.T) {
 }
 
 // The lines macOS's log holds, in `log show --style compact`, as on a Mac.
-const btmLog = `Timestamp               Ty Process[PID:TID]
+const btmLogText = `Timestamp               Ty Process[PID:TID]
 2026-11-22 08:17:18.876 Df BackgroundTaskManagementAgent[5570:257e1a8] [com.apple.backgroundtaskmanagement:main] Posting advisory notification request: identifier=30BA9EC9-E707-4D56-8850-FC0D731B68A3, body='“irie” is an item that can run in the backgro…'
 2026-11-22 08:51:20.820 Df BackgroundTaskManagementAgent[5570:265097f] [com.apple.backgroundtaskmanagement:main] Posting advisory notification request: identifier=D6406C3C-C8A2-4CDB-8076-2E7DEEF96E57, body='“irie” is an item that can run in the backgro…'
 2026-11-22 09:09:24.995 Df BackgroundTaskManagementAgent[71002:27026c4] [com.apple.backgroundtaskmanagement:main] Posting advisory notification request: identifier=7A4ECB4D-7D8F-4C1E-B4D0-575E1D4DA156, body='“Example Updater” is an item that can run in…'
 `
 
+// btmLog is the log as the copy's own item names itself.
+var btmLog = strings.ReplaceAll(btmLogText, "“irie”", "“"+brand.Slug+"”")
+
 func TestBackgroundItemsAnnouncedLately(t *testing.T) {
 	n := Advisories(btmLog)
-	if n["irie"] != 2 || n["Example Updater"] != 1 || len(n) != 2 {
+	if n[brand.Slug] != 2 || n["Example Updater"] != 1 || len(n) != 2 {
 		t.Fatalf("advisories %v", n)
 	}
 	f, line := backgroundFinding(n)
-	if f.ID != "alerts:background" || line != "" || !strings.Contains(f.Text, "3 times") || !strings.Contains(f.Text, "irie (2 times), Example Updater (once)") {
+	if f.ID != "alerts:background" || line != "" || !strings.Contains(f.Text, "3 times") || !strings.Contains(f.Text, brand.Slug+" (2 times), Example Updater (once)") {
 		t.Errorf("finding %+v, line %q", f, line)
 	}
 	if !strings.Contains(f.Advice, "launcher") {

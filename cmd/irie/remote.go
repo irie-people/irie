@@ -63,7 +63,7 @@ keeps it running.
 
 func remoteCmd(args []string) error {
 	if len(args) == 0 {
-		fmt.Print(remoteUsage)
+		fmt.Print(aligned(remoteUsage))
 		return nil
 	}
 	cfg, p, err := load()
@@ -228,7 +228,7 @@ func remoteCmd(args []string) error {
 		}
 		return errors.New("usage: " + brand.Slug + " remote ca export|import|profile")
 	case "help", "-h", "--help":
-		fmt.Print(remoteUsage)
+		fmt.Print(aligned(remoteUsage))
 		return nil
 	}
 	return fmt.Errorf("unknown remote command %q\n\n%s", sub, remoteUsage)

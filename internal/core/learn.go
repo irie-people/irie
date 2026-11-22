@@ -62,12 +62,12 @@ func yourTurn(msg string) (string, bool) {
 // learnOp answers the learn op: what the Help menu shows. With a session,
 // the tutorials of its project's languages come first.
 func (c *Core) learnOp(a ipc.LearnArgs) (ipc.LearnResult, error) {
-	var dir string
+	var dir, repo string
 	if a.Session != "" {
 		c.mu.Lock()
 		x := c.sessions[a.Session]
 		if x != nil {
-			dir = x.cwd
+			dir, repo = x.cwd, x.repo
 		}
 		c.mu.Unlock()
 		if x == nil {
@@ -84,6 +84,7 @@ func (c *Core) learnOp(a ipc.LearnArgs) (ipc.LearnResult, error) {
 		Bar:       c.cfg().UI.Bar,
 		Tips:      tips,
 		Topics:    docTopics(dir),
+		Saved:     c.savedListFor(a.Session != "", projectName(repo, dir)),
 	}, nil
 }
 

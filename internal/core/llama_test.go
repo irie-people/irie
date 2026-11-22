@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
@@ -148,7 +149,7 @@ func TestBigRunsAModelOnIriesOwnLlamaServer(t *testing.T) {
 			server = p
 		}
 	}
-	if server == nil || server["session_name"] != "irie-agents" || server["pane_current_command"] != "irie" || server["@irie_name"] != "bonsai-2:9b" {
+	if server == nil || server["session_name"] != brand.Slug+"-agents" || server["pane_current_command"] != "irie" || server["@irie_name"] != "bonsai-2:9b" {
 		t.Fatalf("server pane = %v", server)
 	}
 	spec, err := host.ReadSpec(c.paths.SpecFile(r.Session.ID))

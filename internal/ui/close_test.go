@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -144,7 +145,7 @@ func TestXOnAnOutsideRowClosesNothing(t *testing.T) {
 	m, b := withOutside(t, 34, 24, 1, 2)
 	m = send(m, keyMsg("end"))
 	m = send(m, keyMsg("x"))
-	if len(b.closes) != 0 || !strings.Contains(m.status, "x closes one of Irie's sessions") {
+	if len(b.closes) != 0 || !strings.Contains(m.status, "x closes one of "+brand.Name+"'s sessions") {
 		t.Errorf("closed %v, status %q", b.closes, m.status)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/lid"
@@ -54,7 +55,7 @@ esac
 	fakeTool(t, bin, "ioreg", `echo "    \"AppleClamshellState\" = $(cat `+m.path("lid")+`)"`+"\n")
 	fakeTool(t, bin, "system_profiler", `cat `+m.path("displays")+"\n")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("IRIE_LID", "")
+	t.Setenv(brand.Env("LID"), "")
 	rule := m.path("irie-lid")
 	m.set("irie-lid", "the rule")
 	old, oldLook := lidRule, lidLook

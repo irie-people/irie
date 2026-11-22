@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // A Keychain that can't be asked now is away, never a key lost: locked
@@ -52,7 +54,7 @@ esac
 	if bytes.Contains(b, []byte("add-generic-password")) {
 		t.Errorf("a key was made while the Keychain was away:\n%s", b)
 	}
-	if !bytes.Contains(b, []byte("find-generic-password -s Irie vault -a sidebar -w /home/alice/Library/Keychains/login.keychain-db")) {
+	if !bytes.Contains(b, []byte("find-generic-password -s "+brand.Name+" vault -a sidebar -w /home/alice/Library/Keychains/login.keychain-db")) {
 		t.Errorf("the login keychain was not named:\n%s", b)
 	}
 	t.Setenv("FAKE_EXIT", "44")
@@ -122,9 +124,9 @@ func TestFindMakesNoKey(t *testing.T) {
 	if got, err := f.Find("sidebar"); err != nil || !bytes.Equal(got, key) {
 		t.Errorf("find %x %v", got, err)
 	}
-	t.Setenv("IRIE_KEYCHAIN", "off")
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
 	if src := System(f.Dir); Kind(src) != KindFile {
-		t.Errorf("System with IRIE_KEYCHAIN=off: %T", src)
+		t.Errorf("System with %s=off: %T", brand.Env("KEYCHAIN"), src)
 	}
 	if Kind(Keychain{}) != KindKeychain || Kind(SecretService{}) != KindSecrets {
 		t.Error("Kind")

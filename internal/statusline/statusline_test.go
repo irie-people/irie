@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -222,7 +223,7 @@ func TestRunForwardsAndPrintsItsOwnLine(t *testing.T) {
 	defer l.Close()
 	core := &fakeCore{}
 	go ipc.Serve(l, core)
-	env := map[string]string{"IRIE_SESSION": "s0k3j9x2m4a7q", "IRIE_SOCKET": sock, "COLUMNS": "40"}
+	env := map[string]string{brand.Env("SESSION"): "s0k3j9x2m4a7q", brand.Env("SOCKET"): sock, "COLUMNS": "40"}
 
 	// The line leads with the core's answer and fits the terminal.
 	var out, errOut bytes.Buffer
@@ -241,7 +242,7 @@ func TestRunForwardsAndPrintsItsOwnLine(t *testing.T) {
 
 func TestRunWithoutIrieStillPrints(t *testing.T) {
 	var out, errOut bytes.Buffer
-	env := map[string]string{"IRIE_SESSION": "s0k3j9x2m4a7q", "IRIE_SOCKET": "/nonexistent/core.sock"}
+	env := map[string]string{brand.Env("SESSION"): "s0k3j9x2m4a7q", brand.Env("SOCKET"): "/nonexistent/core.sock"}
 	start := time.Now()
 	if code := Run(nil, strings.NewReader(sample), &out, &errOut, func(k string) string { return env[k] }); code != 0 || out.String() == "" {
 		t.Errorf("exit %d, printed %q", code, out.String())

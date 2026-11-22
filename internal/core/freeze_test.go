@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
@@ -30,7 +31,7 @@ func (c *coreEnv) withOldHosts() {
 	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
 		c.t.Fatal(err)
 	}
-	c.t.Setenv("IRIE_BIN", wrapper)
+	c.t.Setenv(brand.Env("BIN"), wrapper)
 }
 
 func (c *coreEnv) hostPID(s ipc.Session) int {

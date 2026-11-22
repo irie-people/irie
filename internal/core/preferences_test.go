@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -15,7 +16,7 @@ func TestPreferencesNote(t *testing.T) {
 	if n := preferencesNote([]string{}); n != "" {
 		t.Errorf("no preferences said %q", n)
 	}
-	want := "[Irie] The user’s preferences, which always apply:\n- Text me in one line.\n- Ask before you push."
+	want := "[" + brand.Name + "] The user’s preferences, which always apply:\n- Text me in one line.\n- Ask before you push."
 	if n := preferencesNote([]string{" Text me in one line. ", "Ask before you push."}); n != want {
 		t.Errorf("note = %q, want %q", n, want)
 	}

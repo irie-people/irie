@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/dms"
 	"github.com/irie-people/irie/internal/ipc"
@@ -122,7 +123,7 @@ func TestPrivacyOffTurnsEveryPartOff(t *testing.T) {
 		t.Error("a part's own switch reads off while its plugin is")
 	}
 	for _, name := range []string{Anon, Browser} {
-		if why := Why(e.Config, name); !strings.Contains(why, "the privacy plugin is") || !strings.Contains(why, "irie plugins on privacy") {
+		if why := Why(e.Config, name); !strings.Contains(why, "the privacy plugin is") || !strings.Contains(why, brand.Slug+" plugins on privacy") {
 			t.Errorf("Why(%s) = %q", name, why)
 		}
 	}
@@ -146,7 +147,7 @@ func TestPrivacyOffTurnsEveryPartOff(t *testing.T) {
 
 func TestWhySaysWhatTurnsAPartOn(t *testing.T) {
 	cfg := config.Default()
-	if why := Why(cfg, Anon); !strings.Contains(why, "irie setup anon") {
+	if why := Why(cfg, Anon); !strings.Contains(why, brand.Slug+" setup anon") {
 		t.Errorf("Why(anon) = %q", why)
 	}
 	cfg.Anon.On = true
@@ -183,7 +184,7 @@ func TestEdits(t *testing.T) {
 		}
 	}
 	for _, c := range []struct{ plugin, part, want string }{
-		{"nothing", "", "Irie's plugins are "},
+		{"nothing", "", brand.Name + "'s plugins are "},
 		{"privacy", "nothing", "its parts are anon, browser, switch"},
 		{"privacy", "switch", "no switch of its own"},
 	} {

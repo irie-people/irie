@@ -19,6 +19,7 @@ const MaxSocketPath = 104
 
 // Paths holds Irie's own directory inside each XDG base directory.
 type Paths struct {
+	Home    string // $HOME, which a ~ in a setting stands for
 	Config  string // $XDG_CONFIG_HOME/irie
 	State   string // $XDG_STATE_HOME/irie
 	Data    string // $XDG_DATA_HOME/irie
@@ -43,6 +44,7 @@ func New(getenv func(string) string, uid int) (Paths, error) {
 		return filepath.Join(home, fallback, brand.Slug)
 	}
 	p := Paths{
+		Home:   home,
 		Config: base("XDG_CONFIG_HOME", ".config"),
 		State:  base("XDG_STATE_HOME", ".local/state"),
 		Data:   base("XDG_DATA_HOME", ".local/share"),

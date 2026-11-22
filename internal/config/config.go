@@ -907,7 +907,11 @@ type Learn struct {
 	// renders and which cost tokens; or tile, the Teach tile, on a local
 	// model, for what the person asks to have explained, which costs none,
 	// so the agent is told to draw none.
-	Pictures  string            `toml:"pictures"`
+	Pictures string `toml:"pictures"`
+	// Library is the folder the Teach tile keeps its explanations in, as
+	// files to read and reuse, a folder in it for each project
+	// (internal/explained): ~ is the home folder, and "off" keeps none.
+	Library   string            `toml:"library"`
 	AgentTips bool              `toml:"agent_tips"` // Irie's tips under Claude Code's spinner
 	Links     map[string]string `toml:"links"`      // your own learning resources, by title, first in the Help menu's list
 }
@@ -940,6 +944,11 @@ const (
 	PicturesAgent = "agent"
 	PicturesTile  = "tile"
 )
+
+// DefaultLibrary is where the Teach tile keeps its explanations unless
+// learn.library says otherwise: among the person's documents, to read and
+// reuse.
+const DefaultLibrary = "~/Documents/" + brand.Name + "/Explained"
 
 // Tutor modes (learn.tutor), which are also the words +explain and +teach.
 const (
@@ -1133,7 +1142,7 @@ func Default() Config {
 		},
 		Remote:   Remote{Port: DefaultRemotePort},
 		Place:    Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
-		Learn:    Learn{Tutor: TutorOff, Visual: true, Pictures: PicturesAgent, AgentTips: true, Links: map[string]string{}},
+		Learn:    Learn{Tutor: TutorOff, Visual: true, Pictures: PicturesAgent, Library: DefaultLibrary, AgentTips: true, Links: map[string]string{}},
 		Browser:  Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:     defaultMail(),
@@ -1485,6 +1494,9 @@ func (c Config) Validate() error {
 	}
 	if c.Learn.Pictures != PicturesAgent && c.Learn.Pictures != PicturesTile {
 		bad("learn.pictures = %q: must be agent or tile", c.Learn.Pictures)
+	}
+	if l := c.Learn.Library; l != "off" && !filepath.IsAbs(l) && !strings.HasPrefix(l, "~/") {
+		bad("learn.library = %q: must be a folder, absolute or from ~/, or off", l)
 	}
 	if !slices.Contains(TutorModes, c.Learn.Tutor) {
 		bad("learn.tutor = %q: must be off, explain or teach", c.Learn.Tutor)

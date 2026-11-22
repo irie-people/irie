@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
@@ -81,7 +82,7 @@ func TestALocalSpawnRunsOnIriesOwnServer(t *testing.T) {
 		}
 	}
 	// It runs under `irie runtime`, which stops its model runners with it.
-	if server == nil || server["session_name"] != "irie-agents" || server["pane_current_command"] != "irie" {
+	if server == nil || server["session_name"] != brand.Slug+"-agents" || server["pane_current_command"] != "irie" {
 		t.Fatalf("server pane = %v", server)
 	}
 	b, err := os.ReadFile(log)

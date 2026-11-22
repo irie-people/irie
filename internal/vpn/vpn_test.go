@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 )
 
@@ -94,7 +95,7 @@ func TestAMissingCommandSaysWhereItComesFrom(t *testing.T) {
 	k := Kind{Name: "x", Title: "X VPN", Get: "https://example.com/x", find: func(Settings) (string, error) {
 		return findCLI("", []string{"no-such-vpn-cli-here"}, []string{filepath.Join(t.TempDir(), "none")})
 	}}
-	if _, err := k.Find(Settings{}); err == nil || err.Error() != "X VPN isn't installed: its app, from https://example.com/x, brings the command Irie uses." {
+	if _, err := k.Find(Settings{}); err == nil || err.Error() != "X VPN isn't installed: its app, from https://example.com/x, brings the command "+brand.Name+" uses." {
 		t.Errorf("err = %v", err)
 	}
 }

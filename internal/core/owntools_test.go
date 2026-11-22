@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
@@ -204,8 +205,8 @@ func TestASessionStartsWithYourSkillAndTools(t *testing.T) {
 	// The plugin's word starts a session on its skill: with a task, which
 	// names it, and alone, named as the word is.
 	for _, w := range []struct{ text, name, task string }{
-		{":grants find arts grants", "Find Arts Grants", "/irie:grants find arts grants"},
-		{":grants", "Grant work", "/irie:grants"},
+		{":grants find arts grants", "Find Arts Grants", "/" + brand.Slug + ":grants find arts grants"},
+		{":grants", "Grant work", "/" + brand.Slug + ":grants"},
 	} {
 		var r ipc.InputResult
 		// The menus' agent, one whose Claude Code loads plugins.

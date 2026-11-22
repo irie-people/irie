@@ -73,7 +73,7 @@ func variorumCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 	switch action {
 	case ipc.VariorumStatus, ipc.VariorumConnect, ipc.VariorumForget:
 	case "help", "-h", "--help":
-		fmt.Fprintln(stdout, variorumUsage)
+		fmt.Fprintln(stdout, aligned(variorumUsage))
 		return nil
 	default:
 		return errors.New(variorumUsage)

@@ -17,6 +17,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // relayList is the daemon's relay list, cut down: one of each kind.
@@ -165,7 +167,7 @@ func TestWhereNamesNoAddress(t *testing.T) {
 		"export https_proxy='http://127.0.0.1:9251'\n",
 		"export HTTP_PROXY='http://127.0.0.1:9251'\n",
 		"export NO_PROXY='localhost,127.0.0.1,::1'\n",
-		"export IRIE_ANON='acme'\n",
+		"export " + brand.Env("ANON") + "='acme'\n",
 	} {
 		if !strings.Contains(ex, want) {
 			t.Errorf("exports lack %q:\n%s", want, ex)
@@ -188,7 +190,7 @@ func TestEnvironDropsTheProxiesItHad(t *testing.T) {
 	env := Environ([]string{
 		"PATH=/usr/bin", "NO_PROXY=*", "no_proxy=*",
 		"ALL_PROXY=socks5h://other.example:1080", "https_proxy=http://proxy.example:3128",
-		"FTP_PROXY=http://proxy.example:3128", "IRIE_ANON=other", "HOME=/home/alice",
+		"FTP_PROXY=http://proxy.example:3128", brand.Env("ANON") + "=other", "HOME=/home/alice",
 	}, c)
 	seen := map[string]string{}
 	for _, kv := range env {
@@ -199,7 +201,7 @@ func TestEnvironDropsTheProxiesItHad(t *testing.T) {
 		seen[k] = v
 	}
 	want := map[string]string{
-		"PATH": "/usr/bin", "HOME": "/home/alice", "IRIE_ANON": "acme",
+		"PATH": "/usr/bin", "HOME": "/home/alice", brand.Env("ANON"): "acme",
 		"ALL_PROXY": c.Proxy(), "https_proxy": c.Proxy(), "NO_PROXY": "localhost,127.0.0.1,::1", "no_proxy": "localhost,127.0.0.1,::1",
 	}
 	for k, v := range want {

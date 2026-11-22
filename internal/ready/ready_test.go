@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // fake writes an executable script named name into dir that prints out and
@@ -188,11 +190,11 @@ func TestGitIsNeededOnlyForProjects(t *testing.T) {
 func TestPathCheck(t *testing.T) {
 	home, bin, o := machine(t)
 	fake(t, bin, "tmux", `echo "tmux 3.7b"`)
-	self := fake(t, filepath.Join(home, ".local", "share", "irie", "bin"), "irie", "")
+	self := fake(t, filepath.Join(home, ".local", "share", "irie", "bin"), brand.Slug, "")
 	o.Self = self
 	it, _ := Check(o).Item(PathID)
 	if it.Status != Warn || it.Fix == nil || it.Fix.Line != `export PATH="$HOME/.local/share/irie/bin:$PATH"` {
-		t.Fatalf("irie off PATH = %+v", it)
+		t.Fatalf("%s off PATH = %+v", brand.Slug, it)
 	}
 
 	// ~/.local/bin/irie, a link to it, but ~/.local/bin is not on the
@@ -201,10 +203,10 @@ func TestPathCheck(t *testing.T) {
 	if err := os.MkdirAll(lb, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(self, filepath.Join(lb, "irie")); err != nil {
+	if err := os.Symlink(self, filepath.Join(lb, brand.Slug)); err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []string{filepath.Join(lb, "irie"), self} {
+	for _, s := range []string{filepath.Join(lb, brand.Slug), self} {
 		o.Self = s
 		if it, _ := Check(o).Item(PathID); it.Status != Warn || it.Fix == nil || it.Fix.Line != `export PATH="$HOME/.local/bin:$PATH"` {
 			t.Errorf("irie as %s, linked in ~/.local/bin off PATH = %+v", s, it)
@@ -215,7 +217,7 @@ func TestPathCheck(t *testing.T) {
 		t.Errorf("irie on PATH = %+v", it)
 	}
 
-	other := fake(t, bin, "irie", "")
+	other := fake(t, bin, brand.Slug, "")
 	if it, _ := Check(o).Item(PathID); it.Status != Warn || it.Path != other {
 		t.Errorf("another irie first = %+v", it)
 	}
@@ -274,7 +276,7 @@ func TestAddLineOnce(t *testing.T) {
 	g := filepath.Join(t.TempDir(), ".zshrc")
 	os.WriteFile(g, []byte("alias ll='ls -l'"), 0o644)
 	AddLine(g, "x")
-	if b, _ := os.ReadFile(g); !strings.HasPrefix(string(b), "alias ll='ls -l'\n\n# Added by irie setup") || !strings.HasSuffix(string(b), "\nx\n") {
+	if b, _ := os.ReadFile(g); !strings.HasPrefix(string(b), "alias ll='ls -l'\n\n# Added by "+brand.Slug+" setup") || !strings.HasSuffix(string(b), "\nx\n") {
 		t.Errorf("appended:\n%q", b)
 	}
 }

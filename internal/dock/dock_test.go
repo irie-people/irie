@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // cmuxExample is the example file of cmux's Dock docs, which must read as is.
@@ -87,9 +89,9 @@ func TestFindPrefersIrieAndTheNearest(t *testing.T) {
 	if p, src := Find(sub, top); p != filepath.Join(top, ".cmux", "dock.json") || src != SourceCmux {
 		t.Fatalf("got %q %q, want the top's cmux file", p, src)
 	}
-	write(t, filepath.Join(top, ".irie", "dock.json"), cmuxExample)
-	if p, src := Find(sub, top); p != filepath.Join(top, ".irie", "dock.json") || src != SourceRepo {
-		t.Fatalf("got %q %q, want the top's Irie file over its cmux one", p, src)
+	write(t, filepath.Join(top, "."+brand.Slug, "dock.json"), cmuxExample)
+	if p, src := Find(sub, top); p != filepath.Join(top, "."+brand.Slug, "dock.json") || src != SourceRepo {
+		t.Fatalf("got %q %q, want the top's own file over its cmux one", p, src)
 	}
 	write(t, filepath.Join(top, "app", ".cmux", "dock.json"), cmuxExample)
 	if p, _ := Find(sub, top); p != filepath.Join(top, "app", ".cmux", "dock.json") {

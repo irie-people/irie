@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // skillName is the Agent Skills spec's name: lowercase letters, digits and
@@ -117,7 +119,7 @@ func TestBuildMakesAReadOnlyPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(b, &manifest); err != nil || manifest["name"] != "irie" || manifest["version"] != "1.2.3" || manifest["license"] != "Apache-2.0" {
+	if err := json.Unmarshal(b, &manifest); err != nil || manifest["name"] != brand.Slug || manifest["version"] != "1.2.3" || manifest["license"] != "Apache-2.0" {
 		t.Errorf("manifest %s", b)
 	}
 	skill := filepath.Join(dir, "skills", "present", "SKILL.md")

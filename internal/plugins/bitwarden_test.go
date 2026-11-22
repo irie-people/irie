@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -101,14 +102,14 @@ func TestBitwardenOff(t *testing.T) {
 	if p.On || part(t, p, Autofill).State != ipc.PartPluginOff || part(t, p, Vault).State != ipc.PartHeld {
 		t.Errorf("bitwarden off = %+v", p)
 	}
-	if why := Why(config.Default(), Vault); !strings.Contains(why, "isn't in Irie yet") {
+	if why := Why(config.Default(), Vault); !strings.Contains(why, "isn't in "+brand.Name+" yet") {
 		t.Errorf("Why(vault) = %q", why)
 	}
 	if !strings.Contains(Text(Status(e)), "  ○ Bitwarden for agents: ") {
 		t.Errorf("Text lacks the held part:\n%s", Text(Status(e)))
 	}
 	for _, c := range []struct{ plugin, part, want string }{
-		{"bitwarden", "vault", "isn't in Irie yet"},
+		{"bitwarden", "vault", "isn't in " + brand.Name + " yet"},
 		{"bitwarden", "autofill", "no switch of its own"},
 		{"bitwarden", "nothing", "its parts are autofill, vault"},
 	} {

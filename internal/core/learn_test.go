@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
@@ -55,7 +56,7 @@ func TestTeachModeTurnIsYours(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"outputStyle": "Learning"`, `"label": "Irie tip"`, `"id": "irie.park"`} {
+	for _, want := range []string{`"outputStyle": "Learning"`, `"label": "` + brand.Name + ` tip"`, `"id": "irie.park"`} {
 		if !strings.Contains(string(settings), want) {
 			t.Errorf("settings lack %s:\n%s", want, settings)
 		}
