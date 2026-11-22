@@ -644,6 +644,7 @@ enum Snapshot {
             store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
             KeyChord.shared.showFixture([])
             KeyPeek.shared.showFixture(nil)
+            store.teach.loadFixture(shown: false, asked: nil, in: nil, result: nil)
         }
         let shots: [(String, Bool, Bool, @MainActor () -> Void)] = [
             ("reversed", false, true, {
@@ -693,6 +694,22 @@ enum Snapshot {
             }),
             ("keys-peek-code", false, false, {
                 KeyPeek.shared.showFixture(KeyCatalog.held(.command, place: .code, store: store))
+            }),
+            // The Teach tile (TeachTile.swift) at its place at the top
+            // right, with a card of each of the catalog's pictures, and
+            // as it opens, before anything is asked.
+            ("teach-tile", false, false, {
+                KeyPeek.shared.showFixture(nil)
+                let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
+                store.teach.loadFixture(shown: true, asked: Fixture.teachQuestion, in: (Fixture.selected, name), result: Fixture.teachCard)
+            }),
+            ("teach-tile-dark", true, false, {
+                let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
+                store.teach.loadFixture(shown: true, asked: Fixture.teachQuestion, in: (Fixture.selected, name), result: Fixture.teachCard)
+            }),
+            ("teach-tile-empty", false, false, {
+                store.teach.loadFixture(shown: true, asked: nil, in: nil, result: nil,
+                                        recent: [Fixture.teachQuestion, "What is a worktree?"])
             }),
         ]
         for (base, dark, reversed, set) in shots {
@@ -837,6 +854,33 @@ enum Fixture {
         """
         return try! Wire.decoder.decode(MaterializeResult.self, from: Data(json.utf8))
     }
+
+    /// What the Teach tile is asked in the snapshots, and the card a local
+    /// model made for it, with each of the catalog's pictures.
+    static let teachQuestion = "How does a kept card know it is out of date?"
+    static var teachCard: MaterializeResult {
+        let made = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-120))
+        let json = """
+        {"id": "explain/\(selected)/3f1a", "state": "fresh", "by": "bonsai-2:9b", "made": "\(made)",
+         "spec": {"title": "When a kept card is made again", "body": [
+           {"type": "Flow", "items": [
+             {"title": "A view asks", "detail": "by the card's name"},
+             {"title": "The store answers", "detail": "with what it kept, at once"},
+             {"title": "Out of date?", "detail": "inputs moved, or as old as Every"}]},
+           {"type": "Diagram", "links": [
+             {"from": "Cold", "to": "Fresh", "label": "first card"},
+             {"from": "Fresh", "to": "Stale", "label": "inputs moved"},
+             {"from": "Stale", "to": "Refreshing", "label": "a remake begins"},
+             {"from": "Refreshing", "to": "Fresh", "label": "the new card"}]},
+           {"type": "Compare", "sides": [
+             {"title": "Inputs", "points": ["what the card reads", "a change puts it behind"]},
+             {"title": "Recipe", "points": ["what makes the card", "a change leaves it cold"]}]},
+           {"type": "Code", "language": "go", "text": "if r.Gap > 0 && age < r.Gap {\\n\\treturn false\\n}\\nreturn c.Inputs != r.Inputs"},
+           {"type": "Text", "style": "caption", "text": "Gap comes first: it is the most a card can cost."}]}}
+        """
+        return try! Wire.decoder.decode(MaterializeResult.self, from: Data(json.utf8))
+    }
+
     /// The code card's file, in the selected session's folder, and another
     /// it has open.
     static var codeFolder: String { "/home/alice/code/\(Brand.slug)-docs-guide" }
@@ -1155,7 +1199,7 @@ enum Fixture {
         "trod": {"on": true, "start": "23:00", "end": "07:00", "away": "15m", "questions": true, "nudges": 8, "retry": "15m", "within": "24h", "max_working": 4, "max_plan_use": 90, "keep_awake": true,
             "rules": ["Don't spend money you didn't make.", "Don't go over the plan's weekly allotment: never buy usage credits or turn on extra usage.", "Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages."],
             "guidelines": ["When you have to choose, take the option you would recommend, and say in your last message which you took and why.", "Finish the task you were given; note new ideas and extra work for the morning instead of starting them."]},
-        "learn": {"agent_tips": true, "links": {"Team handbook": "https://example.com/handbook"}, "tutor": "explain", "visual": true},
+        "learn": {"agent_tips": true, "links": {"Team handbook": "https://example.com/handbook"}, "pictures": "tile", "tutor": "explain", "visual": true},
         "local": {"context": 65536, "env": {}, "kv_cache": "q8_0", "memory_gib": 0, "ollama": "", "port": 11435, "url": ""},
         "profiles": {
             "claude": {"command": "claude", "effort": "max", "harness": "claude-code", "model": "claude-opus-5-5", "permission_mode": "auto"},

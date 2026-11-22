@@ -54,11 +54,15 @@ func (c *Core) cardStore() *materialize.Store {
 // materializeOp answers the materialize op: the card a recipe makes, as
 // kept, with a remake begun when one is due, and waited for when asked.
 func (c *Core) materializeOp(a ipc.MaterializeArgs) (ipc.MaterializeResult, error) {
-	if a.Session != "" {
-		var err error
-		if a, err = c.sessionCardArgs(a); err != nil {
-			return ipc.MaterializeResult{}, err
-		}
+	var err error
+	switch {
+	case a.Explain != "":
+		a, err = c.explainCardArgs(a)
+	case a.Session != "":
+		a, err = c.sessionCardArgs(a)
+	}
+	if err != nil {
+		return ipc.MaterializeResult{}, err
 	}
 	switch {
 	case a.ID == "" || len(a.ID) > ipc.MaxMaterializeID:
@@ -100,15 +104,19 @@ func (c *Core) materializeOp(a ipc.MaterializeArgs) (ipc.MaterializeResult, erro
 }
 
 // recipeOf is the recipe an ask names. Its inputs are the context's digest
-// unless the ask gives its own, so new text puts the card out of date.
+// unless the ask gives its own, so new text puts the card out of date; a
+// card that explains reads its inputs from explainCardArgs alone, since
+// its context moves with every step of the session it is asked in.
 func recipeOf(a ipc.MaterializeArgs) materialize.Recipe {
-	inputs := a.Inputs
-	if inputs == "" && a.Context != "" {
+	inputs, kind := a.Inputs, genui.KindSummary
+	if a.Explain != "" {
+		kind = genui.KindExplain
+	} else if inputs == "" && a.Context != "" {
 		sum := sha256.Sum256([]byte(a.Context))
 		inputs = hex.EncodeToString(sum[:8])
 	}
 	return materialize.Recipe{
-		ID: a.ID, Prompt: a.Prompt, Profile: "local", Catalog: genui.Catalog,
+		ID: a.ID, Prompt: a.Prompt, Profile: "local", Catalog: genui.Catalog, Kind: kind,
 		Inputs: inputs, Every: a.Every, Gap: a.Gap, Context: a.Context,
 	}
 }
@@ -139,6 +147,9 @@ func (c *Core) remakeCard(s *materialize.Store, rm materialize.Remake) {
 		defer cancel()
 		spec, by, err := c.makeCard(ctx, rm.Recipe)
 		card, newest, ferr := s.Finish(rm, spec, by, err, time.Now())
+		if ferr == nil && rm.Recipe.Kind == genui.KindExplain {
+			ferr = s.Trim(explainIDs, explainKept)
+		}
 		if ferr != nil {
 			c.log.Warn("materialize: the cards' file", "err", ferr)
 		}
@@ -155,6 +166,6 @@ func (c *Core) makeCard(ctx context.Context, r materialize.Recipe) (json.RawMess
 	if err != nil {
 		return nil, "", err
 	}
-	spec, err := genui.Make(ctx, m, r.Prompt, r.Context)
+	spec, err := genui.Make(ctx, m, r.Kind, r.Prompt, r.Context)
 	return spec, m.Name, err
 }

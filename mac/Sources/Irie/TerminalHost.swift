@@ -91,7 +91,7 @@ struct TerminalHost: NSViewRepresentable {
 /// Draws with Metal once it is in a window. SwiftTerm compiles its shaders
 /// from Shaders.metal in the app's resources at run time, so no Xcode is
 /// needed; without Metal it keeps drawing with Core Graphics.
-final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
+final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen, TerminalExplaining {
     private var triedMetal = false
     /// Whether it takes the keyboard once it is in a window; not while the
     /// conversation shows over it.
@@ -360,6 +360,13 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
         guard TerminalSelection.worthCopying(text) else { return }
         super.copy(self)
         TerminalSelection.copied(text)
+    }
+
+    /// Explain in the terminal's menu: the selection, explained with a
+    /// picture in the Teach tile.
+    @objc func explainSelection(_ sender: Any?) {
+        guard selection.active else { return }
+        TerminalSelection.explain(selection.getSelectedText())
     }
 }
 

@@ -21,6 +21,7 @@ const (
 	MaxMaterializeID     = 200
 	MaxMaterializePrompt = 4 << 10
 	MaxMaterializeText   = 64 << 10
+	MaxExplain           = 2 << 10 // what an explaining card is asked to explain
 )
 
 // MaxMaterializeWait is the longest an ask waits for its card's remake.
@@ -32,6 +33,13 @@ type MaterializeArgs struct {
 	// core makes from its row and its conversation: the core writes ID,
 	// Prompt, Context, Inputs and Gap. Off unless materialize.sessions.
 	Session string `json:"session,omitempty"`
+	// Explain asks instead for a card that explains what it says, a
+	// picture first, as the Teach tile does: the core writes the rest of
+	// the recipe, and with Session it reads that session's conversation,
+	// so that a question about its work is answered from it. Made on a
+	// local model like every card, so it costs no tokens, and kept, so the
+	// same question asked again draws at once.
+	Explain string `json:"explain,omitempty"`
 	ID      string `json:"id,omitempty"`     // the card's name, such as "repo/irie/recent"
 	Prompt  string `json:"prompt,omitempty"` // what the card is to show; a new one leaves the kept card cold
 	// Context is the text the model makes the card from. Its digest is

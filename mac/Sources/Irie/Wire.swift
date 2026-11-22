@@ -1030,13 +1030,18 @@ enum Wire {
 }
 
 /// An ask for a materialized card (docs/proposals/materialized-cards.md,
-/// internal/ipc/materialize.go): here a session's own card, where it
-/// stands, which the core makes from its conversation.
+/// internal/ipc/materialize.go): a session's own card, where it stands,
+/// which the core makes from its conversation; or, with explain, a card
+/// that explains what the person asked, as the Teach tile shows it, from
+/// that session's conversation when one is given.
 struct MaterializeArgs: Encodable {
-    var session: String
+    var session: String?
     /// How long the core waits for a remake under way, in nanoseconds, as
     /// Go writes a time.Duration; nil answers at once.
     var wait: Int64? = nil
+    var explain: String? = nil
+    /// Drops the kept card, so the next ask makes it again.
+    var forget: Bool? = nil
 }
 
 /// A materialized card as it stands. `state` is cold, fresh, stale or
@@ -1085,6 +1090,23 @@ struct GenPart: Decodable, Equatable {
     var label: String?
     var value: GenNumber?
     var total: GenNumber?
+    /// A Diagram's links, a Compare's sides, and the language of Code.
+    var links: [GenLink]?
+    var sides: [GenSide]?
+    var language: String?
+}
+
+/// One line of a Diagram: from one thing to another, by their names.
+struct GenLink: Decodable, Equatable {
+    var from: String
+    var to: String
+    var label: String?
+}
+
+/// One side of a Compare: what it is, and its points.
+struct GenSide: Decodable, Equatable {
+    var title: String
+    var points: [GenCell]?
 }
 
 struct GenItem: Decodable, Equatable {

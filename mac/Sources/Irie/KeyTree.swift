@@ -66,6 +66,8 @@ enum KeyAction: Equatable {
     case settings
     /// A new task, as ⌘N starts one: a session spawned.
     case newTask
+    /// The Teach tile shown or hidden (TeachTile.swift).
+    case teach
     /// A menu item, by its menu's name and its own, as "View › Layout ›
     /// Focus".
     case menu([String])
@@ -79,6 +81,7 @@ enum KeyAction: Equatable {
         case "zen": self = .zen; return
         case "settings": self = .settings; return
         case "new-task", "task", "spawn": self = .newTask; return
+        case "teach", "teach-tile", "explain": self = .teach; return
         default: break
         }
         if let colon = t.firstIndex(of: ":") {
@@ -103,6 +106,7 @@ enum KeyAction: Equatable {
         case .zen: return "Zen"
         case .settings: return "Settings"
         case .newTask: return "New Task"
+        case .teach: return "Teach Tile"
         case let .layout(l): return KeyTree.layout(l)?.name ?? l
         case let .menu(path): return path.last ?? "Menu"
         }
@@ -121,7 +125,8 @@ enum KeyTree {
 
     /// Irie's own: X Execute › L Layout › R Reverse, and 1 to 9 for your
     /// first nine layouts, as ⌃⌘1 to ⌃⌘9; at the root, Fn+, Settings as
-    /// ⌘, opens them, Fn+S a new task, spawned, and Fn+Z zen.
+    /// ⌘, opens them, Fn+S a new task, spawned, Fn+T the Teach tile, and
+    /// Fn+Z zen.
     static func builtIn(layouts: [PaneLayout]) -> KeyNode {
         var layout = KeyNode(key: "l", name: "Layout", children: [KeyNode(key: "r", name: "Reverse", action: .reverse)])
         for (i, l) in layouts.prefix(9).enumerated() {
@@ -130,6 +135,7 @@ enum KeyTree {
         return KeyNode(key: "", name: "", children: [
             KeyNode(key: "x", name: "Execute", children: [layout]),
             KeyNode(key: "s", name: "New Task", action: .newTask),
+            KeyNode(key: "t", name: "Teach Tile", action: .teach),
             KeyNode(key: ",", name: "Settings", action: .settings),
             KeyNode(key: "z", name: "Zen", action: .zen),
         ])
@@ -400,6 +406,8 @@ final class KeyChord {
             PluginCommands.openSettings()
         case .newTask:
             store.newTaskSheet = true
+        case .teach:
+            store.teach.toggle()
         case let .layout(name):
             if let l = KeyTree.layout(name) {
                 LookBook.shared.apply(l)

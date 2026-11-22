@@ -316,10 +316,13 @@ struct CoreConfig: Decodable, Equatable {
     struct Learn: Decodable, Equatable {
         var tutor: String
         var visual: Bool
+        /// Who draws the pictures: agent or tile; nil from a core older
+        /// than the Teach tile.
+        var pictures: String?
         var agentTips: Bool
         var links: [String: String]
         enum CodingKeys: String, CodingKey {
-            case tutor, visual, links
+            case tutor, visual, pictures, links
             case agentTips = "agent_tips"
         }
     }
@@ -1350,10 +1353,19 @@ private struct LearningSettings: View {
                         .pickerStyle(.radioGroup)
                         Toggle("Draw a picture where it helps", isOn: model.bind(c, \.learn!.visual, "learn.visual"))
                             .disabled(l.tutor == "off")
+                        if let pictures = l.pictures {
+                            Picker("Drawn by", selection: model.binding(pictures, "learn.pictures") { $0.learn?.pictures = $1 }) {
+                                Text("A local model, in the Teach tile: no tokens").tag("tile")
+                                Text("The agent, in its replies: uses tokens").tag("agent")
+                            }
+                            .pickerStyle(.radioGroup)
+                            .disabled(l.tutor == "off" || !l.visual)
+                        }
                     } header: {
                         Text("Tutor mode")
                     } footer: {
-                        footnote(Self.about(l.tutor) + " Sessions started from now on follow this; +explain or +teach in a task sets it for that task alone.")
+                        footnote(Self.about(l.tutor) + " Sessions started from now on follow this; +explain or +teach in a task sets it for that task alone."
+                            + (l.pictures == nil ? "" : " In the Teach tile (Help › Teach Tile, ⌃⌘T), a local model draws what you ask to have explained, from the session’s conversation, and the agent is asked to draw none, which saves the tokens its diagrams cost."))
                     }
                     Section {
                         Toggle("Show \(Brand.name)’s tips under Claude Code’s spinner", isOn: model.bind(c, \.learn!.agentTips, "learn.agent_tips"))

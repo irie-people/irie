@@ -8,9 +8,12 @@ enum LearnTab: String, Hashable {
 }
 
 /// The Help menu (docs/proposals/learning.md §7.1): Irie's guide pages on its
-/// site, opened in the browser, and the Learn window's two pages.
+/// site, opened in the browser, the Teach tile, and the Learn window's two
+/// pages.
 struct LearnCommands: Commands {
     let store: Store
+    /// The menus' facts, for the Teach tile's tick (MenuBar.swift).
+    let menu: MenuState
     @Environment(\.openWindow) private var openWindow
 
     static let site = URL(string: Brand.site)!
@@ -23,11 +26,18 @@ struct LearnCommands: Commands {
     ]
 
     var body: some Commands {
+        let f = MainActor.assumeIsolated { menu.facts }
         CommandGroup(replacing: .help) {
             ForEach(Self.pages, id: \.1) { page in
                 Button(page.0) { NSWorkspace.shared.open(Self.site.appendingPathComponent(page.1)) }
             }
             Divider()
+            // The Teach tile: a picture of what you want explained, drawn
+            // on a local model (TeachTile.swift).
+            Toggle("Teach Tile", isOn: Binding(
+                get: { f.teach },
+                set: { on in MainActor.assumeIsolated { store.teach.shown = on } }))
+                .keyboardShortcut("t", modifiers: [.command, .control])
             Button("Learning Resources…") {
                 MainActor.assumeIsolated { store.learnTab = .resources }
                 openWindow(id: LearnWindow.id)

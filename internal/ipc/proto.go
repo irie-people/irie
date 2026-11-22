@@ -150,6 +150,10 @@ const FeatureBoostAlways = "boost-always"
 // freeze dog watches the window that asks (DESIGN §2.4).
 const FeatureWatch = "watch"
 
+// FeatureExplain is in hello's features when materialize takes
+// MaterializeArgs.Explain: a card that explains, as the Teach tile shows.
+const FeatureExplain = "materialize-explain"
+
 // FeatureUndoConfirm is in hello's features when undo and redo take
 // UndoArgs.Confirm.
 const FeatureUndoConfirm = "undo-confirm"

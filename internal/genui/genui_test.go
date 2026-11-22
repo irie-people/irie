@@ -37,7 +37,7 @@ func TestCheckSaysWhatToFix(t *testing.T) {
 	many := `{"title":"t","body":[{"type":"List","items":[` + strings.Repeat(`{"title":"x"},`, MaxRows) + `{"title":"x"}]}]}`
 	for name, tc := range map[string]struct{ spec, says string }{
 		"no title":       {`{"body":[]}`, "no title"},
-		"a part unknown": {`{"title":"t","body":[{"type":"Chart"}]}`, "use Text, List, Facts, Table, Progress, Divider"},
+		"a part unknown": {`{"title":"t","body":[{"type":"Chart"}]}`, "use Text, List, Facts, Table, Progress, Divider, Flow, Diagram, Compare, Code"},
 		"too many rows":  {many, "more than 100 rows"},
 		"not an object":  {`["title"]`, "not one JSON object"},
 		"a nested cell":  {`{"title":"t","body":[{"type":"Table","rows":[[{"a":1}]]}]}`, "words or a number"},
@@ -98,7 +98,7 @@ func TestALocalModelMakesTheCard(t *testing.T) {
 	srv := httptest.NewServer(f)
 	defer srv.Close()
 	m := localmodel.ChatModel{URL: srv.URL, Name: "qwen3:4b"}
-	spec, err := Make(context.Background(), m, "Which store should keep sessions?", "SQLite does 5000 writes a second.")
+	spec, err := Make(context.Background(), m, KindSummary, "Which store should keep sessions?", "SQLite does 5000 writes a second.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,8 +113,102 @@ func TestALocalModelMakesTheCard(t *testing.T) {
 		t.Errorf("the model was not given the prompt and its context: %q", user)
 	}
 	f.reply = `{"title": "Three ways", "body": [{"type": "Chart"}]}`
-	if _, err := Make(context.Background(), m, "Which store?", ""); err == nil || !strings.Contains(err.Error(), "qwen3:4b") {
+	if _, err := Make(context.Background(), m, KindSummary, "Which store?", ""); err == nil || !strings.Contains(err.Error(), "qwen3:4b") {
 		t.Errorf("a card with a part the catalog lacks: %v; want it refused, naming the model", err)
+	}
+}
+
+// explainCard is a card that explains, with each of the catalog's pictures.
+const explainCard = `{"title":"How a kept card moves","body":[` +
+	`{"type":"Flow","items":[{"title":"Ask","detail":"a view names the card"},{"title":"Keep","detail":"the store answers at once"},{"title":"Remake","detail":"only when out of date"}]},` +
+	`{"type":"Diagram","links":[{"from":"Cold","to":"Fresh","label":"first card"},{"from":"Fresh","to":"Stale","label":"inputs moved"},{"from":"Stale","to":"Fresh"}]},` +
+	`{"type":"Compare","sides":[{"title":"Inputs","points":["what it reads","puts it behind"]},{"title":"Recipe","points":["what makes it"]}]},` +
+	`{"type":"Code","language":"go","text":"card, st, rm, err := s.Want(r, now)\nif rm != nil {\n\tremake(*rm)\n}"}]}`
+
+func TestTheCatalogHasPictures(t *testing.T) {
+	c, err := Check([]byte(explainCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Body[2].Sides[0].Points[1]; got != "puts it behind" {
+		t.Errorf("a side's point reads %q", got)
+	}
+	got := Text(c, 60)
+	for _, want := range []string{
+		"1. Ask — a view names the card\n   ↓\n2. Keep — the store answers at once\n   ↓\n3. Remake",
+		"Cold → Fresh  (first card)\nFresh → Stale  (inputs moved)\nStale → Fresh\n",
+		"Inputs            Recipe\n• what it reads   • what makes it\n• puts it behind\n",
+		"go:\n    card, st, rm, err := s.Want(r, now)\n    if rm != nil {\n     remake(*rm)\n    }\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the drawing lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestADiagramIsCheckedAsAPicture(t *testing.T) {
+	link := func(from, to string) string { return `{"from":"` + from + `","to":"` + to + `"}` }
+	var many, wide []string
+	for range MaxLinks + 1 {
+		many = append(many, link("a", "b"))
+	}
+	for i := range MaxNodes {
+		wide = append(wide, link(fmt.Sprint("n", i), fmt.Sprint("m", i)))
+	}
+	diagram := func(links []string) string {
+		return `{"title":"t","body":[{"type":"Diagram","links":[` + strings.Join(links, ",") + `]}]}`
+	}
+	for name, tc := range map[string]struct{ spec, says string }{
+		"an end left out": {diagram([]string{link("a", " ")}), "link 1 of the diagram needs both a from and a to"},
+		"too many links":  {diagram(many), "at most 24 fit"},
+		"too many things": {diagram(wide), "joins 32 things, and at most 16 fit"},
+		"too many sides":  {`{"title":"t","body":[{"type":"Compare","sides":[{"title":"a"},{"title":"b"},{"title":"c"},{"title":"d"},{"title":"e"}]}]}`, "at most 4 fit side by side"},
+		"a nested point":  {`{"title":"t","body":[{"type":"Compare","sides":[{"title":"a","points":[{"x":1}]}]}]}`, "words or a number"},
+	} {
+		if _, err := Check([]byte(tc.spec)); err == nil || !strings.Contains(err.Error(), tc.says) {
+			t.Errorf("%s: %v; want it to say %q", name, err, tc.says)
+		}
+	}
+}
+
+// twoReplies answers the first chat with one reply and every one after
+// with another, noting the messages of the last.
+type twoReplies struct {
+	first, then string
+	n           int
+	last        []struct{ Role, Content string }
+}
+
+func (f *twoReplies) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var asked struct {
+		Messages []struct{ Role, Content string }
+	}
+	json.NewDecoder(r.Body).Decode(&asked)
+	f.last = asked.Messages
+	reply := f.then
+	if f.n == 0 {
+		reply = f.first
+	}
+	f.n++
+	b, _ := json.Marshal(map[string]any{"message": map[string]string{"role": "assistant", "content": reply}, "done": true})
+	fmt.Fprintf(w, "%s\n", b)
+}
+
+func TestACardThatDoesNotDrawIsAskedForAgainWithWhatToFix(t *testing.T) {
+	f := &twoReplies{first: `{"title": "Steps", "body": [{"type": "Chart"}]}`, then: explainCard}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	m := localmodel.ChatModel{URL: srv.URL, Name: "qwen3:4b"}
+	spec, err := Make(context.Background(), m, KindExplain, "How does a kept card move?", "")
+	if err != nil || f.n != 2 {
+		t.Fatalf("made %s, %v after %d asks; want the second ask's card", spec, err, f.n)
+	}
+	if f.last[0].Content != explain {
+		t.Errorf("an explaining card was made with the instructions %q", f.last[0].Content[:40])
+	}
+	fix := f.last[len(f.last)-1].Content
+	if !strings.Contains(fix, `part 1 is a "Chart"`) || f.last[len(f.last)-2].Role != "assistant" {
+		t.Errorf("the second ask: %q; want the first reply, then what to fix", fix)
 	}
 }
 

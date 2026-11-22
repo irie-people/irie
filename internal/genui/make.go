@@ -15,9 +15,15 @@ import (
 // with the catalog and the card, it fits a context of 8,192 tokens.
 const MaxContext = 20 << 10
 
-// system tells a model what a card is: the catalog, in short, and the
-// rule that holds it to what it was given.
-const system = `You make one card: a short summary a person takes in at a glance, drawn by an app in its own look.
+// The kinds of card a model makes, each with its own instructions.
+const (
+	KindSummary = ""        // what its context says, at a glance, such as where a session stands
+	KindExplain = "explain" // what the person asked to have explained, a picture first
+)
+
+// summary tells a model what a summary card is: the catalog, in short, and
+// the rule that holds it to what it was given.
+const summary = `You make one card: a short summary a person takes in at a glance, drawn by an app in its own look.
 Answer with one JSON object and nothing else, in this shape:
 {"title": "a few words", "body": [part, ...]}
 Each part is one of these:
@@ -30,12 +36,42 @@ Each part is one of these:
 Use only what the context says, and never make up a name, a number or a fact.
 Keep it short: at most eight parts, in plain words, with no Markdown and no links.`
 
-// Make has the local model m make the card prompt asks for, from text
-// alone, the card's context, and gives the card's JSON, compacted, once it
-// passes Check. m runs on this computer (localmodel.FindChatModel never
+// explain tells a model what an explaining card is: pictures first, from
+// the catalog's Flow, Diagram and Compare, with a few words beside them.
+// It may explain from what it knows, but the work in its context it takes
+// only as the context tells it.
+const explain = `You explain one thing to a person who learns best from pictures. You answer with one card, which an app draws in its own look.
+Answer with one JSON object and nothing else, in this shape:
+{"title": "a few words", "body": [part, ...]}
+Begin with one picture, the part that shows it best:
+{"type": "Flow", "items": [{"title": "a step", "detail": "what happens in it"}]}   (steps in order, 2 to 6 of them)
+{"type": "Diagram", "links": [{"from": "a thing", "to": "another", "label": "how they connect"}]}   (up to 12 links; the same name is the same thing)
+{"type": "Compare", "sides": [{"title": "one", "points": ["...", "..."]}, {"title": "the other", "points": ["..."]}]}   (2 or 3 sides)
+Then, where they help:
+{"type": "Text", "text": "a sentence or two", "style": "body"}   (style: body or caption)
+{"type": "Code", "language": "go", "text": "a few lines"}   (a short example, at most 12 lines)
+{"type": "List", "items": [{"title": "...", "detail": "..."}]}
+{"type": "Facts", "facts": [{"label": "...", "value": "..."}]}
+Explain in plain words, as to a newcomer. Where the context bears on what is asked, follow it, and never make up a name, a number or a fact about the work in it.
+Keep it short: one picture and at most five parts in all, with no Markdown and no links.`
+
+// instructions are the instructions for a kind of card; summary for one
+// it does not know.
+func instructions(kind string) string {
+	if kind == KindExplain {
+		return explain
+	}
+	return summary
+}
+
+// Make has the local model m make the card prompt asks for, of the kind
+// given, from text alone, the card's context, and gives the card's JSON,
+// compacted, once it passes Check. A card that does not is asked for once
+// more, with what to fix, since a small model often gets it right the
+// second time. m runs on this computer (localmodel.FindChatModel never
 // picks a cloud model), so a card costs no tokens. The caller bounds how
 // long it may take with ctx.
-func Make(ctx context.Context, m localmodel.ChatModel, prompt, text string) (json.RawMessage, error) {
+func Make(ctx context.Context, m localmodel.ChatModel, kind, prompt, text string) (json.RawMessage, error) {
 	if len(text) > MaxContext {
 		text = strings.ToValidUTF8(text[:MaxContext], "") + "\n[cut short]"
 	}
@@ -49,18 +85,24 @@ func Make(ctx context.Context, m localmodel.ChatModel, prompt, text string) (jso
 		opt.Think = &off
 	}
 	o := localmodel.Ollama{URL: m.URL}
-	reply, err := o.Chat(ctx, m.Name, []localmodel.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: ask}}, opt, nil)
-	if err != nil {
-		return nil, err
+	msgs := []localmodel.ChatMessage{{Role: "system", Content: instructions(kind)}, {Role: "user", Content: ask}}
+	var err error
+	for try := 0; try < 2; try++ {
+		var reply string
+		if reply, err = o.Chat(ctx, m.Name, msgs, opt, nil); err != nil {
+			return nil, err
+		}
+		var spec json.RawMessage
+		if spec, err = cardJSON(reply); err == nil {
+			if _, err = Check(spec); err == nil {
+				return spec, nil
+			}
+		}
+		msgs = append(msgs,
+			localmodel.ChatMessage{Role: "assistant", Content: reply},
+			localmodel.ChatMessage{Role: "user", Content: "That card does not draw: " + err.Error() + ". Write the whole card again, with that fixed."})
 	}
-	spec, err := cardJSON(reply)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", m.Name, err)
-	}
-	if _, err := Check(spec); err != nil {
-		return nil, fmt.Errorf("%s: %w", m.Name, err)
-	}
-	return spec, nil
+	return nil, fmt.Errorf("%s: %w", m.Name, err)
 }
 
 // cardJSON is the JSON object in a model's reply, compacted. What a model

@@ -547,9 +547,7 @@ final class ClaudeKeys {
 @MainActor
 struct KeyPeekView: View {
     let peek: KeyPeek
-    @Environment(\.accessibilityReduceTransparency) private var solid
     @Environment(\.accessibilityReduceMotion) private var still
-    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         GeometryReader { geo in
@@ -567,7 +565,6 @@ struct KeyPeekView: View {
     }
 
     private func panel(_ s: PeekSheet, height: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         let many = s.groups.reduce(0) { $0 + $1.rows.count } > 9
         return VStack(spacing: 10) {
             // The keys so far, large, where an alert has its icon.
@@ -614,25 +611,9 @@ struct KeyPeekView: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 18)
         .frame(width: many ? 540 : 300)
-        .background {
-            if solid {
-                shape.fill(Theme.field)
-            } else {
-                // Frosted, in the palette's own field colour, with no line
-                // round it: its ground runs on past its edge and blurs into
-                // the window, so the edge is soft all round.
-                ZStack {
-                    shape.fill(Theme.field.opacity(0.6))
-                        .padding(-10)
-                        .blur(radius: 14)
-                    shape.fill(.regularMaterial)
-                        .overlay(shape.fill(Theme.field.opacity(0.6)))
-                        .mask { shape.inset(by: 2).blur(radius: 3) }
-                }
-                .shadow(color: Theme.shadow, radius: 24, y: 8)
-            }
-        }
-        .overlay { if solid || contrast == .increased { shape.strokeBorder(Theme.edge, lineWidth: 1) } }
+        // Frosted, its edge blurring into the window (Frosted.swift), as
+        // the Teach tile's is.
+        .frostedPanel()
         .accessibilityElement(children: .combine)
     }
 }

@@ -3,7 +3,8 @@
 // card, the check it must pass before Irie keeps or draws it, and a card
 // drawn as plain text for a terminal. Irie owns the look: a model picks
 // parts from the catalog and fills them with words and numbers, and never
-// writes markup, styles or code.
+// writes markup, styles or code. Even a Diagram is data, the links between
+// things, which Irie lays out and draws itself.
 package genui
 
 import (
@@ -19,17 +20,21 @@ import (
 // Catalog is the catalog's version. It is part of the recipe of every
 // card a model makes (internal/materialize), so a new version leaves every
 // kept card cold, to be made again with what the new one holds.
-const Catalog = 1
+const Catalog = 2
 
 // Limits on a card, past which it is refused, never cut short.
 const (
 	MaxBytes = 32 << 10 // the card's JSON
 	MaxParts = 200      // the parts of its body
-	MaxRows  = 100      // the rows of a table, and the items of a list
+	MaxRows  = 100      // the rows of a table, the items of a list or a flow, and a side's points
+	MaxLinks = 24       // the links of a diagram
+	MaxNodes = 16       // the things a diagram's links join
+	MaxSides = 4        // the sides of a comparison
 )
 
 // The parts of the catalog, named after A2UI's basic catalog where the two
-// overlap.
+// overlap. Flow, Diagram and Compare are pictures, for a card that
+// explains (KindExplain); Code is a short example.
 const (
 	PartText     = "Text"
 	PartList     = "List"
@@ -37,9 +42,13 @@ const (
 	PartTable    = "Table"
 	PartProgress = "Progress"
 	PartDivider  = "Divider"
+	PartFlow     = "Flow"    // steps in order, joined by arrows: Items
+	PartDiagram  = "Diagram" // how things connect: Links
+	PartCompare  = "Compare" // two to four things side by side: Sides
+	PartCode     = "Code"    // a short example: Text, in Language
 )
 
-var parts = []string{PartText, PartList, PartFacts, PartTable, PartProgress, PartDivider}
+var parts = []string{PartText, PartList, PartFacts, PartTable, PartProgress, PartDivider, PartFlow, PartDiagram, PartCompare, PartCode}
 
 // Card is a card: a title over the parts of its body, in order.
 type Card struct {
@@ -51,20 +60,23 @@ type Card struct {
 // uses; a view skips a field it does not know, so a newer catalog's cards
 // still draw in an older view.
 type Part struct {
-	Type    string   `json:"type"`
-	Text    string   `json:"text,omitempty"`    // Text
-	Style   string   `json:"style,omitempty"`   // Text: title, body, caption or mono; "" is body
-	Items   []Item   `json:"items,omitempty"`   // List
-	Facts   []Fact   `json:"facts,omitempty"`   // Facts
-	Columns []Cell   `json:"columns,omitempty"` // Table
-	Rows    [][]Cell `json:"rows,omitempty"`    // Table
-	Label   string   `json:"label,omitempty"`   // Progress
-	Value   Number   `json:"value,omitempty"`   // Progress
-	Total   Number   `json:"total,omitempty"`   // Progress
+	Type     string   `json:"type"`
+	Text     string   `json:"text,omitempty"`     // Text, Code
+	Style    string   `json:"style,omitempty"`    // Text: title, body, caption or mono; "" is body
+	Items    []Item   `json:"items,omitempty"`    // List, Flow
+	Facts    []Fact   `json:"facts,omitempty"`    // Facts
+	Columns  []Cell   `json:"columns,omitempty"`  // Table
+	Rows     [][]Cell `json:"rows,omitempty"`     // Table
+	Label    string   `json:"label,omitempty"`    // Progress
+	Value    Number   `json:"value,omitempty"`    // Progress
+	Total    Number   `json:"total,omitempty"`    // Progress
+	Links    []Link   `json:"links,omitempty"`    // Diagram
+	Sides    []Side   `json:"sides,omitempty"`    // Compare
+	Language string   `json:"language,omitempty"` // Code: such as go or swift; "" when it is not code of one
 }
 
-// Item is one line of a List: a title, a detail beside it, and a status
-// mark: ok, warn, note or none.
+// Item is one line of a List, or one step of a Flow: a title, a detail
+// beside it, and a status mark: ok, warn, note or none.
 type Item struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail,omitempty"`
@@ -75,6 +87,20 @@ type Item struct {
 type Fact struct {
 	Label string `json:"label"`
 	Value Cell   `json:"value"`
+}
+
+// Link is one line of a Diagram: from one thing to another, by their
+// names, with a few words on how. Things of the same name are one thing.
+type Link struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Label string `json:"label,omitempty"`
+}
+
+// Side is one side of a Compare: what it is, and its points.
+type Side struct {
+	Title  string `json:"title"`
+	Points []Cell `json:"points,omitempty"`
 }
 
 // Cell is a table's cell or a fact's value: words, though a model may
@@ -144,7 +170,38 @@ func Check(spec []byte) (Card, error) {
 			return Card{}, fmt.Errorf("part %d is a %q, which the catalog does not have: use %s", i+1, p.Type, strings.Join(parts, ", "))
 		case len(p.Rows) > MaxRows || len(p.Items) > MaxRows:
 			return Card{}, fmt.Errorf("part %d has more than %d rows", i+1, MaxRows)
+		case len(p.Sides) > MaxSides:
+			return Card{}, fmt.Errorf("part %d compares %d sides, and at most %d fit side by side", i+1, len(p.Sides), MaxSides)
+		}
+		for _, sd := range p.Sides {
+			if len(sd.Points) > MaxRows {
+				return Card{}, fmt.Errorf("part %d has a side of more than %d points", i+1, MaxRows)
+			}
+		}
+		if err := checkLinks(p.Links); err != nil {
+			return Card{}, fmt.Errorf("part %d: %w", i+1, err)
 		}
 	}
 	return c, nil
+}
+
+// checkLinks says what to fix in a diagram's links: too many of them, too
+// many things joined, or a link with an end left out, which would draw as
+// an arrow from nothing.
+func checkLinks(links []Link) error {
+	if len(links) > MaxLinks {
+		return fmt.Errorf("the diagram has %d links, and at most %d fit", len(links), MaxLinks)
+	}
+	nodes := map[string]bool{}
+	for j, l := range links {
+		from, to := strings.TrimSpace(l.From), strings.TrimSpace(l.To)
+		if from == "" || to == "" {
+			return fmt.Errorf("link %d of the diagram needs both a from and a to", j+1)
+		}
+		nodes[from], nodes[to] = true, true
+	}
+	if len(nodes) > MaxNodes {
+		return fmt.Errorf("the diagram joins %d things, and at most %d fit", len(nodes), MaxNodes)
+	}
+	return nil
 }

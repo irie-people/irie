@@ -27,6 +27,10 @@ const materializeUsage = `  ` + brand.Slug + ` ctl materialize ID PROMPT [--cont
   ` + brand.Slug + ` ctl materialize --session SESSION [--wait D]
                                          where a session stands, as its own card
                                          (materialize.sessions)
+  ` + brand.Slug + ` ctl materialize --explain TOPIC [--session SESSION] [--forget]
+                                         a card that explains TOPIC, a picture
+                                         first, as the Teach tile shows it; with a
+                                         session, from its conversation
 `
 
 // cardWidth is how wide ctl materialize draws a card.
@@ -43,7 +47,8 @@ func ctlMaterialize(args []string) error {
 	asJSON := fs.Bool("json", false, "print the answer as JSON")
 	forget := fs.Bool("forget", false, "drop the card kept under ID")
 	session := fs.String("session", "", "a session's own card, where it stands, which the core makes from its conversation")
-	usage := errors.New("usage: " + brand.Slug + " ctl materialize ID PROMPT [--context FILE|-] [--every D] [--gap D] [--wait D] [--json], --forget ID, or --session SESSION")
+	explain := fs.String("explain", "", "a card that explains this, a picture first; with --session, from that session's conversation")
+	usage := errors.New("usage: " + brand.Slug + " ctl materialize ID PROMPT [--context FILE|-] [--every D] [--gap D] [--wait D] [--json], --forget ID, --session SESSION, or --explain TOPIC")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -51,7 +56,7 @@ func ctlMaterialize(args []string) error {
 	rest := fs.Args()
 	need := 2
 	switch {
-	case *session != "":
+	case *explain != "" || *session != "":
 		need = 0
 	case *forget:
 		need = 1
@@ -65,7 +70,7 @@ func ctlMaterialize(args []string) error {
 	if fs.NArg() > 0 {
 		return usage
 	}
-	a := ipc.MaterializeArgs{Session: *session, Every: *every, Gap: *gap, Wait: min(*wait, ipc.MaxMaterializeWait), Forget: *forget}
+	a := ipc.MaterializeArgs{Session: *session, Explain: *explain, Every: *every, Gap: *gap, Wait: min(*wait, ipc.MaxMaterializeWait), Forget: *forget}
 	if need > 0 {
 		a.ID = rest[0]
 	}

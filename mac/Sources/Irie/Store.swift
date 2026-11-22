@@ -82,6 +82,8 @@ final class Store {
     private(set) var canLearn = false
     /// The core makes materialized cards (docs/proposals/materialized-cards.md).
     private(set) var canMaterialize = false
+    /// It makes cards that explain, for the Teach tile (materialize-explain).
+    private(set) var canExplain = false
     /// Each session's card of where it stands, as the core last gave it.
     var sessionCards: [String: MaterializeResult] = [:]
     /// The core runs the right sidebar's Dock (op dock, Dock.swift).
@@ -395,6 +397,8 @@ final class Store {
     let vault = VaultModel()
     /// Zen: the session on show alone, full screen (Zen.swift).
     let zen = ZenModel()
+    /// The Teach tile, a picture of what you want explained (TeachTile.swift).
+    let teach = TeachTile()
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
@@ -471,6 +475,7 @@ final class Store {
                 canTutor = hello.features.contains("spawn-tutor")
                 canLearn = hello.features.contains("learn")
                 canMaterialize = hello.features.contains("materialize")
+                canExplain = hello.features.contains("materialize-explain")
                 canDock = hello.features.contains("dock")
                 rolodex.canShell = hello.features.contains("pane")
                 canLink = hello.features.contains("link")
@@ -848,6 +853,8 @@ final class Store {
         isFixture = true
         // Zen draws only as the snapshot asks, and saves nothing.
         zen.fixture = true
+        // So does the Teach tile, hidden until a snapshot shows it.
+        teach.loadFixture(shown: false, asked: nil, in: nil, result: nil)
         // Whatever the app popped out, the fixture's terminal is in.
         poppedOut = nil
         sessions = rows.sorted(by: Self.before)
@@ -1382,6 +1389,16 @@ final class Store {
             sessionCards[id] = done
         }
         return true
+    }
+
+    /// Asks the core for the card that explains topic, made from session's
+    /// conversation when one is given, as the Teach tile shows it; with
+    /// wait, waits that many seconds while a local model makes it. Forget
+    /// drops the kept card instead, so the next ask makes it anew. Throws
+    /// what the core said when it refused.
+    func explainCard(_ topic: String, session: String?, wait: TimeInterval? = nil, forget: Bool = false) async throws -> MaterializeResult {
+        let args = MaterializeArgs(session: session, wait: wait.map { Int64($0 * 1_000_000_000) }, explain: topic, forget: forget ? true : nil)
+        return try await client.call("materialize", args, timeout: (wait ?? 0) + 15, as: MaterializeResult.self)
     }
 
     /// Takes a task added to the one before back and starts it as a task

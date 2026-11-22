@@ -899,12 +899,23 @@ type Learn struct {
 	// made its choices; or teach, in its Learning style, which also leaves
 	// small parts for you to write. +explain and +teach set it for one task.
 	Tutor string `toml:"tutor"`
-	// Visual asks an agent in a tutor mode to draw a small diagram where a
-	// picture helps, which the Mac app's conversation view renders.
-	Visual    bool              `toml:"visual"`
+	// Visual gives a tutor mode pictures where a picture helps.
+	Visual bool `toml:"visual"`
+	// Pictures says who draws them: agent, the agent itself, as small
+	// diagrams in its replies, which the Mac app's conversation view
+	// renders and which cost tokens; or tile, the Teach tile, on a local
+	// model, for what the person asks to have explained, which costs none,
+	// so the agent is told to draw none.
+	Pictures  string            `toml:"pictures"`
 	AgentTips bool              `toml:"agent_tips"` // Irie's tips under Claude Code's spinner
 	Links     map[string]string `toml:"links"`      // your own learning resources, by title, first in the Help menu's list
 }
+
+// Who draws a tutor mode's pictures (learn.pictures).
+const (
+	PicturesAgent = "agent"
+	PicturesTile  = "tile"
+)
 
 // Tutor modes (learn.tutor), which are also the words +explain and +teach.
 const (
@@ -1098,7 +1109,7 @@ func Default() Config {
 		},
 		Remote:   Remote{Port: DefaultRemotePort},
 		Place:    Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
-		Learn:    Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
+		Learn:    Learn{Tutor: TutorOff, Visual: true, Pictures: PicturesAgent, AgentTips: true, Links: map[string]string{}},
 		Browser:  Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:     defaultMail(),
@@ -1441,6 +1452,9 @@ func (c Config) Validate() error {
 	}
 	if _, ok := c.Profiles[Auto]; ok {
 		bad("profiles.%s: auto is "+brand.Name+"'s router; give the profile another name", Auto)
+	}
+	if c.Learn.Pictures != PicturesAgent && c.Learn.Pictures != PicturesTile {
+		bad("learn.pictures = %q: must be agent or tile", c.Learn.Pictures)
 	}
 	if !slices.Contains(TutorModes, c.Learn.Tutor) {
 		bad("learn.tutor = %q: must be off, explain or teach", c.Learn.Tutor)

@@ -220,10 +220,11 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 			argv = append(argv, "--strict-mcp-config")
 		}
 	}
-	// In a tutor mode, the ask for diagrams goes after Claude Code's own
-	// instructions and its output style, taking nothing away.
-	if s.Visual && s.Tutor != "" && s.Probe.Flags["--append-system-prompt"] {
-		argv = append(argv, "--append-system-prompt", harness.VisualNote)
+	// In a tutor mode, the note on pictures goes after Claude Code's own
+	// instructions and its output style, taking nothing away: draw them,
+	// or leave them to the Teach tile.
+	if n := harness.PictureNote(s.Tutor, s.Visual, s.Tile); n != "" && s.Probe.Flags["--append-system-prompt"] {
+		argv = append(argv, "--append-system-prompt", n)
 	}
 	files := map[string][]byte{SettingsFile: settings}
 	if mcp != nil {

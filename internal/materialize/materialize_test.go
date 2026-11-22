@@ -49,6 +49,7 @@ func TestTheHashVersionsWhatMakesTheCard(t *testing.T) {
 		"another prompt":  {Prompt: r.Prompt + "?", Catalog: r.Catalog},
 		"another profile": {Prompt: r.Prompt, Profile: "local", Catalog: r.Catalog},
 		"another catalog": {Prompt: r.Prompt, Catalog: r.Catalog + 1},
+		"another kind":    {Prompt: r.Prompt, Catalog: r.Catalog, Kind: "explain"},
 	} {
 		if other.Hash() == r.Hash() {
 			t.Errorf("%s: the same hash", name)
@@ -61,6 +62,10 @@ func TestTheHashVersionsWhatMakesTheCard(t *testing.T) {
 	}
 	if (Recipe{Prompt: "a b", Profile: "c"}).Hash() == (Recipe{Prompt: "a", Profile: "b c"}).Hash() {
 		t.Error("a space moved between two fields, and the hash stayed")
+	}
+	// A recipe of no kind hashes as one did before there were kinds.
+	if got := (Recipe{Prompt: "p", Profile: "local", Catalog: 1}).Hash(); got != "c6eb4dfb80eb0e85" {
+		t.Errorf("a summary's hash is %s; it changed", got)
 	}
 }
 
@@ -345,5 +350,29 @@ func TestAFileThatDoesNotReadGivesAnEmptyStore(t *testing.T) {
 	}
 	if again, err := Open(path); err != nil || again == nil {
 		t.Errorf("the file written over does not read: %v", err)
+	}
+}
+
+func TestTrimKeepsTheNewestOfAKind(t *testing.T) {
+	s, path := open(t)
+	for i, id := range []string{"explain/a", "explain/b", "explain/c"} {
+		first(t, s, Recipe{ID: id, Prompt: id, Catalog: 2}, t0.Add(time.Duration(i)*time.Minute))
+	}
+	first(t, s, status(), t0)
+	// A card being made is the newest, whenever it was last made.
+	if _, _, rm, _ := s.Want(Recipe{ID: "explain/new", Prompt: "new", Catalog: 2}, t0.Add(time.Hour)); rm == nil {
+		t.Fatal("no remake began for a new card")
+	}
+	if err := s.Trim("explain/", 1); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id, kept := range map[string]bool{"explain/a": false, "explain/b": false, "explain/c": true, "explain/new": true, "session/abc/status": true} {
+		if _, ok := again.cards[id]; ok != kept {
+			t.Errorf("%s: kept %v, want %v", id, ok, kept)
+		}
 	}
 }

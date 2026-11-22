@@ -20,6 +20,7 @@ type cardOllama struct {
 	mu    sync.Mutex
 	reply string
 	chats int
+	asked []struct{ Role, Content string } // the last chat's messages
 }
 
 func (f *cardOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -31,8 +32,13 @@ func (f *cardOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/show":
 		fmt.Fprint(w, `{"capabilities":["completion"],"model_info":{}}`)
 	case "/api/chat":
+		var asked struct {
+			Messages []struct{ Role, Content string }
+		}
+		json.NewDecoder(r.Body).Decode(&asked)
 		f.mu.Lock()
 		f.chats++
+		f.asked = asked.Messages
 		reply := f.reply
 		f.mu.Unlock()
 		b, _ := json.Marshal(map[string]any{"message": map[string]string{"role": "assistant", "content": reply}, "done": true})
@@ -44,6 +50,13 @@ func (f *cardOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (f *cardOllama) say(reply string) { f.mu.Lock(); f.reply = reply; f.mu.Unlock() }
 func (f *cardOllama) count() int       { f.mu.Lock(); defer f.mu.Unlock(); return f.chats }
+
+// lastAsked is the last chat's messages.
+func (f *cardOllama) lastAsked() []struct{ Role, Content string } {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.asked
+}
 
 func cardCore(t *testing.T, url string) *Core {
 	t.Helper()

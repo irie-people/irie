@@ -133,8 +133,13 @@ func TestATutorModeIsANoteBeforeTheTask(t *testing.T) {
 			t.Errorf("task argument = %q", argv[len(argv)-1])
 		}
 	}
-	if harness.WithTutor(config.TutorOff, true, "x") != "x" || harness.WithTutor("", true, "x") != "x" {
+	if harness.WithTutor(config.TutorOff, harness.VisualNote, "x") != "x" || harness.WithTutor("", harness.VisualNote, "x") != "x" {
 		t.Error("off adds nothing")
+	}
+	s := spawnOf("x")
+	s.Tutor, s.Visual, s.Tile = config.TutorTeach, true, true
+	if _, _, files, _ := (Harness{}).Launch(aider(config.TaskArg), s); !strings.Contains(string(files[harness.TaskFile]), harness.TileNote) {
+		t.Errorf("the tile draws the pictures, yet the task file says %q", files[harness.TaskFile])
 	}
 }
 

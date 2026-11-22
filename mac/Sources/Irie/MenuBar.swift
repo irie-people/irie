@@ -88,6 +88,8 @@ final class MenuState {
         var zenLayout = ZenLayout.centred
         /// Bitwarden is locked, unlocking or unlocked (Bitwarden.swift).
         var bitwarden = BitwardenVault.State.locked.rawValue
+        /// The Teach tile shows (TeachTile.swift): Help > Teach Tile ticked.
+        var teach = false
     }
 
     private(set) var facts = Facts()
@@ -136,6 +138,7 @@ extension Store {
         f.helperShown = helperShown
         f.showTerminal = showTerminal
         f.reversed = reversed
+        f.teach = teach.shown
         f.sideTab = side.open ? side.tab : nil
         f.poppedOut = poppedOut != nil
         f.canPopOut = attach != nil
