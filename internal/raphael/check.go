@@ -18,6 +18,12 @@ type Input struct {
 	// Thorough asks Homebrew what it would clean up too, which can take
 	// minutes: for a look the person asked for.
 	Thorough bool
+	// Want is the style the person chose for each of macOS's own senders
+	// of notices (alerts.*), by its id.
+	Want map[string]string
+	// Signed are the app's programs whose signatures say whether macOS
+	// keeps what the person allows them: the app and the command.
+	Signed []string
 }
 
 // Quick is the part of a look that runs no tool: what runs hot, memory,
@@ -47,9 +53,9 @@ func Quick(in Input, m Memory, d Disk) (fs []Finding, fine []string) {
 	return fs, fine
 }
 
-// Slow is the rest of a look: the caches, what starts by itself and
-// macOS's protections. It runs tools, in the background state, so it takes
-// a while: du alone may take a minute over big caches.
+// Slow is the rest of a look: the caches, what starts by itself, macOS's
+// protections and its own alerts. It runs tools, in the background state,
+// so it takes a while: du alone may take a minute over big caches.
 func Slow(ctx context.Context, r Runner, in Input, d Disk) (fs []Finding, fine []string) {
 	caches, total := cacheFindings(ctx, r, cachesInput{Home: in.Home, Procs: in.Procs, Disk: d, Thorough: in.Thorough})
 	fs = append(fs, caches...)
@@ -72,6 +78,12 @@ func Slow(ctx context.Context, r Runner, in Input, d Disk) (fs []Finding, fine [
 	protect, pfine := protectFindings(ctx, r, protectInput{Now: in.Now})
 	fs = append(fs, protect...)
 	fine = append(fine, pfine...)
+	if ctx.Err() != nil {
+		return fs, fine
+	}
+	alerts, afine := alertFindings(ctx, r, alertsInput{Home: in.Home, Want: in.Want, Signed: in.Signed, Now: in.Now})
+	fs = append(fs, alerts...)
+	fine = append(fine, afine...)
 	sortFindings(fs)
 	return fs, fine
 }

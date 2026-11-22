@@ -56,6 +56,7 @@ type Config struct {
 	Peers     map[string]Peer    `toml:"peers"`
 	Env       Env                `toml:"env"`
 	Learn     Learn              `toml:"learn"`
+	Alerts    Alerts             `toml:"alerts"`
 	VPN       VPN                `toml:"vpn"`
 	Browser   Browser            `toml:"browser"`
 	Anon      Anon               `toml:"anon"`
@@ -911,6 +912,29 @@ type Learn struct {
 	Links     map[string]string `toml:"links"`      // your own learning resources, by title, first in the Help menu's list
 }
 
+// Alerts is how macOS shows its own notices about the work done here
+// (DESIGN §4.11, Raphael), which System Settings › Notifications does not
+// list, so it can't change their style: "" leaves macOS's own, banners go
+// by themselves after a few seconds into Notification Center, and alerts
+// stay on screen until they are closed. The core puts the chosen style back
+// whenever macOS's differs, as it starts and as the setting changes.
+type Alerts struct {
+	// Background is Login Items' "Background Items Added", which comes each
+	// time a program is set to start by itself.
+	Background string `toml:"background"`
+	// Privacy is Privacy & Security's notices, such as that an app was
+	// kept from changing other apps.
+	Privacy string `toml:"privacy"`
+}
+
+// The styles alerts.* may name.
+const (
+	AlertsAsMacOS  = ""
+	AlertsBanners  = "banners"
+	AlertsAlerts   = "alerts"
+	alertsStyleErr = "must be banners, alerts or \"\" to leave macOS's own"
+)
+
 // Who draws a tutor mode's pictures (learn.pictures).
 const (
 	PicturesAgent = "agent"
@@ -1236,6 +1260,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Peers     map[string]Peer           `toml:"peers"`
 		Env       *Env                      `toml:"env"`
 		Learn     *Learn                    `toml:"learn"`
+		Alerts    *Alerts                   `toml:"alerts"`
 		VPN       *VPN                      `toml:"vpn"`
 		Browser   *Browser                  `toml:"browser"`
 		Anon      *Anon                     `toml:"anon"`
@@ -1250,7 +1275,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Plugins   *Plugins                  `toml:"plugins"`
 
 		Materialize *Materialize `toml:"materialize"`
-	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Jammin: &c.Jammin, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Jammin: &c.Jammin, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn, Alerts: &c.Alerts}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1452,6 +1477,11 @@ func (c Config) Validate() error {
 	}
 	if _, ok := c.Profiles[Auto]; ok {
 		bad("profiles.%s: auto is "+brand.Name+"'s router; give the profile another name", Auto)
+	}
+	for _, a := range [][2]string{{"alerts.background", c.Alerts.Background}, {"alerts.privacy", c.Alerts.Privacy}} {
+		if v := a[1]; v != AlertsAsMacOS && v != AlertsBanners && v != AlertsAlerts {
+			bad("%s = %q: "+alertsStyleErr, a[0], v)
+		}
 	}
 	if c.Learn.Pictures != PicturesAgent && c.Learn.Pictures != PicturesTile {
 		bad("learn.pictures = %q: must be agent or tile", c.Learn.Pictures)

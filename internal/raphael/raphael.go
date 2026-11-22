@@ -3,8 +3,10 @@
 // slows it down, fills it up or may have got in. He finds processes that
 // run hot for a long time, memory hogs and swap, a disk nearly full and the
 // biggest caches that are safe to clear, login items that are unsigned, not
-// notarized or look like known kinds of suspicious persistence, and the
-// state of macOS's own protections.
+// notarized or look like known kinds of suspicious persistence, the state
+// of macOS's own protections, and macOS's own alerts: the ones that stay
+// until they are closed, the background items and access it asked about
+// lately, and why it asks again.
 //
 // He only looks. A Finding may carry a Fix, which shows first what it will
 // run; the core runs one only on the person's OK, one at a time (Do). He
@@ -44,10 +46,11 @@ const (
 	AreaCaches     = "caches"
 	AreaStartup    = "startup"
 	AreaProtection = "protection"
+	AreaAlerts     = "alerts" // macOS's own alerts, and the access it asks for in Irie's name (alerts.go)
 )
 
 // areaOrder is the order areas are reported in.
-var areaOrder = []string{AreaDisk, AreaMemory, AreaProcesses, AreaProtection, AreaStartup, AreaCaches}
+var areaOrder = []string{AreaDisk, AreaMemory, AreaProcesses, AreaProtection, AreaAlerts, AreaStartup, AreaCaches}
 
 // Finding is one thing Raphael found.
 type Finding struct {

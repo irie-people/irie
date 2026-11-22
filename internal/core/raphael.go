@@ -230,7 +230,8 @@ func (c *Core) raphaelInput(ps []raphael.Proc, hot []raphael.Hot, t proc.Table, 
 			o.Irie[p.PID] = true
 		}
 	}
-	return raphael.Input{Home: home, UID: os.Getuid(), Known: c.cfg().Arch.Raphael.Known, Owner: o, Procs: ps, Hot: hot, Now: now}
+	return raphael.Input{Home: home, UID: os.Getuid(), Known: c.cfg().Arch.Raphael.Known, Owner: o, Procs: ps, Hot: hot, Now: now,
+		Want: alertsWant(c.cfg().Alerts), Signed: c.raphaelSigned()}
 }
 
 // raphaelBegin starts a look at the caches, what starts by itself and
@@ -355,13 +356,14 @@ func (c *Core) raphaelFix(f raphael.Finding) {
 	home, _ := os.UserHomeDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
-	said, err := raphael.Do(ctx, r.run(), *f.Fix, raphael.DoInput{Home: home, UID: os.Getuid()})
+	said, err := raphael.Do(ctx, r.run(), *f.Fix, raphael.DoInput{Home: home, UID: os.Getuid(), State: c.paths.State})
 	d := ipc.RaphaelDone{At: time.Now(), Label: f.Fix.Label, Said: said}
 	if err != nil {
 		d.Said, d.Error = f.Fix.Label+": "+err.Error(), true
 		c.log.Warn("raphael: a fix failed", "fix", f.Fix.Label, "err", err)
 	} else {
 		c.log.Info("raphael: fixed", "fix", f.Fix.Label, "said", said)
+		c.keepRaphaelStyle(*f.Fix)
 	}
 	r.mu.Lock()
 	r.fixes = append([]ipc.RaphaelDone{d}, r.fixes...)

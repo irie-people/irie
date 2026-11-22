@@ -621,6 +621,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[spawn]\npreferences = [\"one\\ntwo\"]\n", "spawn.preferences[0]: must be one line"},
 		{"[spawn]\npreferences = [\"" + strings.Repeat("x", 401) + "\"]\n", "spawn.preferences[0]: must be at most 400"},
 		{"[spawn]\npreferences = [" + strings.Repeat("\"x\", ", 16) + "]\n", "spawn.preferences: at most 15"},
+		{"[alerts]\nbackground = \"loud\"\n", `alerts.background = "loud": must be banners, alerts or "" to leave macOS's own`},
+		{"[alerts]\nprivacy = \"none\"\n", "alerts.privacy"},
 		{"[learn]\ntutor = \"socratic\"\n", "learn.tutor"},
 		{"[learn]\npictures = \"slides\"\n", `learn.pictures = "slides": must be agent or tile`},
 		{"[profiles.teach]\nmodel = \"opus\"\n", "profiles.teach"},
@@ -1111,5 +1113,18 @@ func TestObsidianSection(t *testing.T) {
 		if !NoteInVault(ok) {
 			t.Errorf("NoteInVault(%q) = false", ok)
 		}
+	}
+}
+
+func TestAlertsSection(t *testing.T) {
+	if c := Default(); c.Alerts != (Alerts{}) {
+		t.Errorf("default alerts = %+v: macOS's own, until the person chooses", c.Alerts)
+	}
+	c, err := Load(writeFile(t, "[alerts]\nbackground = \"banners\"\nprivacy = \"alerts\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Alerts != (Alerts{Background: AlertsBanners, Privacy: AlertsAlerts}) {
+		t.Errorf("alerts = %+v", c.Alerts)
 	}
 }

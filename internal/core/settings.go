@@ -129,8 +129,12 @@ func (c *Core) configureWith(path string, sets []ipc.ConfigSet, guard func(befor
 	if err != nil {
 		return err
 	}
+	was := c.cfg().Alerts
 	c.useConfig(cfg)
 	c.log.Info("settings", "keys", keys)
+	if cfg.Alerts != was {
+		go c.alertsKeep()
+	}
 	// Every sidebar hears red_on_done and close_when_done at once.
 	c.publishHeader()
 	return nil
