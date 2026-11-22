@@ -207,9 +207,10 @@ func Status(e Env) []ipc.Plugin {
 // then yours, and how each of your bundles stands.
 func Here(e Env) ([]ipc.Plugin, []ipc.PluginBundle) {
 	mine, bundles := Mine(e.Paths.Plugins())
+	held := holds(e, mine)
 	var out []ipc.Plugin
 	for _, p := range append(All(), mine...) {
-		out = append(out, p.status(e))
+		out = append(out, p.status(e, held[p.Name]))
 	}
 	var bs []ipc.PluginBundle
 	for _, b := range bundles {
@@ -218,7 +219,9 @@ func Here(e Env) ([]ipc.Plugin, []ipc.PluginBundle) {
 	return out, bs
 }
 
-func (p Plugin) status(e Env) ipc.Plugin {
+// status is how a plugin and its parts stand; held, why its helpers and
+// tools wait for your word though it is on (pinHold), or "".
+func (p Plugin) status(e Env, held string) ipc.Plugin {
 	// Parts is a list, even an empty one: clients decode it as one.
 	w := ipc.Plugin{Name: p.Name, Title: p.Title, Summary: p.Summary, Setup: p.Setup, Manifest: p.Manifest, Problem: p.problem, Parts: []ipc.PluginPart{}}
 	if p.problem != "" {
@@ -230,6 +233,9 @@ func (p Plugin) status(e Env) ipc.Plugin {
 	}
 	for _, x := range p.Parts {
 		s := x.status(e, w.On)
+		if held != "" && (x.Helper != nil || x.Tools != nil) {
+			s.State, s.Detail = ipc.PartHeld, held
+		}
 		if x.Pane != nil && x.Held == "" {
 			pane := *x.Pane
 			if pane.ID == "" {

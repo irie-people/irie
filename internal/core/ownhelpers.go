@@ -4,15 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/tmux"
@@ -43,6 +46,73 @@ type ownHelperKeep struct {
 	want   []plugins.Helper     // the helpers to keep running, as it read them then
 	at     map[string]time.Time // when it last started each, by id
 	why    map[string]string    // why each one doesn't start, in a sentence, by id
+	// pins are what each plugin of yours that runs something ran when you
+	// turned it on (DESIGN §4.17, pins.go); nil until the core's first look.
+	pins plugins.Pins
+}
+
+// keepPins keeps the pins file as the core holds the pins (DESIGN §4.17).
+// At the core's first look it takes the file it finds, or, with none, pins
+// each plugin of yours that runs something and is on, as it stands, which is
+// how plugins turned on before Irie kept pins carry on. From then on, the
+// file is written again whenever it says otherwise, so an edit of it, or
+// its removal, is undone within a look. The caller holds c.mu.
+func (c *Core) keepPins() {
+	k := &c.ownHelpers
+	if k.pins == nil {
+		if pins, ok := plugins.ReadPins(c.paths); ok {
+			k.pins = pins
+		} else {
+			k.pins = plugins.PinsNow(plugins.Env{Config: *c.cfg(), Paths: c.paths})
+			c.log.Info("plugins: pinned what your plugins run, as it stands", "plugins", len(k.pins))
+		}
+	}
+	if have, ok := plugins.ReadPins(c.paths); ok && plugins.SamePins(have, k.pins) {
+		return
+	}
+	if err := plugins.WritePins(c.paths, k.pins); err != nil {
+		c.log.Warn("plugins: pins", "err", err)
+	}
+}
+
+// pinnedNote tells an agent about to write a file that a plugin of yours
+// runs that the edit holds the plugin's helpers and tools until you turn it
+// on again (DESIGN §4.17), so it tells you, or "". The caller holds c.mu.
+func (c *Core) pinnedNote(tool string, input json.RawMessage, evs []event.Event) string {
+	if !slices.Contains([]string{"Write", "Edit", "MultiEdit", "NotebookEdit"}, tool) || !slices.ContainsFunc(evs, func(e event.Event) bool { return e.Kind == event.ToolStarted }) {
+		return ""
+	}
+	var in struct {
+		FilePath string `json:"file_path"`
+		Notebook string `json:"notebook_path"`
+	}
+	if json.Unmarshal(input, &in) != nil || in.FilePath+in.Notebook == "" {
+		return ""
+	}
+	path := filepath.Clean(in.FilePath + in.Notebook)
+	for _, name := range slices.Sorted(maps.Keys(c.ownHelpers.pins)) {
+		if _, ok := c.ownHelpers.pins[name].Files[path]; ok {
+			return "[" + brand.Name + "] " + path + " is what your user's plugin " + name + " runs. " + brand.Name + " holds a changed one until they turn the plugin on again, so if you change it, tell them: in Settings › Plugins, or " + brand.Slug + " plugins on " + name + "."
+		}
+	}
+	return ""
+}
+
+// pinPlugins pins what the plugins of yours named run now, at your word:
+// you turned them on (pluginsOp). The caller holds c.mu.
+func (c *Core) pinPlugins(names []string) {
+	if len(names) == 0 {
+		return
+	}
+	c.keepPins()
+	for name, pin := range plugins.PinsNow(plugins.Env{Config: *c.cfg(), Paths: c.paths}, names...) {
+		c.ownHelpers.pins[name] = pin
+	}
+	if err := plugins.WritePins(c.paths, c.ownHelpers.pins); err != nil {
+		c.log.Warn("plugins: pins", "err", err)
+	}
+	c.ownHelpers.looked = time.Time{} // start what is now allowed at once
+	c.log.Info("plugins: pinned at your word", "plugins", names)
 }
 
 // ownHelperSpec is what a helper's pane runs with, kept in @irie_version, so
@@ -67,6 +137,7 @@ func (c *Core) keepOwnHelpers(now time.Time) {
 	k := &c.ownHelpers
 	if now.Sub(k.looked) >= ownHelperLook {
 		k.looked = now
+		c.keepPins()
 		k.want = nil
 		for _, h := range plugins.Helpers(plugins.Env{Config: *c.cfg(), Paths: c.paths}) {
 			if h.On && len(h.Run) > 0 && h.Problem == "" {
@@ -155,6 +226,9 @@ func (c *Core) helpersOp(a ipc.HelpersArgs) (ipc.HelpersResult, error) {
 		if h == nil {
 			return ipc.HelpersResult{}, ipc.Errorf(ipc.CodeBadArgs, "No helper is called %q.", a.ID)
 		}
+		if h.Held != "" {
+			return ipc.HelpersResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s doesn't run: %s", h.Title, h.Held)
+		}
 		if !h.On || len(h.Run) == 0 {
 			return ipc.HelpersResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s doesn't run: its plugin is off, or it has no program.", h.Title)
 		}
@@ -200,6 +274,8 @@ func (c *Core) helpersOp(a ipc.HelpersArgs) (ipc.HelpersResult, error) {
 		switch {
 		case h.Problem != "":
 			w.Problem = h.Problem
+		case h.Held != "":
+			w.Problem = h.Held
 		case !w.Runs || !h.On:
 		case why[h.ID] != "":
 			w.Problem = why[h.ID]

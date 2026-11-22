@@ -101,6 +101,7 @@ func ToolsProgram(t OwnTools) (string, error) {
 // is on. A manifest that doesn't read brings none.
 func Tools(e Env) []OwnTools {
 	mine, _ := Mine(e.Paths.Plugins())
+	held := holds(e, mine)
 	var out []OwnTools
 	for _, p := range mine {
 		if p.problem != "" {
@@ -112,7 +113,9 @@ func Tools(e Env) []OwnTools {
 				continue
 			}
 			t := *x.Tools
-			t.On = on
+			// A server whose program changed since you turned its plugin
+			// on waits for your word, as a helper does (pins.go).
+			t.On = on && held[p.Name] == ""
 			t.Run = slices.Clone(t.Run)
 			out = append(out, t)
 		}
