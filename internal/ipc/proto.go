@@ -1758,6 +1758,21 @@ type LearnResult struct {
 	// order: the Teach tile lists them, and steps through them as a tour.
 	// None without a session, or from a core from before them.
 	Topics []LearnTopic `json:"topics,omitempty"`
+	// Saved are the explanations the Teach tile kept for the session's
+	// project, the newest first (learn.library).
+	Saved []SavedExplanation `json:"saved,omitempty"`
+}
+
+// SavedExplanation is an explanation the library keeps: its question, the
+// topic it explains, its Markdown file, its versions, whether the person
+// kept it, and when its newest was made.
+type SavedExplanation struct {
+	Question string    `json:"question"`
+	Topic    string    `json:"topic,omitempty"`
+	File     string    `json:"file"`
+	Versions int       `json:"versions"`
+	Kept     bool      `json:"kept,omitempty"`
+	Made     time.Time `json:"made"`
 }
 
 // LearnTopic is one thing a project's docs teach: an item of a list in

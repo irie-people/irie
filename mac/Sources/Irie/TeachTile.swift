@@ -22,9 +22,13 @@ final class TeachTile {
     static let least = CGSize(width: 360, height: 200)
     static let share: CGFloat = 0.6
     /// Its head, field and padding: the room in it that is not the card;
-    /// and the tour's bar under a topic's card.
+    /// the tour's bar under a topic's card; the chat's field, and each of
+    /// its turns on show.
     static let chrome: CGFloat = 112
     static let tourBar: CGFloat = 30
+    static let chatField: CGFloat = 44
+    static let chatTurn: CGFloat = 22
+    static let turnsShown = 3
     /// How wide a card of pictures has it, and one of words, or none yet,
     /// at most: as wide as the terminal within those.
     static let picturesWidth: CGFloat = 1000
@@ -71,13 +75,37 @@ final class TeachTile {
     private(set) var recent: [String]
     /// Counts up when its field should take the keyboard.
     private(set) var wantsKeys = 0
-    /// What the selected session's project's own docs teach, and the
-    /// session they were read for.
+    /// What the selected session's project's own docs teach, what the
+    /// library keeps for it, and the session they were read for.
     private(set) var topics: [LearnTopic] = []
+    private(set) var saved: [SavedExplanation] = []
     @ObservationIgnored private var topicsFor: String?
     /// The topic the card on show explains, when it was asked from one: a
     /// step of a tour through its doc's topics.
     private(set) var tour: LearnTopic?
+
+    /// A turn of the chat about the card: what the person said, and the
+    /// version it made, while it is made, or why it could not be.
+    struct Turn: Identifiable {
+        let id = UUID()
+        var said: String
+        var result: MaterializeResult?
+        var problem: String?
+    }
+
+    /// The chat about the question's card, oldest first, and the turn whose
+    /// version is on show: nil for the newest, -1 for the question's own.
+    private(set) var turns: [Turn] = []
+    var viewing: Int?
+    /// What the chat's field holds.
+    var saying = ""
+
+    /// The card on show: the version picked, else the newest made.
+    var showing: MaterializeResult? {
+        if viewing == -1 { return result }
+        if let v = viewing, turns.indices.contains(v), let r = turns[v].result { return r }
+        return turns.last(where: { $0.result?.spec != nil })?.result ?? result
+    }
 
     @ObservationIgnored private var fixture = false
     @ObservationIgnored private var pending: Task<Void, Never>?
@@ -105,7 +133,11 @@ final class TeachTile {
         shown = true
         text = q
         asked = q
-        if !again { tour = topic }
+        if !again {
+            tour = topic
+            turns = []
+            viewing = nil
+        }
         askedIn = store.selectedRow.map { ($0.id, $0.name) }
         problem = nil
         // Another question's card goes; the same one's stays on show while
@@ -125,14 +157,15 @@ final class TeachTile {
             asking = true
             defer { if self.asked == q { self.asking = false } }
             do {
-                if again { _ = try await store.explainCard(q, session: session, forget: true) }
-                var r = try await store.explainCard(q, session: session)
+                let about = current?.title
+                if again { _ = try await store.explainCard(q, session: session, forget: true, about: about) }
+                var r = try await store.explainCard(q, session: session, about: about)
                 guard asked == q, !Task.isCancelled else { return }
                 result = r
                 if r.state == "cold" || r.state == "refreshing", r.err == nil || r.began == true {
                     // A remake runs: wait for it, as long as a local model
                     // may take, while the tile says it is being made.
-                    r = try await store.explainCard(q, session: session, wait: 240)
+                    r = try await store.explainCard(q, session: session, wait: 240, about: about)
                     guard asked == q, !Task.isCancelled else { return }
                     result = r
                 }
@@ -153,6 +186,55 @@ final class TeachTile {
     func again(store: Store) {
         guard let q = asked else { return }
         ask(q, store: store, again: true)
+    }
+
+    /// A turn of the chat: the card on show made again with what was said
+    /// done, kept in the library as its question's newest version.
+    func say(_ words: String, store: Store) {
+        let said = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !said.isEmpty, let q = asked else { return }
+        saying = ""
+        turns.append(Turn(said: said))
+        viewing = nil
+        let i = turns.count - 1
+        let session = askedIn?.id, about = tour?.title
+        Task { [weak self] in
+            do {
+                var r = try await store.explainCard(q, session: session, refine: said, about: about)
+                if r.state == "cold" || r.state == "refreshing", r.err == nil || r.began == true {
+                    r = try await store.explainCard(q, session: session, wait: 240, refine: said, about: about)
+                }
+                guard let self, self.asked == q, self.turns.indices.contains(i) else { return }
+                self.turns[i].result = r
+                if r.spec == nil { self.turns[i].problem = r.err ?? "No new version came." }
+                self.result?.versions = r.versions
+                self.result?.saved = r.saved ?? self.result?.saved
+            } catch {
+                guard let self, self.asked == q, self.turns.indices.contains(i) else { return }
+                self.turns[i].problem = error.localizedDescription
+            }
+        }
+    }
+
+    /// Marks the question's explanation as one that helped, or not: kept
+    /// ones are examples for the explanations made after them.
+    func keep(store: Store) {
+        guard let q = asked else { return }
+        let on = !(result?.kept ?? false)
+        result?.kept = on
+        let session = askedIn?.id
+        Task { [weak self] in
+            let r = try? await store.explainCard(q, session: session, keep: on)
+            guard let self, self.asked == q else { return }
+            self.result?.kept = r?.kept ?? !on
+        }
+    }
+
+    /// Shows the question's Markdown file in Finder, where the library
+    /// keeps it.
+    func reveal() {
+        guard let file = showing?.saved ?? result?.saved else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file)])
     }
 
     /// What a topic is asked as: the same words each time, so its card is
@@ -190,14 +272,15 @@ final class TeachTile {
         return out
     }
 
-    /// Reads what the selected session's project's docs teach, once for
-    /// each session it is asked for.
-    func loadTopics(store: Store) async {
+    /// Reads what the selected session's project's docs teach, and what the
+    /// library keeps for it, once for each session it is asked for, and
+    /// again when the tile shows.
+    func loadTopics(store: Store, again: Bool = false) async {
         let session = store.selection
-        guard !fixture, session != topicsFor else { return }
+        guard !fixture, again || session != topicsFor else { return }
         topicsFor = session
-        let got = await store.learnTopics(session)
-        if store.selection == session { topics = got }
+        let got = await store.learnProject(session)
+        if store.selection == session { (topics, saved) = got }
     }
 
     /// Topics whose names have every word typed, for the field's
@@ -275,11 +358,15 @@ final class TeachTile {
     /// The tile as the snapshots draw it: shown, at its place, with a card
     /// made, and nothing saved.
     func loadFixture(shown: Bool, asked: String?, in session: (String, String)?, result: MaterializeResult?, recent: [String] = [],
-                     topics: [LearnTopic] = [], tour: LearnTopic? = nil) {
+                     topics: [LearnTopic] = [], tour: LearnTopic? = nil, saved: [SavedExplanation] = [], turns: [Turn] = []) {
         fixture = true
         pending?.cancel()
         self.topics = topics
         self.tour = tour
+        self.saved = saved
+        self.turns = turns
+        self.viewing = nil
+        self.saying = ""
         self.shown = shown
         self.asked = asked
         self.text = asked ?? ""
@@ -326,10 +413,10 @@ struct TeachTileView: View {
             let t = term.map { $0.offsetBy(dx: -g.minX, dy: -g.minY) } ?? area
             ZStack(alignment: .topLeading) {
                 if tile.shown, area.width > 0 {
-                    let base = TeachTile.frame(area: area, term: t, own: tile.own, wants: TeachTile.wants(tile.result?.spec))
+                    let base = TeachTile.frame(area: area, term: t, own: tile.own, wants: TeachTile.wants(tile.showing?.spec))
                     let now = changed(base.rect, fixed: base.fixed, by: change, in: area)
                     let most = (now.fixed ? now.rect.height : area.height * TeachTile.share) - TeachTile.chrome
-                        - (tile.tour == nil ? 0 : TeachTile.tourBar)
+                        - (tile.tour == nil ? 0 : TeachTile.tourBar) - chatHeight
                     panel(width: now.rect.width, height: now.fixed ? now.rect.height : nil, most: max(most, 60))
                         .overlay { handles(base, area: area) }
                         .offset(x: now.rect.minX, y: now.rect.minY)
@@ -347,7 +434,7 @@ struct TeachTileView: View {
         // What the selected session's project's docs teach, for the field's
         // suggestions and the tour.
         .task(id: "\(tile.shown) \(store.selection ?? "")") {
-            if tile.shown { await tile.loadTopics(store: store) }
+            if tile.shown { await tile.loadTopics(store: store, again: true) }
         }
     }
 
@@ -437,6 +524,7 @@ struct TeachTileView: View {
             } else {
                 content(most: most, wide: width >= 760)
             }
+            if found.isEmpty, tile.showing?.spec != nil { chat }
             if height != nil { Spacer(minLength: 0) }
             if found.isEmpty, let t = tile.tour { tourBar(t) }
         }
@@ -465,6 +553,23 @@ struct TeachTileView: View {
             Text("Teach").font(Theme.font(13, .bold)).foregroundStyle(Theme.ink)
             Text(caption).font(Theme.font(11)).foregroundStyle(Theme.muted).lineLimit(1)
             Spacer(minLength: 4)
+            if tile.result?.saved != nil {
+                let kept = tile.result?.kept == true
+                Button { tile.keep(store: store) } label: {
+                    Image(systemName: kept ? "star.fill" : "star").font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(kept ? Theme.accentInk : Theme.muted)
+                .help(kept ? "Kept as one that helped: new explanations learn from it" : "Keep it as one that helped, so new explanations learn from it")
+                .accessibilityLabel(kept ? "Kept" : "Keep")
+                Button { tile.reveal() } label: {
+                    Image(systemName: "doc.text").font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.muted)
+                .help("Show its file in Finder: Markdown, kept with every version")
+                .accessibilityLabel("Show the file")
+            }
             if tile.own != nil {
                 Button { tile.recentre() } label: {
                     Image(systemName: "align.horizontal.center").font(.system(size: 11, weight: .semibold))
@@ -503,10 +608,11 @@ struct TeachTileView: View {
     private var caption: String {
         var words: [String] = []
         if let s = tile.askedIn { words.append("from \(s.name)") }
-        if tile.asking && tile.result?.spec == nil {
+        if tile.asking && tile.showing?.spec == nil {
             words.append("drawing")
-        } else if let r = tile.result, let by = r.by, let made = r.made {
+        } else if let r = tile.showing, let by = r.by, let made = r.made {
             words.append("\(by), \(Age.short(made, now: Date()))")
+            if let n = tile.result?.versions, n > 1 { words.append("\(n) versions") }
             if r.state == "refreshing" { words.append("updating") }
         }
         if tile.asked != nil { words.append("no tokens") }
@@ -542,7 +648,7 @@ struct TeachTileView: View {
     /// The card, as tall as it is up to most, past which it scrolls; else
     /// what the tile is doing, or how to begin.
     @ViewBuilder private func content(most: CGFloat, wide: Bool) -> some View {
-        if let card = tile.result?.spec {
+        if let card = tile.showing?.spec {
             ScrollView(.vertical, showsIndicators: cardHeight > most) {
                 GenCardBody(card: card, spacing: 10, wide: wide)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -574,7 +680,103 @@ struct TeachTileView: View {
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if !tile.docs.isEmpty { tours }
-                if !tile.recent.isEmpty { recents }
+                if !tile.saved.isEmpty { savedList }
+                let others = tile.recent.filter { q in !tile.saved.contains { $0.question == q } }
+                if !others.isEmpty { recents(others) }
+            }
+        }
+    }
+
+    /// How tall the chat under the card is: its field, and its turns on show.
+    private var chatHeight: CGFloat {
+        guard tile.showing?.spec != nil else { return 0 }
+        return TeachTile.chatField + CGFloat(min(tile.turns.count, TeachTile.turnsShown) + (tile.turns.isEmpty ? 0 : 1)) * TeachTile.chatTurn
+    }
+
+    /// The chat about the card: its turns, each a click away from the
+    /// version it made, and a field to say what to change or ask more.
+    private var chat: some View {
+        @Bindable var tile = tile
+        return VStack(alignment: .leading, spacing: 4) {
+            if !tile.turns.isEmpty {
+                turn(-1, "The question", made: true)
+                let first = max(tile.turns.count - TeachTile.turnsShown, 0)
+                ForEach(first..<tile.turns.count, id: \.self) { i in
+                    let t = tile.turns[i]
+                    turn(i, t.said, made: t.result?.spec != nil, problem: t.problem)
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
+                TextField("Say what to change, or ask more about it…", text: $tile.saying)
+                    .textFieldStyle(.plain)
+                    .font(Theme.font(12))
+                    .onSubmit { tile.say(tile.saying, store: store) }
+                if !tile.saying.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button("Send") { tile.say(tile.saying, store: store) }
+                        .buttonStyle(.borderless)
+                        .font(Theme.font(11.5, .semibold))
+                        .foregroundStyle(Theme.accentInk)
+                }
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.field))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
+        }
+    }
+
+    /// One line of the chat: what was said, and whether its version is
+    /// made; a click shows that version. -1 is the question's own card.
+    private func turn(_ i: Int, _ words: String, made: Bool, problem: String? = nil) -> some View {
+        let on = tile.viewing == i || (tile.viewing == nil && i == lastMade)
+        return Button { tile.viewing = i == lastMade ? nil : i } label: {
+            HStack(spacing: 6) {
+                Image(systemName: i == -1 ? "questionmark.circle" : "arrow.turn.down.right")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(on ? Theme.accentInk : Theme.muted)
+                Text(words).font(Theme.font(11.5, on ? .semibold : .regular)).foregroundStyle(Theme.ink).lineLimit(1)
+                Spacer(minLength: 4)
+                if let problem {
+                    Text(problem).font(Theme.font(10.5)).foregroundStyle(Theme.muted).lineLimit(1)
+                } else if !made {
+                    Text("drawing…").font(Theme.font(10.5)).foregroundStyle(Theme.muted)
+                }
+            }
+            .frame(height: TeachTile.chatTurn - 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!made && i != -1)
+        .help(made ? "Show this version" : "Being made on the local model")
+    }
+
+    /// The newest turn whose version is made, -1 for none: the one shown
+    /// when none is picked.
+    private var lastMade: Int {
+        tile.turns.lastIndex(where: { $0.result?.spec != nil }) ?? -1
+    }
+
+    /// What the library keeps for this project, the newest first: a click
+    /// shows one at once, with no model.
+    private var savedList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Saved for this project").font(Theme.font(10.5, .semibold)).foregroundStyle(Theme.muted)
+            ForEach(tile.saved.prefix(5), id: \.self) { e in
+                Button { tile.ask(e.question, store: store, topic: e.topic.flatMap { t in tile.topics.first { $0.title == t } }) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: e.kept == true ? "star.fill" : "doc.text")
+                            .font(.system(size: 10))
+                            .foregroundStyle(e.kept == true ? Theme.accentInk : Theme.muted)
+                        Text(e.topic ?? e.question).font(Theme.font(11.5)).foregroundStyle(Theme.ink).lineLimit(1)
+                        if e.versions > 1 {
+                            Text("\(e.versions) versions").font(Theme.font(10.5)).foregroundStyle(Theme.muted)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -674,10 +876,10 @@ struct TeachTileView: View {
     }
 
     /// The questions asked last, to ask again.
-    private var recents: some View {
+    private func recents(_ questions: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Asked before").font(Theme.font(10.5, .semibold)).foregroundStyle(Theme.muted)
-            ForEach(tile.recent.prefix(4), id: \.self) { q in
+            ForEach(questions.prefix(4), id: \.self) { q in
                 Button { tile.ask(q, store: store) } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "clock.arrow.circlepath").font(.system(size: 10)).foregroundStyle(Theme.muted)

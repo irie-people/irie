@@ -40,8 +40,17 @@ type MaterializeArgs struct {
 	// local model like every card, so it costs no tokens, and kept, so the
 	// same question asked again draws at once.
 	Explain string `json:"explain,omitempty"`
-	ID      string `json:"id,omitempty"`     // the card's name, such as "repo/irie/recent"
-	Prompt  string `json:"prompt,omitempty"` // what the card is to show; a new one leaves the kept card cold
+	// Refine, with Explain, asks for the card made again from the newest
+	// one kept for the question, with what the person says of it done: a
+	// turn of the Teach tile's chat. Each is a new version, kept with what
+	// was said. Topic names the topic of the project's docs it explains;
+	// Keep marks the explanation as one that helped, or not, an example
+	// for the ones made after it (learn.library, internal/explained).
+	Refine string `json:"refine,omitempty"`
+	Topic  string `json:"topic,omitempty"`
+	Keep   *bool  `json:"keep,omitempty"`
+	ID     string `json:"id,omitempty"`     // the card's name, such as "repo/irie/recent"
+	Prompt string `json:"prompt,omitempty"` // what the card is to show; a new one leaves the kept card cold
 	// Context is the text the model makes the card from. Its digest is
 	// the card's inputs unless Inputs is given, so new text puts the card
 	// out of date, and the old card stays on show while the next is made.
@@ -67,4 +76,9 @@ type MaterializeResult struct {
 	By    string          `json:"by,omitempty"` // the local model that made it
 	Err   string          `json:"err,omitempty"`
 	Began bool            `json:"began,omitempty"`
+	// For an explanation the library keeps: its Markdown file, how many
+	// versions it has, and whether the person kept it.
+	Saved    string `json:"saved,omitempty"`
+	Versions int    `json:"versions,omitempty"`
+	Kept     bool   `json:"kept,omitempty"`
 }

@@ -3,6 +3,8 @@ package core
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -24,46 +26,103 @@ const (
 	explainIDs   = "explain/"      // the start of every such card's id
 )
 
+// explainAbout is what a card that explains is about, for the library: its
+// question, the project and the topic it was asked in, and what the person
+// said to have it made from the one before ("" for a question's first).
+type explainAbout struct {
+	question, project, topic, asked string
+}
+
+// maxRefine bounds what the person says of a card, in bytes.
+const maxRefine = 1 << 10
+
 // explainCardArgs fills in an ask for a card that explains a.Explain: its
 // id, from the question and the session it is asked in, its prompt, and,
-// with a.Session, its context, that session's conversation.
-func (c *Core) explainCardArgs(a ipc.MaterializeArgs) (ipc.MaterializeArgs, error) {
+// with a.Session, its context: what the session's project's docs say of
+// it, then the session's conversation. With a.Refine it is a turn of the
+// tile's chat: the newest card kept for the question made again, with what
+// the person says of it done.
+func (c *Core) explainCardArgs(a ipc.MaterializeArgs) (ipc.MaterializeArgs, explainAbout, error) {
 	topic := explainText(a.Explain)
 	if topic == "" {
-		return a, ipc.Errorf(ipc.CodeBadArgs, "materialize: say what to explain")
+		return a, explainAbout{}, ipc.Errorf(ipc.CodeBadArgs, "materialize: say what to explain")
 	}
+	ab := explainAbout{question: topic, topic: cleanText(a.Topic, 200)}
 	a.Explain = topic
 	a.ID = explainIDs + explainKey(topic)
 	a.Prompt = "Explain this: " + topic
 	a.Context, a.Inputs, a.Gap = "", "", explainGap
-	if a.Session == "" {
-		return a, nil
-	}
-	conv, err := c.conversation(ipc.ConversationArgs{Session: a.Session, Limit: explainItems})
-	if err != nil {
-		return a, err
-	}
-	c.mu.Lock()
+	var docs string
 	var row ipc.Session
-	var dir string
-	x := c.sessions[a.Session]
-	if x != nil {
-		row, dir = x.wire(), x.cwd
+	var conv ipc.Conversation
+	if a.Session != "" {
+		var err error
+		if conv, err = c.conversation(ipc.ConversationArgs{Session: a.Session, Limit: explainItems}); err != nil {
+			return a, ab, err
+		}
+		c.mu.Lock()
+		var dir, repo string
+		x := c.sessions[a.Session]
+		if x != nil {
+			row, dir, repo = x.wire(), x.cwd, x.repo
+		}
+		c.mu.Unlock()
+		if x == nil {
+			return a, ab, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		}
+		a.ID = explainIDs + a.Session + "/" + explainKey(topic)
+		ab.project = projectName(repo, dir)
+		// What the project's own docs say of it first, then what was said
+		// in the session, in the room the docs leave.
+		if docs = docsFor(dir, topic, explainDocs); docs != "" {
+			docs = docsHead + docs + "\n\n"
+		}
+		a.Inputs = explainInputs(conv)
 	}
-	c.mu.Unlock()
-	if x == nil {
-		return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+	var before string
+	if a.Refine != "" {
+		said := cutText(cleanText(a.Refine, maxRefine), maxRefine)
+		base := c.newestExplained(ab, a.ID)
+		if said == "" || base == nil {
+			return a, ab, ipc.Errorf(ipc.CodeBadArgs, "materialize: there is no card for that question to change yet; ask it first")
+		}
+		// A card of its own for each thing said of each card, made once:
+		// the chat's turns are versions, kept in the library in order.
+		a.ID += "/r" + explainKey(said+"\x00"+string(base))
+		a.Prompt = "Explain this: " + topic + "\n\nThe person is looking at the card made before, given last in the context, and says of it: " + said +
+			"\nMake the whole card again with that done, and keep what they did not ask to change."
+		before = "\n\nThe card made before:\n" + string(base)
+		a.Inputs = ""
+		ab.asked = said
 	}
-	a.ID = explainIDs + a.Session + "/" + explainKey(topic)
-	// What the project's own docs say of it first, then what was said in
-	// the session, in the room the docs leave.
-	docs := docsFor(dir, topic, explainDocs)
-	if docs != "" {
-		docs = docsHead + docs + "\n\n"
+	if a.Session != "" {
+		a.Context = docs + explainContext(row, conv, max(genui.MaxContext-len(docs)-len(before), 0))
 	}
-	a.Context = docs + explainContext(row, conv, genui.MaxContext-len(docs))
-	a.Inputs = explainInputs(conv)
-	return a, nil
+	a.Context += before
+	return a, ab, nil
+}
+
+// projectName is a session's project as the library names it: its repo's
+// name, else its folder's; "" for none.
+func projectName(repo, dir string) string {
+	switch {
+	case repo != "":
+		return filepath.Base(repo)
+	case dir != "":
+		return filepath.Base(dir)
+	}
+	return ""
+}
+
+// newestExplained is the newest card of ab's question: the newest version
+// the library keeps, else the card the store keeps under id; nil for none.
+func (c *Core) newestExplained(ab explainAbout, id string) json.RawMessage {
+	if lib, ok := c.library(); ok {
+		if e, err := lib.Load(ab.project, ab.question); err == nil && e != nil && len(e.Versions) > 0 {
+			return compact(e.Latest().Card)
+		}
+	}
+	return c.cardStore().Kept(id)
 }
 
 // docsHead heads what a project's docs say, in a card's context.

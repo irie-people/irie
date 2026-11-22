@@ -335,3 +335,41 @@ func TestACardThatExplainsIsHeldToThePictures(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownDrawsACardForAFile(t *testing.T) {
+	c, err := Check([]byte(explainCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Markdown(c)
+	for _, want := range []string{
+		"## How a kept card moves\n\n",
+		"1. **Ask** — a view names the card\n2. **Keep** — the store answers at once\n",
+		"```mermaid\nflowchart TD\n  n0[\"Cold\"] -->|\"first card\"| n1[\"Fresh\"]\n  n1 -->|\"inputs moved\"| n2[\"Stale\"]\n  n2 --> n1\n```\n",
+		"| Inputs | Recipe |\n| --- | --- |\n| what it reads | what makes it |\n| puts it behind |  |\n",
+		"```go\ncard, st, rm, err := s.Want(r, now)\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the Markdown lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestMarkdownWritesEveryStringAsText(t *testing.T) {
+	c := Card{Title: "a *b* <script>", Body: []Part{
+		{Type: PartText, Text: "[link](http://example.com) # not a heading"},
+		{Type: PartDiagram, Links: []Link{{From: `say "hi"`, To: "x<y>", Label: "a|b"}}},
+		{Type: PartCode, Text: "a ``` fence", Language: "go\nrm"},
+	}}
+	got := Markdown(c)
+	for _, want := range []string{
+		`## a \*b\* \<script\>`,
+		`\[link\](http://example.com) \# not a heading`,
+		`n0["say #34;hi#34;"] -->|"a#124;b"| n1["x#60;y#62;"]`,
+		"````gorm\na ``` fence\n````",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the Markdown lacks %q:\n%s", want, got)
+		}
+	}
+}

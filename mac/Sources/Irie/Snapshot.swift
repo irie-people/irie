@@ -701,7 +701,9 @@ enum Snapshot {
             ("teach-tile", false, false, {
                 KeyPeek.shared.showFixture(nil)
                 let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
-                store.teach.loadFixture(shown: true, asked: Fixture.teachQuestion, in: (Fixture.selected, name), result: Fixture.teachCard)
+                // A turn of the chat, its version on show, and kept.
+                store.teach.loadFixture(shown: true, asked: Fixture.teachQuestion, in: (Fixture.selected, name), result: Fixture.teachCard,
+                                        turns: [TeachTile.Turn(said: "show the gap as a step too", result: Fixture.teachCard)])
             }),
             ("teach-tile-dark", true, false, {
                 let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
@@ -709,7 +711,11 @@ enum Snapshot {
             }),
             ("teach-tile-empty", false, false, {
                 store.teach.loadFixture(shown: true, asked: nil, in: nil, result: nil,
-                                        recent: [Fixture.teachQuestion, "What is a worktree?"], topics: Fixture.teachTopics)
+                                        recent: [Fixture.teachQuestion, "What is a worktree?"], topics: Fixture.teachTopics,
+                                        saved: [SavedExplanation(question: TeachTile.question(Fixture.teachTopics[2]), topic: "Your groups",
+                                                                 file: "/home/alice/Documents/Irie/Explained/irie/your-groups.md", versions: 3, kept: true, made: nil),
+                                                SavedExplanation(question: Fixture.teachQuestion, topic: nil,
+                                                                 file: "/home/alice/Documents/Irie/Explained/irie/kept-card.md", versions: 1, kept: nil, made: nil)])
             }),
             // With the panes open beside the terminal: over the middle of
             // the terminal still, over the panes where it must be.
@@ -884,6 +890,7 @@ enum Fixture {
         let made = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-120))
         let json = """
         {"id": "explain/\(selected)/3f1a", "state": "fresh", "by": "bonsai-2:9b", "made": "\(made)",
+         "saved": "/home/alice/Documents/Irie/Explained/irie/how-does-a-kept-card-know-it-is-out-of-date-3f1a2b.md", "versions": 2, "kept": true,
          "spec": {"title": "When a kept card is made again", "body": [
            {"type": "Flow", "items": [
              {"title": "A view asks", "detail": "by the card's name"},
