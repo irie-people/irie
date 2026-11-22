@@ -208,6 +208,8 @@ func fakeOf(b Backend) *fakeBackend {
 		return b
 	case *ctlBackend:
 		return b.fakeBackend
+	case *landBackend:
+		return b.fakeBackend
 	}
 	return nil
 }

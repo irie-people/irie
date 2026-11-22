@@ -38,6 +38,8 @@ var reaches = map[string]Reach{
 	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
 	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
 	OpObsidian: ReachRead, OpFind: ReachRead,
+	// What of the work of the sessions a close would close has not landed.
+	OpUnlanded: ReachRead,
 	// The charters' texts and links, built into the binary.
 	OpFounding: ReachRead,
 

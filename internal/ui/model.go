@@ -138,6 +138,8 @@ type Model struct {
 	confirming     string    // the outside session a first m asked to move
 	confirmedAt    time.Time // when it asked
 	thawingAll     time.Time // when a first F asked to thaw them all (control.go)
+	closing        string    // the card a first x said has work not landed (close.go)
+	closingAt      time.Time // when it said so
 
 	undoLabel, redoLabel string      // what u and U would do next, from the history frame (undo.go)
 	menu                 *choiceMenu // a question about an undo or redo, while it waits for an answer
@@ -379,6 +381,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.moved(msg)
 	case closedMsg:
 		m.closedDone(msg)
+	case landedMsg:
+		// The call changes m, so it comes before m is returned.
+		cmd := m.landedDone(msg)
+		return m, cmd
 	case undoneMsg:
 		m.undone(msg)
 	case completedMsg:
@@ -445,7 +451,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			break
 		}
-		m.confirming, m.thawingAll = "", time.Time{}
+		m.confirming, m.thawingAll, m.closing = "", time.Time{}, ""
 		if v, ok := tabAt(msg.X); ok && m.tabbed() && msg.Y == m.tabsTop() {
 			m.setView(v)
 			break
@@ -491,6 +497,9 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.String() != "F" {
 		m.thawingAll = time.Time{} // and a thaw of them all
+	}
+	if msg.String() != "x" {
+		m.closing = "" // and a close of work not landed
 	}
 	switch msg.String() {
 	case "up", "k":

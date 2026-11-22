@@ -172,6 +172,8 @@ type (
 	ClosedSession     = ipc.ClosedSession
 	CloseArgs         = ipc.CloseArgs
 	CloseResult       = ipc.CloseResult
+	UnlandedResult    = ipc.UnlandedResult
+	NotLive           = ipc.NotLive
 	ReopenArgs        = ipc.ReopenArgs
 	ReopenResult      = ipc.ReopenResult
 	UndoArgs          = ipc.UndoArgs
@@ -517,6 +519,7 @@ const (
 	OpFind               = ipc.OpFind
 	OpClose              = ipc.OpClose
 	OpReopen             = ipc.OpReopen
+	OpUnlanded           = ipc.OpUnlanded
 	OpUndo               = ipc.OpUndo
 	OpRedo               = ipc.OpRedo
 	OpTheme              = ipc.OpTheme

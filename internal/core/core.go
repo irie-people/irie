@@ -920,7 +920,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpFind, ipc.OpResult, ipc.OpTool,
-			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
+			ipc.OpClose, ipc.OpUnlanded, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
@@ -1003,17 +1003,24 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			if a.Session == "" {
 				return nil, ipc.Errorf(ipc.CodeBadArgs, "close needs a session, sessions or finished")
 			}
-			if err := c.close(a); err != nil {
+			notLive, err := c.close(a)
+			if err != nil {
 				return nil, err
 			}
 			c.recordAction(actClose, a.Session, nil)
-			return ipc.CloseResult{Sessions: []string{a.Session}}, nil
+			return ipc.CloseResult{Sessions: []string{a.Session}, NotLive: notLive}, nil
 		}
 		// Several close as one step of the history, which one undo takes
 		// back (undo.go), even when one of them failed to close.
-		ids, err := c.closeMany(a)
+		ids, notLive, err := c.closeMany(a)
 		c.recordSteps(actClose, ids, nil)
-		return ipc.CloseResult{Sessions: ids}, err
+		return ipc.CloseResult{Sessions: ids, NotLive: notLive}, err
+	case ipc.OpUnlanded:
+		var a ipc.CloseArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.unlanded(a), nil
 	case ipc.OpDog:
 		return c.dogList()
 	case ipc.OpRebuilds:

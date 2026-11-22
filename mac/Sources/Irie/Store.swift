@@ -158,6 +158,11 @@ final class Store {
     /// Whether the core keeps a history to undo, and what undo and redo
     /// would take next (Undo.swift).
     private(set) var canUndo = false
+    /// The core says what of a card's work has not landed before a close
+    /// (unlanded), which asks first when some has not (Closing.swift).
+    private(set) var canSayUnlanded = false
+    /// The cards a close of one is on its way to closing (Closing.swift).
+    @ObservationIgnored var closingNow: Set<String> = []
     private(set) var undoLabel: String?
     private(set) var redoLabel: String?
     /// The core asks before an undo or redo when told to (undo-confirm), so
@@ -480,6 +485,7 @@ final class Store {
                 canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
+                canSayUnlanded = hello.features.contains("unlanded")
                 canConfirmUndo = hello.features.contains("undo-confirm")
                 canPlugins = hello.features.contains("plugins")
                 canHelpers = hello.features.contains("helpers")

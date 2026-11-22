@@ -586,7 +586,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case OpRate:
 		r.Text = fmt.Sprintf("Rated %s %s. The router learns from it.", name, as[RateArgs](st.Args).Verdict)
 	case OpClose:
-		a, n := as[CloseArgs](st.Args), len(as[CloseResult](result).Sessions)
+		a, cr := as[CloseArgs](st.Args), as[CloseResult](result)
+		n := len(cr.Sessions)
 		switch {
 		case len(a.Sessions) == 0 && !a.Finished:
 			r.Session, r.Text = nil, "Closed "+name+". :reopen brings it back."
@@ -596,6 +597,16 @@ func Said(st Step, result any, err error) (InputResult, error) {
 			r.Session, r.Text = nil, "Closed 1 session. :undo brings it back."
 		default:
 			r.Session, r.Text = nil, fmt.Sprintf("Closed %d sessions. :undo brings them all back.", n)
+		}
+		// A close never waits for a word on work that has not landed, so it
+		// says what it was (DESIGN §4.5): "2 commits on irie/fix not in
+		// live: …", each closed card's named when it closed several.
+		for _, nl := range cr.NotLive {
+			who := ""
+			if len(a.Sessions) > 0 || a.Finished {
+				who = nl.Name + ": "
+			}
+			r.Text += " " + who + nl.Words() + "."
 		}
 	case OpReopen:
 		s := as[ReopenResult](result).Session

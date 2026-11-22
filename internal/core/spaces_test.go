@@ -117,3 +117,39 @@ func TestTheLastSpaceStaysAndCloseFinishedKeepsToASpace(t *testing.T) {
 		t.Errorf("closed %v, want only the first space's finished session", r.Sessions)
 	}
 }
+
+func TestASpawnNamesItsSpaceAndMakesOneWhenNoneHasTheName(t *testing.T) {
+	c := setup(t)
+	lessons := c.spaces(ipc.SpacesArgs{Do: ipc.SpacesNew, Name: "Video Lessons"}).Space
+	byName := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Name: "by-name", Space: "  video lessons "})
+	if got := c.spaceOfRow(byName.ID); got != lessons {
+		t.Errorf("a spawn naming the space in another case is in %q, want %q", got, lessons)
+	}
+	// A name no space has makes one, last, and the next spawn finds it.
+	made := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Name: "made", Space: "Night jobs"})
+	r := c.spaces(ipc.SpacesArgs{})
+	if !slices.Equal(spaceNames(r), []string{"Main", "Video Lessons", "Night jobs"}) {
+		t.Fatalf("spaces %v, want Night jobs made last", spaceNames(r))
+	}
+	night := r.Spaces[2].ID
+	if got := c.spaceOfRow(made.ID); got != night {
+		t.Errorf("made is in %q, want the new space %q", got, night)
+	}
+	again := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Name: "again", Space: "Night jobs"})
+	if got := c.spaceOfRow(again.ID); got != night || len(c.spaces(ipc.SpacesArgs{}).Spaces) != 3 {
+		t.Errorf("again is in %q of %d spaces, want %q of 3", got, len(c.spaces(ipc.SpacesArgs{}).Spaces), night)
+	}
+	// An id never makes a space: one that is gone takes the first.
+	gone := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Name: "gone", Space: "pzzzzzzzzzzzz"})
+	if got := c.spaceOfRow(gone.ID); got != "" || len(c.spaces(ipc.SpacesArgs{}).Spaces) != 3 {
+		t.Errorf("a gone space's id put the session in %q and made %d spaces, want the first and 3", got, len(c.spaces(ipc.SpacesArgs{}).Spaces))
+	}
+	// A group it names is one of that space's.
+	grouped := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Name: "grouped", Space: "Video Lessons", Group: "Reels"})
+	if row, _ := c.row(grouped.ID); row.Space != lessons || row.Group == "" {
+		t.Errorf("grouped is in space %q group %q, want %q and a group", row.Space, row.Group, lessons)
+	}
+	for _, id := range []string{byName.ID, made.ID, again.ID, gone.ID, grouped.ID} {
+		c.waitState(id, ipc.StateDone)
+	}
+}

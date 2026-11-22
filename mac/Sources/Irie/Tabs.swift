@@ -105,8 +105,10 @@ extension Store {
     }
 
     /// Closes several sessions as one step of the history: the core closes
-    /// them in one `close`, and ⌘Z brings them all back. When the shown one
-    /// goes, the next card left takes its place, or the one before it.
+    /// them in one `close`, and ⌘Z brings them all back. One question goes
+    /// first when commits of any of them have not landed (mayClose). When
+    /// the shown one goes, the next card left takes its place, or the one
+    /// before it.
     func closeMany(_ list: [Session]) {
         guard !list.isEmpty else {
             say("Nothing to close there. Pinned and parked cards stay.", error: false)
@@ -117,12 +119,14 @@ extension Store {
             return
         }
         let ids = Set(list.map(\.id))
-        showNext(after: ids)
-        pickNone()
         Task {
+            let (go, asked) = await mayClose(CloseArgs(sessions: list.map(\.id)))
+            guard go else { return }
+            showNext(after: ids)
+            pickNone()
             do {
-                let r = try await client.call("close", CloseArgs(sessions: list.map(\.id)), as: CloseResult.self)
-                say("Closed \(r.sessions.count) sessions. ⌘Z brings them all back.", error: false, seconds: 6, undo: true)
+                let r = try await client.call("close", CloseArgs(sessions: list.map(\.id)), timeout: 30, as: CloseResult.self)
+                sayClosed("Closed \(r.sessions.count) sessions. ⌘Z brings them all back.", r, asked: asked)
             } catch {
                 say("Couldn’t close them all: \(error.localizedDescription)", error: true)
             }
@@ -130,21 +134,34 @@ extension Store {
     }
 
     /// Close All Finished: the core closes every session whose work is
-    /// through, but the pinned, the parked and another machine's.
+    /// through, but the pinned, the parked and another machine's, after one
+    /// question when commits of any of them have not landed (mayClose).
     func closeFinished() {
         Task {
+            let args = CloseArgs(finished: true, space: spaces.isEmpty ? nil : space)
+            let (go, asked) = await mayClose(args)
+            guard go else { return }
             do {
-                let r = try await client.call("close", CloseArgs(finished: true, space: spaces.isEmpty ? nil : space), as: CloseResult.self)
+                let r = try await client.call("close", args, timeout: 30, as: CloseResult.self)
                 if r.sessions.isEmpty {
                     say("Nothing has finished to close. Pinned and parked sessions stay.", error: false)
                     return
                 }
                 if let id = selection, r.sessions.contains(id) { showNext(after: Set(r.sessions)) }
-                say("Closed \(r.sessions.count) finished \(r.sessions.count == 1 ? "session" : "sessions"). ⌘Z brings them back.",
-                    error: false, seconds: 6, undo: true)
+                sayClosed("Closed \(r.sessions.count) finished \(r.sessions.count == 1 ? "session" : "sessions"). ⌘Z brings them back.", r, asked: asked)
             } catch {
                 say("Couldn’t close the finished sessions: \(error.localizedDescription)", error: true)
             }
+        }
+    }
+
+    /// Says that a close of several went, with what of the work of those its
+    /// question did not name had not landed.
+    private func sayClosed(_ text: String, _ r: CloseResult, asked: Set<String>) {
+        if let said = Self.notLiveNotice(r.notLive ?? [], asked: asked) {
+            say("\(text) \(said)", error: true, seconds: 10, undo: true)
+        } else {
+            say(text, error: false, seconds: 6, undo: true)
         }
     }
 
@@ -328,9 +345,16 @@ struct SubRow<Content: View>: View {
     }
 }
 
-/// What a close of several returns: the sessions it closed.
+/// What a close returns: the sessions it closed, and those of them whose
+/// commits had not landed (Closing.swift).
 struct CloseResult: Decodable {
     var sessions: [String]
+    var notLive: [NotLive]?
+
+    enum CodingKeys: String, CodingKey {
+        case sessions
+        case notLive = "not_live"
+    }
 }
 
 /// The × that takes a card's mark while the pointer is on it, with

@@ -156,14 +156,21 @@ func (c *Core) spacesOp(a ipc.SpacesArgs) (ipc.SpacesResult, error) {
 var spacesDo = map[string]string{ipc.SpacesNew: chainNewSpace, ipc.SpacesRename: chainRenameSpace,
 	ipc.SpacesMove: chainMoveSpace, ipc.SpacesRemove: chainRemoveSpace}
 
-// spaceName makes name fit to name a space other than id: one line, cut
-// to maxSpaceName, and numbered when another space has it in any case; a
-// name of its own, "Space 2", when empty. The caller holds c.mu.
-func (c *Core) spaceName(name, id string) string {
+// cleanSpaceName is name on one line, its spaces as one, cut to
+// maxSpaceName.
+func cleanSpaceName(name string) string {
 	name = strings.Join(strings.FieldsFunc(name, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }), " ")
 	if r := []rune(name); len(r) > maxSpaceName {
 		name = strings.TrimSpace(string(r[:maxSpaceName]))
 	}
+	return name
+}
+
+// spaceName makes name fit to name a space other than id: one line, cut
+// to maxSpaceName, and numbered when another space has it in any case; a
+// name of its own, "Space 2", when empty. The caller holds c.mu.
+func (c *Core) spaceName(name, id string) string {
+	name = cleanSpaceName(name)
 	taken := func(n string) bool {
 		return slices.ContainsFunc(c.spaces, func(s ipc.Space) bool { return s.ID != id && strings.EqualFold(s.Name, n) })
 	}
@@ -182,6 +189,48 @@ func (c *Core) spaceName(name, id string) string {
 			return n
 		}
 	}
+}
+
+// spaceFor is the space ref names, as a spawn's Space does: by id, else by
+// name in any case. A name no space has makes a space of that name, last,
+// as a spawn's Group makes a group; an id never makes one, so a client
+// that names a space that is gone puts its session in the first, as a
+// row's space does. "" for the first space. The caller holds c.mu, and
+// the header goes out after it (spawn's publishHeader).
+func (c *Core) spaceFor(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || c.spaceIndex(ref) >= 0 {
+		return c.spaceKey(ref)
+	}
+	name := cleanSpaceName(ref)
+	if i := slices.IndexFunc(c.spaces, func(s ipc.Space) bool { return strings.EqualFold(s.Name, name) }); i >= 0 {
+		return c.spaceKey(c.spaces[i].ID)
+	}
+	if isSpaceID(ref) || name == "" {
+		return ""
+	}
+	s := ipc.Space{ID: newSpaceID(), Name: c.spaceName(name, "")}
+	c.spaces = append(c.spaces, s)
+	c.saveSpaces()
+	c.log.Info("spaces", "do", ipc.SpacesNew, "space", s.ID, "for", "spawn")
+	return s.ID
+}
+
+// isSpaceID reports whether s has the shape of a space's id: the first
+// space's, or what newSpaceID makes.
+func isSpaceID(s string) bool {
+	if s == firstSpace.ID {
+		return true
+	}
+	if len(s) != 13 || s[0] != 'p' {
+		return false
+	}
+	for _, r := range s[1:] {
+		if !strings.ContainsRune(crockford, r) {
+			return false
+		}
+	}
+	return true
 }
 
 // newSpaceID is a space's id: "p" and 12 random base32 characters.
@@ -384,15 +433,16 @@ func doSpace(k string) func(c *Core, a action) (action, error) {
 	}
 }
 
-// placeInSpace puts session id, just spawned by a, in its space: a.Space,
-// else the space of the session that started it. The caller holds c.mu.
+// placeInSpace puts session id, just spawned by a, in its space: the one
+// a.Space names (spaceFor), else the space of the session that started it.
+// The caller holds c.mu.
 func (c *Core) placeInSpace(id string, a ipc.SpawnArgs) {
 	x := c.sessions[id]
 	if x == nil {
 		return
 	}
-	space := a.Space
-	if space == "" {
+	space := c.spaceFor(a.Space)
+	if strings.TrimSpace(a.Space) == "" {
 		space = c.spaceOf(c.sessions[cmp.Or(a.After, a.Parent, a.Continues)])
 	}
 	if space = c.spaceKey(space); space != "" {
