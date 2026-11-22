@@ -1,22 +1,25 @@
 ---
 name: founding-documents
-description: Twenty-three texts of rights, word for word from the bodies that keep them and checked against other copies, with how each bears on the others: Magna Carta (1215 and 1297), the Petition of Right, the Habeas Corpus Act, the English Bill of Rights, Sweden's Press Act of 1766, the Virginia Declaration and Statute, the Declaration of Independence, the Articles, the Northwest Ordinance, the Constitution with all 27 amendments, the Rights of Man (1789), the Bill of Rights, the Declaration of Sentiments, the Emancipation Proclamation, the Gettysburg Address, the Universal Declaration of Human Rights, the Covenant on Civil and Political Rights, and the freedom-of-information laws of the US, the UK and India. Use to quote, cite or check any of them, such as "what does the Fourth Amendment say", "FOIA's exemptions" or "what did the Bill of Rights take from the English one".
+description: Twenty-nine texts of rights, word for word from the bodies that keep them and checked against other copies, with how each bears on the others: Magna Carta (1215 and 1297), the Petition of Right, the Body of Liberties, the Habeas Corpus Act, the English Bill of Rights, Sweden's Press Act of 1766, the Virginia, Pennsylvania and Massachusetts declarations of rights, the Declaration of Independence, the Articles, the Virginia Statute, the Northwest Ordinance, the Constitution with all 27 amendments, the Rights of Man, the Bill of Rights, the Declaration of Sentiments, the Emancipation Proclamation, the Gettysburg Address, the Universal Declaration, both Covenants of 1966, the Civil Rights and Voting Rights Acts, and the freedom-of-information laws of the US, the UK and India. Use to quote, cite or check any of them, such as "what does the Fourth Amendment say" or "what did the Bill of Rights take from the English one".
 license: Apache-2.0
 ---
 
 # The charters
 
-This skill holds Irie's verified copies of twenty-three texts of rights, each in a file beside this one, the oldest first:
+This skill holds Irie's verified copies of twenty-nine texts of rights, each in a file beside this one, the oldest first:
 
 - **magna-carta.md**: Magna Carta, the charter King John granted at Runnymede in 1215, in William Sharp McKechnie's translation as a 1915 edition printed it: its preamble and 63 chapters.
 - **magna-carta-1297.md**: Magna Carta as Edward I confirmed it in 1297, the charter on the English statute book with 37 chapters, in the statute book's old translation as Ruffhead's Statutes at Large (1763) prints it; its chapter 29 is the one the Petition of Right recites.
 - **petition-of-right.md**: the Petition of Right of 1628, 3 Cha. I c. 1, as enacted, in the Statutes of the Realm's spelling, which recites Magna Carta and names "due p[ro]cesse of Lawe".
+- **body-of-liberties.md**: the Massachusetts Body of Liberties of 1641, the Bay Colony's first code, its 98 liberties in Gray's edition of 1843, in the original spelling.
 - **habeas-corpus-act.md**: the Habeas Corpus Act of 1679, 31 Cha. II c. 2, as the Statutes of the Realm prints it.
 - **english-bill-of-rights.md**: the English Bill of Rights of 1689, "An Act declareing the Rights and Liberties of the Subject and Setleing the Succession of the Crowne", 1 Will. & Mar. sess. 2 c. 2, as enacted, in the Statutes of the Realm's spelling.
 - **freedom-of-the-press-act-1766.md**: Sweden's Freedom of the Press Act of 2 December 1766, the first law to abolish censorship and open the state's papers, in Ian Giles and Peter Graves's translation (2016, CC BY 4.0).
 - **virginia-declaration-of-rights.md**: the Virginia Declaration of Rights of June 12, 1776, in the National Archives' modernized rendering: its spelling and punctuation are today's, not 1776's, and verification.md says where it differs from the adopted text.
 - **declaration.md**: the Declaration of Independence, with its 56 signers.
+- **pennsylvania-declaration-of-rights.md**: the Pennsylvania Declaration of Rights of September 28, 1776, sixteen articles, as Thorpe's government print of 1909 gives it.
 - **articles-of-confederation.md**: the Articles of Confederation, agreed in 1777 and ratified in 1781, their thirteen articles.
+- **massachusetts-declaration-of-rights.md**: the Massachusetts Declaration of Rights of 1780, John Adams's thirty articles, as the Commonwealth's own text gives them, in its later spelling.
 - **virginia-statute-for-religious-freedom.md**: Jefferson's Virginia Statute for Religious Freedom as passed on January 16, 1786, from Hening's Statutes at Large of Virginia.
 - **northwest-ordinance.md**: the Northwest Ordinance of July 13, 1787, its fourteen sections and six articles of compact, in the National Archives' transcription.
 - **constitution.md**: the Constitution of the United States, its signers, and all 27 amendments.
@@ -26,8 +29,11 @@ This skill holds Irie's verified copies of twenty-three texts of rights, each in
 - **emancipation-proclamation.md**: the Emancipation Proclamation of January 1, 1863, in the National Archives' transcription.
 - **gettysburg-address.md**: the Gettysburg Address, November 19, 1863, the Bliss copy.
 - **universal-declaration-of-human-rights.md**: the Universal Declaration of Human Rights, proclaimed on 10 December 1948: its preamble and 30 articles, following the resolution's official record.
+- **civil-rights-act.md**: the Civil Rights Act of 1964 as enacted, its eleven titles, from the Statutes at Large.
+- **voting-rights-act.md**: the Voting Rights Act of 1965 as enacted, from the Statutes at Large.
 - **freedom-of-information-act.md**: the Freedom of Information Act, 5 U.S.C. § 552, as the United States Code sets it out today, with its source credit, the laws that made and amended it.
 - **international-covenant-on-civil-and-political-rights.md**: the International Covenant on Civil and Political Rights of 16 December 1966, its preamble and 53 articles, the UN's text following the certified true copy.
+- **international-covenant-on-economic-social-and-cultural-rights.md**: the International Covenant on Economic, Social and Cultural Rights, adopted the same day, its preamble and 31 articles, likewise.
 - **privacy-act.md**: the Privacy Act of 1974, 5 U.S.C. § 552a, as the Code sets it out, with its source credit.
 - **freedom-of-information-act-2000.md**: the United Kingdom's Freedom of Information Act 2000, as enacted, whole, with its eight Schedules.
 - **right-to-information-act.md**: India's Right to Information Act, 2005, as India Code sets it out, as amended.
@@ -47,13 +53,13 @@ verification.md says where each text comes from, what it was checked against, th
 
 Irie keeps links between the texts, each from a later text back to an earlier one, with a sentence saying what the one took from the other and quoting both; Irie's tests check every quotation against the texts. `irie ctl charters` lists them, and `--json` gives each one's sentence. In short:
 
-- Magna Carta (1297) follows the 1215 charter, cut to 37 chapters. The Petition of Right drew on both, reciting chapter 29. The Virginia Declaration drew on Magna Carta (the law of the land, Section 8) and on the English Bill of Rights (bail, fines and punishments, Section 9).
-- The Declaration of Independence drew on the Virginia Declaration ("created equal", "unalienable Rights"). The Rights of Man drew on both, and the Universal Declaration on the Rights of Man.
+- Magna Carta (1297) follows the 1215 charter, cut to 37 chapters. The Petition of Right drew on both, reciting chapter 29, and the Body of Liberties on the 1297 charter. The Virginia Declaration drew on Magna Carta (the law of the land, Section 8) and on the English Bill of Rights (bail, fines and punishments, Section 9).
+- The Declaration of Independence drew on the Virginia Declaration ("created equal", "unalienable Rights"), and so did Pennsylvania's and Massachusetts's declarations, Massachusetts's on the English Bill of Rights too and following the Body of Liberties. The Rights of Man drew on Virginia's and Jefferson's, and the Universal Declaration on the Rights of Man.
 - The Virginia Statute drew on the Virginia Declaration (the free exercise of religion), and the First Amendment on the Statute.
 - The Articles of Confederation follow the Declaration. The Northwest Ordinance follows the Articles, as an act of their Congress, and drew on the Habeas Corpus Act. The Constitution follows the Declaration, which it dates itself from, replaced the Articles, and drew on the Habeas Corpus Act (Article I, Section 9) and the Northwest Ordinance (the Thirteenth Amendment's words).
-- The Bill of Rights amends the Constitution and drew on Magna Carta in both charters (due process), the Petition of Right (due process, quartering), the English Bill of Rights (the Eighth Amendment's words, petition, arms), the Virginia Declaration, the Virginia Statute and the Northwest Ordinance.
+- The Bill of Rights amends the Constitution and drew on Magna Carta in both charters (due process), the Petition of Right (due process, quartering), the Body of Liberties (torture, double jeopardy, cruel punishments), the English Bill of Rights (the Eighth Amendment's words, petition, arms), the Virginia, Pennsylvania (speech, press, arms) and Massachusetts (searches and seizures, arms) declarations, the Virginia Statute and the Northwest Ordinance.
 - The Declaration of Sentiments drew on the Declaration of Independence, whose words it rewrites for women. The Emancipation Proclamation follows the Constitution (the Commander in Chief's power). The Gettysburg Address follows the Declaration, which it counts from, and the Proclamation.
-- The Universal Declaration drew on the Declaration of Independence, the Rights of Man and the Bill of Rights; the Covenant drew on the Universal Declaration.
+- The Universal Declaration drew on the Declaration of Independence, the Rights of Man and the Bill of Rights; both Covenants drew on the Universal Declaration and stand beside each other. The Civil Rights Act follows the Constitution (the Fourteenth Amendment) and the Universal Declaration; the Voting Rights Act follows the Constitution (the Fifteenth) and the Civil Rights Act.
 - The Freedom of Information Act follows the Constitution, as an Act of Congress, Sweden's Press Act of 1766, the first such law, and the Universal Declaration (Article 19); the Privacy Act stands beside FOIA in the Code and follows the Constitution and the Universal Declaration (Article 12). The United Kingdom's Act follows FOIA and the Covenant; India's follows the Universal Declaration, the Covenant and FOIA.
 
 The links are Irie's reading of the texts, not the documents' words: give one as Irie's link, never as a source.
@@ -68,4 +74,4 @@ Irie keeps these texts on a chain of its own on this computer, the Charters chai
 
 ## In Irie
 
-The Charters plugin shows the twenty-three in the Charters tab of the Mac app's right sidebar, each with the links that say how it bears on the others. Its search finds a passage whatever its spelling or capitals, and its foot shows the chain's newest version.
+The Charters plugin shows the twenty-nine in the Charters tab of the Mac app's right sidebar, each with the links that say how it bears on the others. Its search finds a passage whatever its spelling or capitals, and its foot shows the chain's newest version.

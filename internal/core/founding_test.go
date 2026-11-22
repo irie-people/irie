@@ -62,7 +62,9 @@ func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 	for _, h := range r.Found {
 		where[h.Doc+": "+h.Where] = true
 	}
-	if !where["constitution: Amendments › Amendment IV"] || !where["rights: Amendments › Amendment IV"] || len(r.Found) != 2 || r.Chain != nil || r.Links != nil {
+	// The Fourth Amendment, in the Constitution and the Bill of Rights, and
+	// Massachusetts's Article XIV, which it drew on.
+	if !where["constitution: Amendments › Amendment IV"] || !where["rights: Amendments › Amendment IV"] || !where["massachusetts: Article XIV."] || len(r.Found) != 3 || r.Chain != nil || r.Links != nil {
 		t.Errorf("found %v", r.Found)
 	}
 }

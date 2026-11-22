@@ -232,7 +232,7 @@ final class FoundingModel {
                          why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552."),
         ]
         chain = FoundingChainInfo(folder: "~/.local/state/\(Brand.slug)/chain/charters", head: "sha512:" + String(repeating: "9c1e40b7", count: 16),
-                                  created: "2026-11-21T12:00:00Z", versions: 5, texts: 23, links: 43, verified: true, problem: nil)
+                                  created: "2026-11-21T12:00:00Z", versions: 6, texts: 29, links: 57, verified: true, problem: nil)
         showing = "constitution"
         query = "choose"
         asked = "choose"

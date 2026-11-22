@@ -238,6 +238,39 @@ func TestTheDocuments(t *testing.T) {
 		t.Errorf("the Petition of Right: %d numbered sections of %d headings, %d notes", numbered, h2, count(pr, "note", func(string) bool { return true }))
 	}
 
+	// The Pennsylvania Declaration of Rights: its title, then its sixteen
+	// articles, I. to XVI., each beginning "That".
+	pdr := d["pennsylvania"]
+	if pdr.Title != "The Pennsylvania Declaration of Rights" || !strings.Contains(pdr.About, "Thorpe") || !strings.Contains(pdr.About, "September 28, 1776") {
+		t.Errorf("the Pennsylvania Declaration: %q, %q", pdr.Title, pdr.About)
+	}
+	var pdrArts []string
+	for _, b := range pdr.Blocks {
+		if b.Kind == "h2" && strings.HasSuffix(b.Text, ".") && len(b.Text) < 7 {
+			pdrArts = append(pdrArts, strings.TrimSuffix(b.Text, "."))
+		}
+	}
+	if !slices.Equal(pdrArts, romans[:16]) || count(pdr, "h2", func(string) bool { return true }) != 17 || count(pdr, "text", func(s string) bool { return strings.HasPrefix(s, "That ") }) != 16 {
+		t.Errorf("the Pennsylvania Declaration: articles %v, %d headings", pdrArts, count(pdr, "h2", func(string) bool { return true }))
+	}
+
+	// The Massachusetts Declaration of Rights: the Constitution's Preamble,
+	// then Part the First's thirty articles, Article I. to Article XXX.
+	ma := d["massachusetts"]
+	if ma.Title != "The Massachusetts Declaration of Rights" || !strings.Contains(ma.About, "Commonwealth") || !strings.Contains(ma.About, "June 15, 1780") {
+		t.Errorf("the Massachusetts Declaration: %q, %q", ma.Title, ma.About)
+	}
+	var maArts []string
+	for _, b := range ma.Blocks {
+		if b.Kind == "h2" && strings.HasPrefix(b.Text, "Article ") {
+			maArts = append(maArts, strings.TrimSuffix(strings.TrimPrefix(b.Text, "Article "), "."))
+		}
+	}
+	romans30 := append(slices.Clone(romans), "XXVIII", "XXIX", "XXX")
+	if !slices.Equal(maArts, romans30) || count(ma, "h2", func(s string) bool { return s == "Preamble" || s == "Part the First" }) != 2 || count(ma, "note", func(string) bool { return true }) != 4 {
+		t.Errorf("the Massachusetts Declaration: articles %v, %d notes", maArts, count(ma, "note", func(string) bool { return true }))
+	}
+
 	// The Virginia Statute for Religious Freedom: the Act's title, then its
 	// three sections, I. to III., as Hening prints them.
 	vs := d["virginia-statute"]
@@ -246,6 +279,29 @@ func TestTheDocuments(t *testing.T) {
 	}
 	if len(vs.Blocks) != 4 || vs.Blocks[0].Text != "An act for establishing religious freedom." || !strings.HasPrefix(vs.Blocks[1].Text, "I. ") || !strings.HasPrefix(vs.Blocks[2].Text, "II. ") || !strings.HasPrefix(vs.Blocks[3].Text, "III. ") {
 		t.Errorf("the Virginia Statute: %d blocks, %+v", len(vs.Blocks), vs.Blocks)
+	}
+
+	// The Body of Liberties: liberties 1 to 93 in order, then 94, the
+	// capital laws, and 95, the churches' liberties, as headings with their
+	// own numbered laws under them, then 96 to 98.
+	bl := d["body-of-liberties"]
+	if bl.Title != "The Massachusetts Body of Liberties" || !strings.Contains(bl.About, "1843") || !strings.Contains(bl.About, "Gray") {
+		t.Errorf("the Body of Liberties: %q, %q", bl.Title, bl.About)
+	}
+	at = 0
+	for n := 1; n <= 98; n++ {
+		start := strconv.Itoa(n) + ". "
+		i := slices.IndexFunc(bl.Blocks[at:], func(b ipc.FoundingBlock) bool {
+			return (b.Kind == "text" || b.Kind == "h2") && strings.HasPrefix(b.Text, start)
+		})
+		if i < 0 {
+			t.Errorf("the Body of Liberties: no liberty %d after block %d", n, at)
+			continue
+		}
+		at += i
+	}
+	if count(bl, "h2", func(string) bool { return true }) != 9 || count(bl, "h2", func(s string) bool { return s == "94. Capitall Laws." }) != 1 {
+		t.Errorf("the Body of Liberties: %d headings", count(bl, "h2", func(string) bool { return true }))
 	}
 
 	// The Habeas Corpus Act: its long title first, its sections under the
@@ -451,6 +507,83 @@ func TestTheUKAct(t *testing.T) {
 	}
 }
 
+// TestTheEconomicCovenant: the International Covenant on Economic, Social
+// and Cultural Rights, the UN's text: its preamble of seven paragraphs,
+// then Parts I to V with Articles 1 to 31 in order under them.
+func TestTheEconomicCovenant(t *testing.T) {
+	c := docs(t)["icescr"]
+	if c.Title != "The International Covenant on Economic, Social and Cultural Rights" || !strings.Contains(c.About, "2200 A (XXI)") || !strings.Contains(c.About, "3 January 1976") {
+		t.Errorf("the Economic Covenant: %q, %q", c.Title, c.About)
+	}
+	var parts, articles []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, b.Text)
+		case "h3":
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case "text":
+			if len(parts) == 1 {
+				preamble++
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 31; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if strings.Join(parts, "|") != "Preamble|Part I|Part II|Part III|Part IV|Part V" || !slices.Equal(articles, want) || preamble != 7 {
+		t.Errorf("the Economic Covenant: parts %v, %d articles, %d preamble paragraphs", parts, len(articles), preamble)
+	}
+}
+
+// TestTheCivilRightsAct: the Act as enacted, from the Statutes at Large:
+// its eleven titles under their headings, their side headings, and its
+// sixty-three sections, SEC. 101. to SEC. 1106.
+func TestTheCivilRightsAct(t *testing.T) {
+	c := docs(t)["civil-rights"]
+	if c.Title != "The Civil Rights Act of 1964" || !strings.Contains(c.About, "Statutes at Large") || !strings.Contains(c.About, "July 2, 1964") {
+		t.Errorf("the Civil Rights Act: %q, %q", c.Title, c.About)
+	}
+	var titles []string
+	for _, b := range c.Blocks {
+		if b.Kind == "h2" {
+			titles = append(titles, strings.TrimSuffix(strings.Fields(b.Text)[1], "."))
+		}
+	}
+	secs := count(c, "text", func(s string) bool { return strings.HasPrefix(s, "SEC. ") })
+	if !slices.Equal(titles, []string{"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI"}) || count(c, "h3", func(string) bool { return true }) != 21 || secs != 63 {
+		t.Errorf("the Civil Rights Act: titles %v, %d side headings, %d sections", titles, count(c, "h3", func(string) bool { return true }), secs)
+	}
+	if first := slices.IndexFunc(c.Blocks, func(b ipc.FoundingBlock) bool { return strings.HasPrefix(b.Text, "SEC. 101. ") }); first < 0 || !strings.HasPrefix(c.Blocks[len(c.Blocks)-2].Text, "SEC. 1106. ") && !strings.HasPrefix(c.Blocks[len(c.Blocks)-1].Text, "SEC. 1106. ") && c.Blocks[len(c.Blocks)-1].Text != "Approved July 2, 1964." {
+		t.Errorf("the Civil Rights Act's first and last sections: %+v", c.Blocks[len(c.Blocks)-1])
+	}
+}
+
+// TestTheVotingRightsAct: the Act as enacted, from the Statutes at Large:
+// "AN ACT" and the long title, the enacting paragraph, sections 2 to 19
+// in order, and the approval.
+func TestTheVotingRightsAct(t *testing.T) {
+	v := docs(t)["voting-rights"]
+	if v.Title != "The Voting Rights Act of 1965" || !strings.Contains(v.About, "Statutes at Large") || !strings.Contains(v.About, "August 6, 1965") {
+		t.Errorf("the Voting Rights Act: %q, %q", v.Title, v.About)
+	}
+	if len(v.Blocks) == 0 || !strings.HasPrefix(v.Blocks[0].Text, "AN ACT\nTo enforce the fifteenth amendment") || v.Blocks[len(v.Blocks)-1].Text != "Approved August 6, 1965." || count(v, "h2", func(string) bool { return true }) != 0 {
+		t.Errorf("the Voting Rights Act's shape: %d blocks", len(v.Blocks))
+	}
+	at := 0
+	for n := 2; n <= 19; n++ {
+		start := "SEC. " + strconv.Itoa(n) + ". "
+		i := slices.IndexFunc(v.Blocks[at:], func(b ipc.FoundingBlock) bool { return b.Kind == "text" && strings.HasPrefix(b.Text, start) })
+		if i < 0 {
+			t.Errorf("the Voting Rights Act: no section %d after block %d", n, at)
+			continue
+		}
+		at += i
+	}
+}
+
 // TestTheRightToInformationAct: India's Act, as India Code sets it out:
 // its number and date, its long title, its six chapters and two schedules
 // in order, its 31 sections in order, and India Code's footnotes as notes.
@@ -518,7 +651,9 @@ func TestTheLinksAreInTheTexts(t *testing.T) {
 			continue
 		}
 		inGraph[l.From], inGraph[l.To] = true, true
-		if year(from) < year(to) || (year(from) == year(to) && from.When <= to.When) {
+		// A link runs back in time, or between two texts of one day that
+		// stand beside each other, as the two Covenants do.
+		if year(from) < year(to) || (year(from) == year(to) && from.When < to.When) || (from.When == to.When && l.How != Beside) {
 			t.Errorf("%s → %s: the link runs forward in time, %s to %s", l.From, l.To, from.When, to.When)
 		}
 		if !slices.Contains(Hows, l.How) {
@@ -613,9 +748,15 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		"magna-carta-1297": {"nor will we not pass upon him, nor condemn him, but by lawful Judgment of his Peers, or by the Law of the Land", "shall not be taken but in the shires", "she may honestly dwell"},
 		"english-rights":   {"cruell and unusuall Punishments inflicted", "excessive Baile ought not to be required", "Setleing the Succession of the Crowne"},
 		"petition":         {"by due p[ro]cesse of Lawe", "The great Charter of the Liberties of England", "Soit droit fait come est desire"},
+		// Gray's 1843 readings, where the leaflet and its keying differ.
+		"body-of-liberties": {"No mans life shall be taken away", "inhumane Barbarous or cruel", "so suffer at any time about their verdict", "for a competent time"},
 		// The edition's readings as British History Online keys them.
 		"habeas":   {"Writts of Habeas Corpus", "better secureing the Liberty of the Subject", "by standingh out an Alias and Pluries"},
 		"virginia": {"nor can he be compelled to give evidence against himself", "the free exercise of religion"},
+		// Thorpe's page's readings, where the State Archives' transcription slipped.
+		"pennsylvania": {"the people have a right to freedom of speech, and of writing, and publishing their sentiments", "or to be elected into office", "towards the expence of that protection"},
+		// The Commonwealth's text's readings, the slip "Any every" among them.
+		"massachusetts": {"Any every denomination of Christians", "Every subject has a right to be secure from all unreasonable searches, and seizures", "cruel or unusual punishments"},
 		// Hening's print's slips, kept.
 		"virginia-statute": {"no man shall be compelled to frequent or support any religious worship", "chose not to to propagate", "wordly honours", "time enongh"},
 		"sweden":           {"free access to all archives shall be permitted", "Adolf Fredrik, by the Grace of God", "All those whom this concern must obediently abide by it."},
@@ -633,10 +774,15 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		// The official record's readings where the UN's web text differs.
 		"udhr":    {"life, liberty and the security of person", "the borders of each State", "in co-operation with the United Nations"},
 		"privacy": {"to the Director of the Congressional Budget Office", "required under section 552 of this title"},
+		// The print's own readings, where the Archives' transcript differs.
+		"civil-rights": {"subpena", "the chief judge of the circuit", "facilities, privileges, advantages, and accommodations", "school personnel inservice training"},
+		// The print's own readings, where the Archives' transcript modernizes.
+		"voting-rights": {"per centum", "suported", "section 5 of the fourteenth amendment", "No voting qualification or prerequisite to voting"},
 		// The enacted XML's readings, where the Queen's Printer's print differs.
 		"uk-foia": {"Any person making a request for information to a public authority is entitled", "seven days' notice"},
 		// The certified true copy's readings, where OHCHR's text differs.
-		"iccpr": {"such legislative or other measures", "a lighter penalty", "sub-paragraph", "in accordance with the Universal Declaration of Human Rights"},
+		"iccpr":  {"such legislative or other measures", "a lighter penalty", "sub-paragraph", "in accordance with the Universal Declaration of Human Rights"},
+		"icescr": {"conditions of work, which ensure", "legal guardians, to choose", "the right of everyone to education"},
 		// India Code's own readings, where the 2005 Gazette differs.
 		"rti": {"all citizens shall have the right to information", "it is expendient", "suomotu", "information which relates to personal information;"},
 	} {
@@ -736,6 +882,10 @@ func TestFindAnySpelling(t *testing.T) {
 		"lawful judgment of his peers":                         "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
 		"securing the liberty of the subject":                  "habeas: ",
 		"all men and women are created equal":                  "seneca: ",
+		"equal employment opportunity":                         "civil-rights: Title VII. Equal Employment Opportunity",
+		"enforce the fifteenth amendment":                      "voting-rights: ",
+		"publishing their sentiments":                          "pennsylvania: XII.",
+		"right of everyone to education":                       "icescr: Part III › Article 13",
 		"disclosure of information held by public authorities": "uk-foia: ",
 		"freedom of expression":                                "iccpr: Part III › Article 19",
 		"establishing religious freedom":                       "virginia-statute: ",

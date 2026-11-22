@@ -32,7 +32,7 @@ func foundingPlugin() Plugin {
 	return Plugin{
 		Name:    "founding",
 		Title:   "Charters",
-		Summary: "Twenty-three texts of rights, word for word from the bodies that keep them and checked against other copies: from Magna Carta, the Petition of Right, the English Bill of Rights and Sweden's Press Act of 1766, through the Declaration of Independence, the Constitution, the Bill of Rights, the Rights of Man, the Declaration of Sentiments and the Gettysburg Address, to the Universal Declaration of Human Rights, the Covenant on Civil and Political Rights and the freedom-of-information laws of the United States, the United Kingdom and India. To read and search in the Charters tab, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
+		Summary: "Twenty-nine texts of rights, word for word from the bodies that keep them and checked against other copies: from Magna Carta, the Petition of Right, the Body of Liberties, the English Bill of Rights and Sweden's Press Act of 1766, through the states' declarations of rights, the Declaration of Independence, the Constitution, the Bill of Rights, the Rights of Man, the Declaration of Sentiments and the Gettysburg Address, to the Universal Declaration of Human Rights, the two Covenants, the Civil Rights and Voting Rights Acts and the freedom-of-information laws of the United States, the United Kingdom and India. To read and search in the Charters tab, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
 		key:     "plugins.founding",
 		on:      func(c config.Config) bool { return c.Plugins.Founding },
 		Parts: []Part{

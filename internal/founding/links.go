@@ -37,6 +37,9 @@ var Links = []Link{
 		Why: "Section III recites the statute book's words: “no Freeman may be taken or imprisoned or be disseised of his Freehold or Liberties or his free Customes or be outlawed or exiled or in any manner destroyed” is chapter 29's “NO Freeman shall be taken, or imprisoned, or be disseised of his Freehold, or Liberties, or free Customs, or be outlawed, or exiled, or any otherwise destroyed”."},
 	{From: "petition", To: "magna-carta", How: DrewOn,
 		Why: "Section III recites “the Statute called The great Charter of the Liberties of England”, that no freeman may be taken or imprisoned “but by the lawfull Judgment of his Peeres or by the Law of the Land”: the charter's “except by the lawful judgment of his peers or by the law of the land”."},
+	// The Massachusetts Body of Liberties, 1641, the colony's first code.
+	{From: "body-of-liberties", To: "magna-carta-1297", How: DrewOn,
+		Why: "Liberty 1, that no man's life, name, person, goods or estate be touched “unlesse it be by vertue or equitie of some expresse law of the Country waranting the same”, is the colony's chapter 29, “NO Freeman shall be taken, or imprisoned, or be disseised of his Freehold, or Liberties, or free Customs, or be outlawed, or exiled, or any otherwise destroyed” but by the law of the land."},
 	// Virginia, June 1776: Mason's declaration, which the Declaration of
 	// Independence and the Bill of Rights both drew on.
 	{From: "virginia", To: "magna-carta", How: DrewOn,
@@ -46,9 +49,19 @@ var Links = []Link{
 	// The Declaration of Independence, July 1776.
 	{From: "declaration", To: "virginia", How: DrewOn,
 		Why: "Jefferson's “all men are created equal” and “certain unalienable Rights” follow Mason's “all men are by nature equally free and independent and have certain inherent rights”, adopted three weeks before."},
+	// The Pennsylvania Declaration of Rights, September 1776.
+	{From: "pennsylvania", To: "virginia", How: DrewOn,
+		Why: "Article I's “That all men are born equally free and independent, and have certain natural, inherent and inalienable rights” follows Mason's “all men are by nature equally free and independent and have certain inherent rights”, three months on."},
 	// The Articles of Confederation, 1777.
 	{From: "articles", To: "declaration", How: Follows,
 		Why: "The Articles bind the thirteen “Free and Independent States” the Declaration made into “a firm league of friendship with each other”, agreed by the same Congress sixteen months on."},
+	// The Massachusetts Declaration of Rights, 1780, John Adams's.
+	{From: "massachusetts", To: "body-of-liberties", How: Follows,
+		Why: "A hundred and forty years on, Article XII keeps the colony's first promise, that no one be punished but by law: liberty 1's “by vertue or equitie of some expresse law of the Country” became “but by the judgment of his peers, or the law of the land”."},
+	{From: "massachusetts", To: "virginia", How: DrewOn,
+		Why: "Article I's “All men are born free and equal, and have certain natural, essential, and unalienable rights” follows Mason's “all men are by nature equally free and independent and have certain inherent rights”, four years on."},
+	{From: "massachusetts", To: "english-rights", How: DrewOn,
+		Why: "Article XXVI, “No magistrate or court of law, shall demand excessive bail or sureties, impose excessive fines, or inflict cruel or unusual punishments”, is the Act's “excessive Baile ought not to be required nor excessive Fines imposed nor cruell and unusuall Punishments inflicted”."},
 	// The Virginia Statute for Religious Freedom, January 1786.
 	{From: "virginia-statute", To: "virginia", How: DrewOn,
 		Why: "The Statute makes law of Section 16's “all men are equally entitled to the free exercise of religion”: “no man shall be compelled to frequent or support any religious worship, place, or ministry whatsoever”, and “all men shall be free to profess, and by argument to maintain, their opinion in matters of religion”."},
@@ -77,10 +90,16 @@ var Links = []Link{
 		Why: "The Fifth Amendment's “nor be deprived of life, liberty, or property, without due process of law” descends from chapter 39, which lets no freeman be taken or imprisoned “except by the lawful judgment of his peers or by the law of the land”."},
 	{From: "rights", To: "magna-carta-1297", How: DrewOn,
 		Why: "The chapter Coke read as due process is the statute book's chapter 29, “nor will we not pass upon him, nor condemn him, but by lawful Judgment of his Peers, or by the Law of the Land”, behind the Fifth Amendment's “without due process of law”."},
+	{From: "rights", To: "body-of-liberties", How: DrewOn,
+		Why: "The Fifth Amendment's “nor shall be compelled in any criminal case to be a witness against himself” and “nor shall any person be subject for the same offence to be twice put in jeopardy of life or limb” have the colony's liberties before them, “No man shall be forced by Torture to confesse any Crime against himselfe” and no man “twise sentenced by Civill Justice for one and the same Crime”; the Eighth's “cruel and unusual punishments” its “inhumane Barbarous or cruel”."},
 	{From: "rights", To: "petition", How: DrewOn,
 		Why: "The Fifth Amendment's “without due process of law” is Section IV's “by due p[ro]cesse of Lawe”, and the Third Amendment's “No Soldier shall, in time of peace be quartered in any house, without the consent of the Owner” answers Section VI's grievance that “the inhabitants against their wills have been compelled to receive them into their houses”."},
 	{From: "rights", To: "english-rights", How: DrewOn,
 		Why: "The Eighth Amendment's “Excessive bail shall not be required, nor excessive fines imposed, nor cruel and unusual punishments inflicted” follows the Act's words; the First's right “to petition the Government for a redress of grievances” and the Second's “right of the people to keep and bear Arms” answer its “Right of the Subjects to petition the King” and the subjects' “Arms for their Defence”."},
+	{From: "rights", To: "pennsylvania", How: DrewOn,
+		Why: "The First Amendment's “or abridging the freedom of speech, or of the press” has Article XII before it, “the people have a right to freedom of speech, and of writing, and publishing their sentiments; therefore the freedom of the press ought not to be restrained”, and the Second Article XIII's “the people have a right to bear arms for the defence of themselves and the state”."},
+	{From: "rights", To: "massachusetts", How: DrewOn,
+		Why: "The Fourth Amendment's “The right of the people to be secure in their persons, houses, papers, and effects, against unreasonable searches and seizures” is Article XIV's “Every subject has a right to be secure from all unreasonable searches, and seizures, of his person, his houses, his papers, and all his possessions”; the Second's right to arms Article XVII's “The people have a right to keep and to bear arms for the common defence”."},
 	{From: "rights", To: "virginia-statute", How: DrewOn,
 		Why: "The First Amendment's “Congress shall make no law respecting an establishment of religion, or prohibiting the free exercise thereof” carries Jefferson's Statute, that “no man shall be compelled to frequent or support any religious worship, place, or ministry whatsoever”, from Virginia to the whole country; Madison drove both through."},
 	{From: "rights", To: "northwest", How: DrewOn,
@@ -107,6 +126,16 @@ var Links = []Link{
 		Why: "Article 1's “All human beings are born free and equal in dignity and rights” carries the 1789 Declaration's “Men are born, and always continue, free and equal in respect of their rights” to everyone, as its drafters, Cassin among them, meant it to."},
 	{From: "udhr", To: "rights", How: DrewOn,
 		Why: "Articles 18 to 20 declare the First Amendment's freedoms of religion, expression and assembly for everyone; Article 5's “cruel, inhuman or degrading treatment or punishment” takes up the Eighth's “cruel and unusual punishments”; Articles 9 to 11 the Fifth and Sixth's fair trial."},
+	// The Civil Rights Act of 1964.
+	{From: "civil-rights", To: "constitution", How: Follows,
+		Why: "Title VI's “No person in the United States shall, on the ground of race, color, or national origin, be excluded from participation in, be denied the benefits of, or be subjected to discrimination under any program or activity receiving Federal financial assistance” enforces the Fourteenth Amendment's “nor deny to any person within its jurisdiction the equal protection of the laws”, under Congress's powers over commerce and the Amendment's own."},
+	{From: "civil-rights", To: "udhr", How: Follows,
+		Why: "Title II's “without discrimination or segregation on the ground of race, color, religion, or national origin” answers, for public accommodations, the Declaration's Article 2, that everyone's rights hold “without distinction of any kind, such as race, colour, sex, language, religion”."},
+	// The Voting Rights Act of 1965.
+	{From: "voting-rights", To: "civil-rights", How: Follows,
+		Why: "A year after the Civil Rights Act's Title I, “Voting Rights”, which only tightened the rules for registering, the Act strikes at the tests themselves: “No voting qualification or prerequisite to voting” may be applied to deny the vote on account of race or color."},
+	{From: "voting-rights", To: "constitution", How: Follows,
+		Why: "An Act “To enforce the fifteenth amendment to the Constitution of the United States”, whose “The right of citizens of the United States to vote shall not be denied or abridged by the United States or by any State on account of race, color, or previous condition of servitude” section 2 makes good against every “voting qualification or prerequisite to voting, or standard, practice, or procedure” that denies the vote on account of race or color."},
 	// The Freedom of Information Act, 1966.
 	{From: "foia", To: "constitution", How: Follows,
 		Why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552, which makes each agency's records available “to any person” unless one of its exemptions holds."},
@@ -117,6 +146,12 @@ var Links = []Link{
 	// The International Covenant on Civil and Political Rights, December 1966.
 	{From: "iccpr", To: "udhr", How: DrewOn,
 		Why: "The Covenant binds its parties to the Declaration's rights, its preamble recognizing them “in accordance with the Universal Declaration of Human Rights”; Article 19's freedom “to seek, receive and impart information and ideas of all kinds, regardless of frontiers” is the Declaration's “to seek, receive and impart information and ideas through any media and regardless of frontiers” made treaty."},
+	// The International Covenant on Economic, Social and Cultural Rights,
+	// adopted the same day.
+	{From: "icescr", To: "udhr", How: DrewOn,
+		Why: "The Covenant binds its parties to the Declaration's economic, social and cultural rights “in accordance with the Universal Declaration of Human Rights”: its Article 13's “the right of everyone to education” is the Declaration's “Everyone has the right to education” made treaty."},
+	{From: "icescr", To: "iccpr", How: Beside,
+		Why: "The two Covenants were adopted together in resolution 2200 A (XXI), one for economic, social and cultural rights and one for civil and political, each preamble holding that “the ideal of free human beings enjoying freedom from fear and want” can only be achieved if everyone may enjoy both kinds of right, the other's words being “the ideal of free human beings enjoying civil and political freedom and freedom from fear and want”."},
 	// The Privacy Act of 1974.
 	{From: "privacy", To: "constitution", How: Follows,
 		Why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552a, on the records agencies keep about individuals."},
