@@ -118,7 +118,7 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	}
 	// Respond needs only the event's name to pick the dialect.
 	e := event.Event{Vendor: &event.Vendor{HookEvent: hookEvent}}
-	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny, Unfinished: r.Unfinished, Allow: r.Allow}))
+	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny, Unfinished: r.Unfinished, Allow: r.Allow, Ask: r.Ask}))
 	return 0
 }
 

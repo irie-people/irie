@@ -55,12 +55,13 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 	var call struct {
 		Tool  string          `json:"tool_name"`
 		Input json.RawMessage `json:"tool_input"`
+		Cwd   string          `json:"cwd"`
 	}
 	json.Unmarshal(a.Payload, &call)
 	var (
-		stop            dogStop
-		word, focusDeny string
-		trod            trodReply
+		stop                    dogStop
+		word, focusDeny, gitAsk string
+		trod                    trodReply
 	)
 	if !late {
 		// The jot dog reads what a finished turn left, and holds its last
@@ -73,10 +74,12 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 			trod = c.trodAtHook(a.Session, evs)
 		}
 		// And the arch agents' word to a session or subagent that starts
-		// (arch.go), and Gabriel's guard of the user's focus (gabriel.go).
+		// (arch.go), Gabriel's guard of the user's focus (gabriel.go) and
+		// Mikael's of what the user's own git runs (gitguard.go).
 		word = c.archWord(a.Session, evs)
 		if trod.how != trodAtAsk {
 			focusDeny = c.focusGuard(a.Session, call.Tool, call.Input, evs)
+			gitAsk = c.gitGuard(call.Tool, call.Input, call.Cwd, evs)
 		}
 	}
 	c.mu.Lock()
@@ -132,6 +135,11 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 			// Gabriel turns the call away, so it never runs.
 			reply.Deny = focusDeny
 			continue
+		case gitAsk != "" && e.Kind == event.ToolStarted:
+			// Mikael asks the user first, in the harness's permission
+			// prompt, about a change to what their own git runs. The call
+			// runs if they say yes, so it is recorded as it starts.
+			reply.Ask = gitAsk
 		case trod.how == trodAtAsk && e.Kind == event.InputNeeded && e.Str("reason") == event.ReasonQuestion:
 			e = trodEvent(e, trodAtAsk)
 			reply.Deny = trod.note
