@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
@@ -145,6 +146,25 @@ func TestNormalize(t *testing.T) {
 		want{event.ModelSwitched, "main", map[string]any{"model": "claude-opus-5-5", "from": "claude-fable-5-1", "source": "auto"}})
 	check(t, "a switch before it is made", payload("PreModelSwitch", `"to_model":"claude-opus-5-5"`))
 	check(t, "an event Irie does not use", payload("PostToolBatch"))
+}
+
+// An `irie ab` run's verdict, from its report, the error it exits 1 with
+// when the outputs differ, or its JSON (DESIGN §4.24).
+func TestNormalizeReadsABRuns(t *testing.T) {
+	call := func(more string) string {
+		return `"tool_name":"Bash","tool_input":{"command":"` + brand.Slug + ` ab -n 10 ./gold ./new -- big.ldif"` + more + `},"tool_use_id":"toolu_10"`
+	}
+	slower := `"tool_response":{"stdout":"time   1.2s   1.5s   25% more\n\nnew is slower, with the same output\n","stderr":""}`
+	check(t, "slower", payload("PostToolUse", call(""), slower),
+		want{event.ToolFinished, "main", map[string]any{"ab": "slower", "ab_line": "new is slower, with the same output", "tool": "Bash"}})
+	differs := `"error":"Exit code 1\noutput  differs at line 3:\n` + brand.Slug + `: ab: new's output differs from gold's, so its times are for different work"`
+	check(t, "differs", payload("PostToolUseFailure", call(""), differs),
+		want{event.ToolFailed, "main", map[string]any{"ab": "differs", "ab_line": brand.Slug + ": ab: new's output differs from gold's, so its times are for different work", "tool": "Bash"}})
+	asJSON := `"tool_response":{"stdout":"{\"same\": true, \"time\": {\"change\": \"lower\"}}","stderr":""}`
+	check(t, "as JSON", payload("PostToolUse", call(""), asJSON),
+		want{event.ToolFinished, "main", map[string]any{"ab": "faster", "ab_line": `"time": {"change": "lower"}`, "tool": "Bash"}})
+	check(t, "in the background", payload("PostToolUse", call(`,"run_in_background":true`), slower),
+		want{event.ToolFinished, "main", map[string]any{"tool": "Bash"}})
 }
 
 // A shell command's tests, as the hooks reference gives a call's end: what

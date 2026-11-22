@@ -283,6 +283,49 @@ enum WindowPanes {
         }
     }
 
+    /// After a launch, the sidebar unfolded, unless zen keeps it folded. A
+    /// relaunch can bring the window back with the sidebar folded (an
+    /// install's did on 2026-11-22), and the title bar has no toggle to show
+    /// it again (SidebarView). Only the app's own run calls this
+    /// (AppDelegate), never a snapshot, which never launches the app. It
+    /// looks once the window has laid itself out and zen has come back and,
+    /// when the app opened behind the user's work, again the first time
+    /// they come to it.
+    static func unfoldAfterLaunch(tries: Int = 40) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            MainActor.assumeIsolated {
+                guard sidebar != nil else {
+                    if tries > 0 { unfoldAfterLaunch(tries: tries - 1) }
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    MainActor.assumeIsolated {
+                        unfoldUnlessZen()
+                        guard !NSApp.isActive else { return }
+                        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+                            MainActor.assumeIsolated {
+                                guard !unfoldedOnReturn else { return }
+                                unfoldedOnReturn = true
+                                unfoldUnlessZen()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether the app's first return to the front since launch has looked.
+    private static var unfoldedOnReturn = false
+
+    /// Shows a folded sidebar, unless zen folded it, and says so in the
+    /// app's output.
+    private static func unfoldUnlessZen() {
+        guard let s = sidebar, !s.shown, !UserDefaults.standard.bool(forKey: ZenModel.onKey) else { return }
+        print("\(Brand.name): the sidebar came back folded after the launch; showing it")
+        setSidebar(shown: true, width: nil)
+    }
+
     /// The window's width, for the drawing of the layout.
     static var width: Double? { window.map { Double($0.frame.width) } }
 

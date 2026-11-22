@@ -40,9 +40,11 @@ type track struct {
 	nudged    int
 	waiting   int
 	waitingOn string
-	// The latest test run of its agents, as the hooks read it, and what
-	// its last turn's message said that this run contradicts (dog.go).
+	// The latest test run and `irie ab` run of its agents, as the hooks
+	// read them, and what its last turn's message said that they
+	// contradict (dog.go).
 	test     testRun
+	ab       abRun
 	unproven string
 
 	// For the trod bot (trod.go): when its last turn ended or failed,
@@ -180,6 +182,9 @@ func (t *track) apply(e event.Event) {
 		}
 		if o := e.Str("tests"); o != "" {
 			t.test = testRun{outcome: o, line: e.Str("test_line"), cmd: t.tools[toolUseID(e)].Str("summary")}
+		}
+		if v := e.Str("ab"); v != "" {
+			t.ab = abRun{verdict: v, line: e.Str("ab_line"), cmd: t.tools[toolUseID(e)].Str("summary")}
 		}
 		t.busy(e)
 		t.held = t.held || t.frozen != nil

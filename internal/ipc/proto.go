@@ -651,13 +651,24 @@ type Loose struct {
 	Nudged int          `json:"nudged,omitempty"` // how often the dog sent it back to finish since your last prompt
 	// Unproven is what its last message says that its own record
 	// contradicts: UnprovenTests, that the tests pass while its latest
-	// test run failed.
+	// test run failed; UnprovenFaster or UnprovenSame, that it made
+	// something faster, or left its output the same, while its latest
+	// `irie ab` run said otherwise.
 	Unproven string `json:"unproven,omitempty"`
 }
 
 // UnprovenTests is a jot whose last message says the tests pass while its
 // latest test run failed (Loose.Unproven).
 const UnprovenTests = "tests"
+
+// UnprovenFaster is a jot whose last message says it made something faster
+// while its latest `irie ab` run said new is slower, and UnprovenSame one
+// that says the output is the same while that run said it differs
+// (Loose.Unproven, DESIGN §4.24).
+const (
+	UnprovenFaster = "faster"
+	UnprovenSame   = "same"
+)
 
 // Words says what is left in plain words, such as "3 files not committed ·
 // 2 commits not in live".
@@ -669,8 +680,13 @@ func (l Loose) Words() string {
 	if l.Ahead > 0 {
 		parts = append(parts, counted(l.Ahead, "commit")+" not in "+l.Land)
 	}
-	if l.Unproven == UnprovenTests {
+	switch l.Unproven {
+	case UnprovenTests:
 		parts = append(parts, "says the tests pass, but the last run failed")
+	case UnprovenFaster:
+		parts = append(parts, "says it's faster, but its last A/B was slower")
+	case UnprovenSame:
+		parts = append(parts, "says the output is the same, but its last A/B differed")
 	}
 	return strings.Join(parts, " · ")
 }

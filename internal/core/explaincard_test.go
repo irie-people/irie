@@ -37,6 +37,11 @@ func TestACardExplainsWhatIsAskedAndIsKeptForTheQuestion(t *testing.T) {
 	if other, _ := c.materializeOp(ipc.MaterializeArgs{Explain: "What is a gap?"}); other.ID == r.ID || other.State != "cold" || !other.Began {
 		t.Errorf("another question: %+v; want a card of its own, begun", other)
 	}
+	// Its remake writes the cards' file: let it finish before the test's
+	// folder goes.
+	if done, _ := c.materializeOp(ipc.MaterializeArgs{Explain: "What is a gap?", Wait: 10 * time.Second}); done.State != "fresh" {
+		t.Errorf("the other question's card is %s; want it made", done.State)
+	}
 	// Forget finds the card by its question.
 	if gone, err := c.materializeOp(ipc.MaterializeArgs{Explain: "How is a card kept?", Forget: true}); err != nil || gone.ID != r.ID || gone.State != "cold" {
 		t.Errorf("forget: %+v, %v", gone, err)
@@ -119,5 +124,24 @@ func TestAnExplanationIsBehindWhenTheSessionSaysMore(t *testing.T) {
 	}
 	if got := explainInputs(ipc.Conversation{}); got != "" {
 		t.Errorf("an empty conversation gives %q", got)
+	}
+}
+
+func TestAnExplanationReadsWhatWasSaidNotTheSteps(t *testing.T) {
+	conv := ipc.Conversation{Items: []ipc.Item{
+		{ID: "u1", Kind: ipc.ItemUser, Text: "how is a card kept?"},
+		{ID: "x1", Kind: ipc.ItemTool, Phrase: "Searched for Reverse", Detail: "Looks.swift"},
+		{ID: "t1", Kind: ipc.ItemText, Text: "In cards.json, by its name."},
+	}, Needs: &ipc.Item{Text: "Allow git push?"}}
+	got := explainContext(ipc.Session{Name: "Teach tile", State: "working", Detail: "Running the tests"}, conv)
+	for _, want := range []string{"Session: Teach tile", "Person: how is a card kept?", "Agent: In cards.json, by its name."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the context lacks %q:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"Searched for Reverse", "Running the tests", "Allow git push"} {
+		if strings.Contains(got, not) {
+			t.Errorf("the context has %q, a step or a wait, which a small model would draw:\n%s", not, got)
+		}
 	}
 }

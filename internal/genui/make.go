@@ -52,8 +52,42 @@ Then, where they help:
 {"type": "Code", "language": "go", "text": "a few lines"}   (a short example, at most 12 lines)
 {"type": "List", "items": [{"title": "...", "detail": "..."}]}
 {"type": "Facts", "facts": [{"label": "...", "value": "..."}]}
-Explain in plain words, as to a newcomer. Where the context bears on what is asked, follow it, and never make up a name, a number or a fact about the work in it.
+Explain in plain words, as to a newcomer. The context, when there is one, is a conversation, for background: explain what is asked, not what the conversation did, unless that is what is asked. Where it bears on what is asked, follow it, and never make up a name, a number or a fact about the work in it.
 Keep it short: one picture and at most five parts in all, with no Markdown and no links.`
+
+// schema is the JSON schema a kind of card's reply is held to, through
+// Ollama's structured outputs: a title over a body of parts, each part an
+// object with a type from those the kind's instructions offer. A small
+// model then cannot write a part as a bare sentence, or leave its type
+// out, as bonsai-2:9b did about one card in five with JSON mode alone.
+func schema(kind string) json.RawMessage {
+	str := map[string]any{"type": "string"}
+	strs := map[string]any{"type": "array", "items": str}
+	num := map[string]any{"type": "number"}
+	obj := func(required []string, props map[string]any) map[string]any {
+		return map[string]any{"type": "object", "required": required, "properties": props}
+	}
+	list := func(item map[string]any) map[string]any { return map[string]any{"type": "array", "items": item} }
+	props := map[string]any{
+		"text":  str,
+		"style": str,
+		"items": list(obj([]string{"title"}, map[string]any{"title": str, "detail": str, "status": str})),
+		"facts": list(obj([]string{"label", "value"}, map[string]any{"label": str, "value": str})),
+	}
+	types := []string{PartText, PartList, PartFacts, PartTable, PartProgress, PartDivider}
+	if kind == KindExplain {
+		types = []string{PartFlow, PartDiagram, PartCompare, PartCode, PartText, PartList, PartFacts}
+		props["language"] = str
+		props["links"] = list(obj([]string{"from", "to"}, map[string]any{"from": str, "to": str, "label": str}))
+		props["sides"] = list(obj([]string{"title", "points"}, map[string]any{"title": str, "points": strs}))
+	} else {
+		props["columns"], props["rows"] = strs, list(strs)
+		props["label"], props["value"], props["total"] = str, num, num
+	}
+	props["type"] = map[string]any{"type": "string", "enum": types}
+	b, _ := json.Marshal(obj([]string{"title", "body"}, map[string]any{"title": str, "body": list(obj([]string{"type"}, props))}))
+	return b
+}
 
 // instructions are the instructions for a kind of card; summary for one
 // it does not know.
@@ -65,8 +99,8 @@ func instructions(kind string) string {
 }
 
 // Make has the local model m make the card prompt asks for, of the kind
-// given, from text alone, the card's context, and gives the card's JSON,
-// compacted, once it passes Check. A card that does not is asked for once
+// given, from text alone, the card's context, and gives the card's JSON
+// as the catalog reads it (Check), compacted, once it passes. A card that does not is asked for once
 // more, with what to fix, since a small model often gets it right the
 // second time. m runs on this computer (localmodel.FindChatModel never
 // picks a cloud model), so a card costs no tokens. The caller bounds how
@@ -78,8 +112,13 @@ func Make(ctx context.Context, m localmodel.ChatModel, kind, prompt, text string
 	ask := "The card to make: " + prompt
 	if strings.TrimSpace(text) != "" {
 		ask += "\n\nThe context:\n" + text
+		if kind == KindExplain {
+			// What is asked goes last too, after the background, where a
+			// small model attends to it.
+			ask = "The context, for background:\n" + text + "\n\nThe card to make: " + prompt
+		}
 	}
-	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "10m", JSON: true}
+	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "10m", JSON: true, Schema: schema(kind)}
 	if m.Thinks() {
 		off := false
 		opt.Think = &off
@@ -94,8 +133,11 @@ func Make(ctx context.Context, m localmodel.ChatModel, kind, prompt, text string
 		}
 		var spec json.RawMessage
 		if spec, err = cardJSON(reply); err == nil {
-			if _, err = Check(spec); err == nil {
-				return spec, nil
+			var c Card
+			if c, err = Check(spec); err == nil {
+				// Kept as the catalog reads it, every part with its type,
+				// so a view that needs one draws it.
+				return json.Marshal(c)
 			}
 		}
 		msgs = append(msgs,
