@@ -52,7 +52,7 @@ Then, where they help:
 {"type": "Code", "language": "go", "text": "a few lines"}   (a short example, at most 12 lines)
 {"type": "List", "items": [{"title": "...", "detail": "..."}]}
 {"type": "Facts", "facts": [{"label": "...", "value": "..."}]}
-Explain in plain words, as to a newcomer. The context, when there is one, is a conversation, for background: explain what is asked, not what the conversation did, unless that is what is asked. Where it bears on what is asked, follow it, and never make up a name, a number or a fact about the work in it.
+Explain in plain words, as to a newcomer. The context, when there is one, is background: what the project's own docs say, and a conversation. Explain what is asked, not what the conversation did, unless that is what is asked. Take the project's words and how it works from its docs, over what you know, and never make up a name, a number or a fact about the work.
 Keep it short: one picture and at most five parts in all, with no Markdown and no links.`
 
 // schema is the JSON schema a kind of card's reply is held to, through

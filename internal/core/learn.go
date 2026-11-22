@@ -83,6 +83,7 @@ func (c *Core) learnOp(a ipc.LearnArgs) (ipc.LearnResult, error) {
 		Glossary:  learn.Get().Glossary,
 		Bar:       c.cfg().UI.Bar,
 		Tips:      tips,
+		Topics:    docTopics(dir),
 	}, nil
 }
 

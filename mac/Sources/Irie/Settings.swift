@@ -161,6 +161,16 @@ struct CoreConfig: Decodable, Equatable {
     }
     /// Nil from a core older than the learning settings.
     var learn: Learn?
+    /// How macOS shows its own alerts (DESIGN §4.11); nil from a core
+    /// older than the Alerts tab.
+    var alerts: Alerts?
+
+    /// The style of each of macOS's own alerts that System Settings
+    /// doesn't let you change: "" as macOS has it, banners or alerts.
+    struct Alerts: Decodable, Equatable {
+        var background: String
+        var privacy: String
+    }
 
     struct UI: Decodable, Equatable {
         var redOnDone: Bool
@@ -527,7 +537,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, tabs, appearance, agents, arch, trod, local, repos, plugins, learning
+        case general, tabs, appearance, agents, arch, trod, local, repos, plugins, learning, alerts
 
         var id: String { rawValue }
 
@@ -543,6 +553,7 @@ struct SettingsView: View {
             case .repos: return "Repos"
             case .plugins: return "Plugins"
             case .learning: return "Learning"
+            case .alerts: return "Alerts"
             }
         }
 
@@ -558,11 +569,12 @@ struct SettingsView: View {
             case .repos: return "folder"
             case .plugins: return "puzzlepiece.extension"
             case .learning: return "graduationcap"
+            case .alerts: return "bell.badge"
             }
         }
     }
 
-    static let size = CGSize(width: 680, height: 560)
+    static let size = CGSize(width: 760, height: 560)
 
     /// The app's defaults key for the tab on show, which the Plugins menu
     /// sets before it opens the window.
@@ -605,6 +617,7 @@ struct SettingsView: View {
         case .repos: RepoSettings(model: model)
         case .plugins: PluginSettings(model: model)
         case .learning: LearningSettings(model: model)
+        case .alerts: AlertsSettings(model: model)
         }
     }
 }
@@ -1432,6 +1445,196 @@ private struct LearningSettings: View {
             return "Claude Code’s Learning style: it also leaves small parts for you to write, marked TODO(human), and waits for you. Pick it when you can edit code; otherwise start with Explain."
         default:
             return "Agents do the work and say what they did, as usual."
+        }
+    }
+}
+
+// MARK: Alerts
+
+/// Raffi's report as the Alerts tab reads it (op raphael): what he
+/// found of macOS's own alerts, and what you can do about each.
+struct RaphaelReport: Decodable, Equatable {
+    struct Finding: Decodable, Identifiable, Equatable {
+        var id: String
+        var area: String
+        var level: String
+        var text: String
+        var advice: String?
+        var evidence: [String]?
+        var fix: Fix?
+    }
+
+    struct Fix: Decodable, Equatable {
+        var label: String
+        var run: [String]
+        var about: String
+        var undo: String?
+    }
+
+    var on: Bool
+    var checking: Bool
+    var checked: Date?
+    var findings: [Finding]
+    var fine: [String]
+    var fixing: String?
+}
+
+struct RaphaelArgs: Encodable {
+    var check: Bool?
+    var fix: String?
+    var ok: Bool?
+}
+
+/// macOS's own notices about the app's work (DESIGN §4.11): the style
+/// of two kinds that System Settings doesn't let you change, ways into
+/// System Settings that don't crash it, and what Raffi found of the alerts
+/// and the access macOS asked for in the app's name.
+@MainActor
+private struct AlertsSettings: View {
+    @Environment(Store.self) private var store
+    @ObservedObject var model: SettingsModel
+    @State private var report: RaphaelReport?
+    /// A fix waiting for your OK.
+    @State private var asking: RaphaelReport.Finding?
+    /// Why the core turned the last ask down.
+    @State private var problem: String?
+
+    /// System Settings' panes, by the links macOS opens them with.
+    static let loginItems = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")!
+    static let fullDiskAccess = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles")!
+
+    var body: some View {
+        WithConfig(model: model) { c in
+            SettingsForm(model: model) {
+                if let a = c.alerts {
+                    Section {
+                        style("Background Items Added", a.background, "alerts.background") { $0.alerts?.background = $1 }
+                        style("Privacy & Security notices", a.privacy, "alerts.privacy") { $0.alerts?.privacy = $1 }
+                    } header: {
+                        Text("macOS’s own alerts")
+                    } footer: {
+                        footnote("macOS shows these until you close each one, and System Settings › Notifications doesn’t list them, so their style is set here. Background Items Added comes each time a program is set to start by itself; Privacy & Security’s say an app was kept from changing other apps, and the like. \(Brand.name) keeps your choice, and puts it back should macOS change it. Notices on screen close as macOS takes a change; they stay in Notification Center.")
+                    }
+                } else {
+                    Section {
+                        Text("This \(Brand.name)’s core is older than these settings. Install the new build to set them here.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    HStack {
+                        Button("Open Login Items") { NSWorkspace.shared.open(Self.loginItems) }
+                        Button("Open Full Disk Access") { NSWorkspace.shared.open(Self.fullDiskAccess) }
+                    }
+                } header: {
+                    Text("System Settings")
+                } footer: {
+                    footnote("On some versions of macOS, Login Items crashes when it opens from a Background Items Added alert, and shows an error: close the alert and open it here. \(Brand.name)’s own item there is \(Brand.slug)-lid, the check that turns the Mac’s sleep back on when no core keeps it off. Agents run their tools in \(Brand.name)’s name, so macOS asks you, for \(Brand.name), when one reaches for a folder it guards: Full Disk Access for \(Brand.name) answers them all at once.")
+                }
+                Section {
+                    if let r = report {
+                        let found = r.findings.filter { $0.area == "alerts" }
+                        if found.isEmpty && !r.checking {
+                            Text(r.checked == nil ? "Raffi hasn’t looked yet." : "Nothing to see to.").foregroundStyle(.secondary)
+                        }
+                        ForEach(found) { f in row(f, fixing: r.fixing == f.id) }
+                        HStack {
+                            if r.checking {
+                                ProgressView().controlSize(.small)
+                                Text("Raffi is looking over your Mac…").foregroundStyle(.secondary)
+                            } else {
+                                Button("Look again") { send(RaphaelArgs(check: true)) }
+                                if let at = r.checked {
+                                    Text("Looked at \(at.formatted(date: .omitted, time: .shortened))").foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } else {
+                        ProgressView()
+                    }
+                    if let p = problem {
+                        Label(p, systemImage: "exclamationmark.triangle").foregroundStyle(Theme.needs).textSelection(.enabled)
+                    }
+                } header: {
+                    Text("What Raffi found")
+                } footer: {
+                    footnote("Raffi, the arch agent who heals, reads what macOS said in its log in the last two hours: the alerts it showed and the access it asked you for in \(Brand.name)’s name. He also checks how \(Brand.name) is signed: macOS forgets what you allowed a build signed ad hoc.")
+                }
+            }
+        }
+        // What a fix will run, and your OK to it.
+        .alert(asking?.fix?.label ?? "", isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { f in
+            Button(f.fix?.label ?? "OK") { send(RaphaelArgs(fix: f.id, ok: true)) }
+            Button("Cancel", role: .cancel) {}
+        } message: { f in
+            Text(Self.ask(f.fix))
+        }
+        // What he found changes as he looks: read it again while the tab shows.
+        .task {
+            while !Task.isCancelled {
+                await load()
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
+    }
+
+    /// A picker for one of macOS's alerts.
+    private func style(_ title: String, _ value: String, _ key: String, _ apply: @escaping (inout CoreConfig, String) -> Void) -> some View {
+        Picker(title, selection: model.binding(value, key, apply)) {
+            Text("As macOS has them").tag("")
+            Text("Go by themselves (banners)").tag("banners")
+            Text("Stay until I close them (alerts)").tag("alerts")
+        }
+    }
+
+    /// One finding: a mark for how it stands, the line, his advice, and
+    /// his fix.
+    private func row(_ f: RaphaelReport.Finding, fixing: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: f.level == "warn" ? "exclamationmark.triangle" : "info.circle")
+                .foregroundStyle(f.level == "warn" ? Color.orange : Color.secondary)
+                .accessibilityLabel(f.level == "warn" ? "Needs care" : "Worth a look")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(f.text).fixedSize(horizontal: false, vertical: true)
+                if let a = f.advice, !a.isEmpty {
+                    Text(a).font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                if let x = f.fix {
+                    Button(fixing ? "Working on it…" : x.label + "…") { asking = f }
+                        .controlSize(.small)
+                        .disabled(fixing)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// What you read before you say OK to a fix: what it runs, what it does
+    /// and how to undo it.
+    static func ask(_ x: RaphaelReport.Fix?) -> String {
+        guard let x else { return "" }
+        var s = "Raffi will run:\n" + x.run.map { "    " + $0 }.joined(separator: "\n") + "\n\n" + x.about
+        if let u = x.undo, !u.isEmpty { s += "\n\nTo undo it: " + u }
+        return s
+    }
+
+    private func load() async {
+        guard case .online = store.link else { return }
+        if let r = try? await store.client.call("raphael", RaphaelArgs(), timeout: 5, as: RaphaelReport.self), r != report {
+            report = r
+        }
+    }
+
+    private func send(_ args: RaphaelArgs) {
+        Task {
+            do {
+                report = try await store.client.call("raphael", args, timeout: 10, as: RaphaelReport.self)
+                problem = nil
+            } catch {
+                problem = error.localizedDescription
+            }
         }
     }
 }

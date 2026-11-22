@@ -709,7 +709,17 @@ enum Snapshot {
             }),
             ("teach-tile-empty", false, false, {
                 store.teach.loadFixture(shown: true, asked: nil, in: nil, result: nil,
-                                        recent: [Fixture.teachQuestion, "What is a worktree?"])
+                                        recent: [Fixture.teachQuestion, "What is a worktree?"], topics: Fixture.teachTopics)
+            }),
+            // With the panes open beside the terminal: over the middle of
+            // the terminal still, over the panes where it must be.
+            ("teach-tile-panes", false, false, {
+                let name = store.sessions.first { $0.id == Fixture.selected }?.name ?? "docs guide"
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
+                // A step of a tour: Your groups, the third topic of the guide.
+                let groups = Fixture.teachTopics[2]
+                store.teach.loadFixture(shown: true, asked: TeachTile.question(groups), in: (Fixture.selected, name), result: Fixture.teachCard,
+                                        topics: Fixture.teachTopics, tour: groups)
             }),
         ]
         for (base, dark, reversed, set) in shots {
@@ -858,6 +868,18 @@ enum Fixture {
     /// What the Teach tile is asked in the snapshots, and the card a local
     /// model made for it, with each of the catalog's pictures.
     static let teachQuestion = "How does a kept card know it is out of date?"
+
+    /// What a project's docs teach, as the learn op gives it, for the tile's
+    /// tour: a guide's topics, then a design's.
+    static let teachTopics: [LearnTopic] = [
+        LearnTopic(title: "A card per session, in a list or a tree", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Cards that never move", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Your groups", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Spaces", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Drag to reorder", file: "docs/MAC.md", heading: "1. What it shows"),
+        LearnTopic(title: "Session", file: "docs/DESIGN.md", heading: "Terms"),
+        LearnTopic(title: "Hold", file: "docs/DESIGN.md", heading: "Terms"),
+    ]
     static var teachCard: MaterializeResult {
         let made = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-120))
         let json = """
@@ -1199,6 +1221,7 @@ enum Fixture {
         "trod": {"on": true, "start": "23:00", "end": "07:00", "away": "15m", "questions": true, "nudges": 8, "retry": "15m", "within": "24h", "max_working": 4, "max_plan_use": 90, "keep_awake": true,
             "rules": ["Don't spend money you didn't make.", "Don't go over the plan's weekly allotment: never buy usage credits or turn on extra usage.", "Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages."],
             "guidelines": ["When you have to choose, take the option you would recommend, and say in your last message which you took and why.", "Finish the task you were given; note new ideas and extra work for the morning instead of starting them."]},
+        "alerts": {"background": "banners", "privacy": ""},
         "learn": {"agent_tips": true, "links": {"Team handbook": "https://example.com/handbook"}, "pictures": "tile", "tutor": "explain", "visual": true},
         "local": {"context": 65536, "env": {}, "kv_cache": "q8_0", "memory_gib": 0, "ollama": "", "port": 11435, "url": ""},
         "profiles": {

@@ -3,6 +3,8 @@ package core
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -133,7 +135,7 @@ func TestAnExplanationReadsWhatWasSaidNotTheSteps(t *testing.T) {
 		{ID: "x1", Kind: ipc.ItemTool, Phrase: "Searched for Reverse", Detail: "Looks.swift"},
 		{ID: "t1", Kind: ipc.ItemText, Text: "In cards.json, by its name."},
 	}, Needs: &ipc.Item{Text: "Allow git push?"}}
-	got := explainContext(ipc.Session{Name: "Teach tile", State: "working", Detail: "Running the tests"}, conv)
+	got := explainContext(ipc.Session{Name: "Teach tile", State: "working", Detail: "Running the tests"}, conv, genui.MaxContext)
 	for _, want := range []string{"Session: Teach tile", "Person: how is a card kept?", "Agent: In cards.json, by its name."} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the context lacks %q:\n%s", want, got)
@@ -143,5 +145,118 @@ func TestAnExplanationReadsWhatWasSaidNotTheSteps(t *testing.T) {
 		if strings.Contains(got, not) {
 			t.Errorf("the context has %q, a step or a wait, which a small model would draw:\n%s", not, got)
 		}
+	}
+}
+
+func TestAnExplanationReadsTheProjectsOwnDocsFirst(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs", "proposals"), 0o755)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Tool\n\nA tool that keeps your notes in folders, one folder for each project you name.\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "docs", "GUIDE.md"), []byte(`# Guide
+
+## Groups
+
+- **Your groups.** New Group in a card's menu makes a group of the card, or of every card picked with it.
+- **Moving.** Drag a card onto a group's header and it joins the group; drag it out to leave.
+
+`+"```"+`
+groups = ["never read: code is left out of passages"]
+`+"```"+`
+
+| Key | What it does |
+|-----|--------------|
+| ⌥⌘↑ | Moves the selected card up within its group |
+`), 0o644)
+	os.WriteFile(filepath.Join(dir, "docs", "proposals", "next.md"), []byte("# Next\n\nGroups that float in a window of their own, which is not built yet at all.\n"), 0o644)
+
+	got := docsFor(dir, "How do I drag a card into a group?", explainDocs)
+	for _, want := range []string{"From docs/GUIDE.md, Groups:\n- Moving. Drag a card onto a group's header", "From docs/GUIDE.md, Groups:\n- Your groups. New Group"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the docs lack %q:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"never read", "not built yet", "**"} {
+		if strings.Contains(got, not) {
+			t.Errorf("the docs have %q, which a card should not read:\n%s", not, got)
+		}
+	}
+	if strings.Index(got, "Moving.") > strings.Index(got, "Your groups.") {
+		t.Errorf("the passage about moving does not come first:\n%s", got)
+	}
+	if docsFor(dir, "the of and", explainDocs) != "" || docsFor("", "groups", explainDocs) != "" {
+		t.Error("docs were given for no words, or for no folder")
+	}
+	if got := docsFor(dir, "groups", 120); len(got) > 120 {
+		t.Errorf("%d bytes of docs in a budget of 120", len(got))
+	}
+
+	// Asked in a session in that folder, the card reads them first.
+	f := &cardOllama{reply: flowCard}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	c := cardCore(t, srv.URL)
+	c.sessions["s1"] = &session{id: "s1", name: "Notes", pane: "%1", cwd: dir}
+	if _, err := c.materializeOp(ipc.MaterializeArgs{Explain: "How do I drag a card into a group?", Session: "s1", Wait: 10 * time.Second}); err != nil {
+		t.Fatal(err)
+	}
+	ask := f.lastAsked()[1].Content
+	if !strings.Contains(ask, docsHead+"From docs/GUIDE.md, Groups:") || strings.Index(ask, docsHead) > strings.Index(ask, "Session: Notes") {
+		t.Errorf("asked %q; want the docs first, then the session", ask)
+	}
+}
+
+func TestPassagesAreParagraphsItemsAndRows(t *testing.T) {
+	got := passagesOf("A.md", "# Top\n\nOne paragraph that runs\nover two lines, long enough.\n\n- An item long enough to say a thing,\n  and its second line.\n1. A numbered item, long enough to keep.\n| a row of a table that is long enough |\n|----|\n\nshort\n")
+	want := []passage{
+		{"A.md, Top", "One paragraph that runs over two lines, long enough."},
+		{"A.md, Top", "- An item long enough to say a thing, and its second line."},
+		{"A.md, Top", "1. A numbered item, long enough to keep."},
+		{"A.md, Top", "| a row of a table that is long enough |"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("passages %q; want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("passage %d: %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestTheDocsTopicsAreTheirBoldItemsInOrder(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "GUIDE.md"), []byte("# Guide\n\n## The list\n\n"+
+		"- **Your groups.** New Group in a card's menu.\n"+
+		"- **Spaces:** chips under the list.\n"+
+		"  - **Nested.** an indented item is not a topic\n"+
+		"- a plain item\n"+
+		"- **Your groups.** told again, kept once\n\n"+
+		"## Moving\n\n"+
+		"* **Drag to reorder** a card where it goes\n"), 0o644)
+	want := []ipc.LearnTopic{
+		{Title: "Your groups", File: "docs/GUIDE.md", Heading: "The list"},
+		{Title: "Spaces", File: "docs/GUIDE.md", Heading: "The list"},
+		{Title: "Drag to reorder", File: "docs/GUIDE.md", Heading: "Moving"},
+	}
+	got := docTopics(dir)
+	if len(got) != len(want) {
+		t.Fatalf("topics %+v; want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("topic %d: %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	// The learn op gives them for a session in that folder, and none
+	// without one.
+	c := cardCore(t, "http://127.0.0.1:1")
+	c.sessions["s1"] = &session{id: "s1", name: "Guide", pane: "%1", cwd: dir}
+	if r, err := c.learnOp(ipc.LearnArgs{Session: "s1"}); err != nil || len(r.Topics) != 3 || r.Topics[2].Title != "Drag to reorder" {
+		t.Errorf("learn for the session: %+v, %v", r.Topics, err)
+	}
+	if r, _ := c.learnOp(ipc.LearnArgs{}); len(r.Topics) != 0 {
+		t.Errorf("learn with no session gave topics %+v", r.Topics)
 	}
 }

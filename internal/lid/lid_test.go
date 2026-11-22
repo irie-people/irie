@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -288,15 +289,118 @@ func TestInstallScriptChecksTheRuleBeforeSudoReadsIt(t *testing.T) {
 	}
 }
 
-func TestAgentPlistRunsTheCheck(t *testing.T) {
-	p := AgentPlist("/home/alice/.local/share/irie/bin/irie", "/home/alice/.local/state/irie/lid.json")
-	for _, want := range []string{"<string>" + Label + "</string>", "<string>/home/alice/.local/share/irie/bin/irie</string>", "<string>lid</string>", "<string>check</string>", "<string>/home/alice/.local/state/irie/lid.json</string>", "<key>RunAtLoad</key>", "<integer>120</integer>"} {
+func TestAgentPlistRunsTheLauncher(t *testing.T) {
+	p := AgentPlist("/home/alice/.local/share/irie/lid/irie-lid", "/home/alice/.local/state/irie/lid.json")
+	for _, want := range []string{"<string>" + Label + "</string>", "<string>/home/alice/.local/share/irie/lid/irie-lid</string>", "<string>--file</string>", "<string>/home/alice/.local/state/irie/lid.json</string>", "<key>RunAtLoad</key>", "<integer>120</integer>"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("plist lacks %q", want)
 		}
 	}
+	if got := Program(p); got != "/home/alice/.local/share/irie/lid/irie-lid" {
+		t.Errorf("Program = %q", got)
+	}
 	if got := AgentPath("/home/alice"); got != "/home/alice/Library/LaunchAgents/io.github.irie-hq.irie.lid.plist" {
 		t.Errorf("AgentPath = %q", got)
+	}
+	if got := LauncherPath("/home/alice/.local/share/irie"); got != "/home/alice/.local/share/irie/lid/irie-lid" {
+		t.Errorf("LauncherPath = %q", got)
+	}
+}
+
+// oldPlist is the agent as setups before the launcher wrote it: it ran the
+// installed binary, which each install replaces.
+func oldPlist(bin, state string) string {
+	return strings.Replace(AgentPlist(bin, state), "<string>--file</string>", "<string>lid</string>\n\t\t<string>check</string>\n\t\t<string>--file</string>", 1)
+}
+
+func TestTheLauncherRunsTheInstalledCheckWithItsArguments(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "it's here", "irie")
+	os.MkdirAll(filepath.Dir(bin), 0o755)
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nprintf '%s|' \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	launcher := filepath.Join(dir, LauncherName)
+	if err := os.WriteFile(launcher, []byte(LauncherScript(bin)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(launcher, "--file", "/home/alice/a b/lid.json").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(out); got != "lid|check|--file|/home/alice/a b/lid.json|" {
+		t.Errorf("the launcher ran %q", got)
+	}
+}
+
+func TestAgentWritesOnlyWhatChanged(t *testing.T) {
+	home, data := t.TempDir(), t.TempDir()
+	bin, state := filepath.Join(data, "bin", "irie"), "/home/alice/.local/state/irie/lid.json"
+	changed, err := Agent(home, data, bin, state)
+	if err != nil || !changed {
+		t.Fatalf("first write: changed %v, %v", changed, err)
+	}
+	launcher := LauncherPath(data)
+	if fi, err := os.Stat(launcher); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("launcher %v, %v", fi, err)
+	}
+	if b, _ := os.ReadFile(AgentPath(home)); Program(string(b)) != launcher {
+		t.Errorf("the plist runs %q, not the launcher", Program(string(b)))
+	}
+	// An install replaces nothing the agent names: both files stay the
+	// same, inode and time, so macOS has nothing to announce.
+	before := map[string]os.FileInfo{}
+	for _, p := range []string{launcher, AgentPath(home)} {
+		old := time.Now().Add(-time.Hour)
+		os.Chtimes(p, old, old)
+		before[p], _ = os.Stat(p)
+	}
+	if changed, err := Agent(home, data, bin, state); err != nil || changed {
+		t.Fatalf("second write: changed %v, %v", changed, err)
+	}
+	for p, was := range before {
+		now, _ := os.Stat(p)
+		if !os.SameFile(was, now) || !now.ModTime().Equal(was.ModTime()) {
+			t.Errorf("%s was written again", p)
+		}
+	}
+	if _, err := os.Stat(launcher + ".new"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a file beside the launcher was left: %v", err)
+	}
+}
+
+func TestRefreshMovesAnOldAgentOntoTheLauncherOnce(t *testing.T) {
+	home, data := t.TempDir(), t.TempDir()
+	bin, state := filepath.Join(data, "bin", "irie"), filepath.Join(home, "state", "lid.json")
+	if changed, err := Refresh(home, data, state); err != nil || changed {
+		t.Fatalf("with no agent set up: changed %v, %v", changed, err)
+	}
+	os.MkdirAll(filepath.Dir(AgentPath(home)), 0o755)
+	os.WriteFile(AgentPath(home), []byte(oldPlist(bin, state)), 0o644)
+	if changed, err := Refresh(home, data, state); err != nil || !changed {
+		t.Fatalf("an old agent: changed %v, %v", changed, err)
+	}
+	b, _ := os.ReadFile(AgentPath(home))
+	if Program(string(b)) != LauncherPath(data) || strings.Contains(string(b), "<string>check</string>") {
+		t.Errorf("the agent was not moved onto the launcher:\n%s", b)
+	}
+	if s, _ := os.ReadFile(LauncherPath(data)); !strings.Contains(string(s), "exec '"+bin+"' lid check") {
+		t.Errorf("the launcher runs the wrong binary:\n%s", s)
+	}
+	if changed, err := Refresh(home, data, state); err != nil || changed {
+		t.Errorf("a second refresh: changed %v, %v", changed, err)
+	}
+	// Another data dir's agent, such as the person's own seen from a test
+	// core's folders, is left as it is.
+	other := t.TempDir()
+	if changed, err := Refresh(home, other, state); err != nil || changed {
+		t.Errorf("another data dir's agent: changed %v, %v", changed, err)
+	}
+	if b2, _ := os.ReadFile(AgentPath(home)); string(b2) != string(b) {
+		t.Errorf("another data dir's refresh changed the agent")
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/genui"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -44,25 +45,35 @@ func (c *Core) explainCardArgs(a ipc.MaterializeArgs) (ipc.MaterializeArgs, erro
 	}
 	c.mu.Lock()
 	var row ipc.Session
+	var dir string
 	x := c.sessions[a.Session]
 	if x != nil {
-		row = x.wire()
+		row, dir = x.wire(), x.cwd
 	}
 	c.mu.Unlock()
 	if x == nil {
 		return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
 	a.ID = explainIDs + a.Session + "/" + explainKey(topic)
-	a.Context = explainContext(row, conv)
+	// What the project's own docs say of it first, then what was said in
+	// the session, in the room the docs leave.
+	docs := docsFor(dir, topic, explainDocs)
+	if docs != "" {
+		docs = docsHead + docs + "\n\n"
+	}
+	a.Context = docs + explainContext(row, conv, genui.MaxContext-len(docs))
 	a.Inputs = explainInputs(conv)
 	return a, nil
 }
+
+// docsHead heads what a project's docs say, in a card's context.
+const docsHead = "What the project's own docs say, the surest guide to its words and to how it works:\n"
 
 // explainContext is what a card that explains reads of its session: what
 // the person and the agent said, oldest first, the newest kept when they
 // run past what a model reads. Its steps are left out: a small model given
 // them draws what the session did, not what was asked.
-func explainContext(row ipc.Session, conv ipc.Conversation) string {
+func explainContext(row ipc.Session, conv ipc.Conversation, budget int) string {
 	said := conv
 	said.Items, said.Needs = nil, nil
 	for _, it := range conv.Items {
@@ -71,7 +82,7 @@ func explainContext(row ipc.Session, conv ipc.Conversation) string {
 		}
 	}
 	row.Detail = ""
-	return sessionContext(row, said)
+	return sessionContextIn(row, said, budget)
 }
 
 // explainInputs is the digest of what a card that explains reads from its
