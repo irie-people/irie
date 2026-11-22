@@ -9,6 +9,7 @@ import (
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/plugins"
 )
 
 // cardOp asks every Mac app open to show a card of a kind beside a session
@@ -20,8 +21,10 @@ import (
 // to open: absolute, clean, a regular file of at most ipc.CardFileMax
 // bytes, with a cursor line and column from 1.
 func (c *Core) cardOp(a ipc.CardArgs) error {
-	if !slices.Contains(ipc.CardKinds, a.Kind) {
-		return ipc.Errorf(ipc.CodeBadArgs, "No card is called %q: they are %s.", a.Kind, strings.Join(ipc.CardKinds, ", "))
+	// A card of a plugin this build leaves out is no card here, rather
+	// than one whose plugin `plugins on` can't turn on.
+	if kinds := plugins.CardKinds(); !slices.Contains(kinds, a.Kind) {
+		return ipc.Errorf(ipc.CodeBadArgs, "No card is called %q: they are %s.", a.Kind, strings.Join(kinds, ", "))
 	}
 	if err := checkCardFile(a); err != nil {
 		return err

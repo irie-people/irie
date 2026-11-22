@@ -170,6 +170,23 @@ func (p Plugin) Key() string { return p.key }
 // IsOn says whether the plugin is on in cfg.
 func (p Plugin) IsOn(cfg config.Config) bool { return p.on(cfg) }
 
+// CardKinds are the kinds of card this build shows (ipc.CardKinds), less
+// the cards of the plugins it leaves out (DESIGN §4.17): a copy built
+// without the mail plugin offers no mail card.
+func CardKinds() []string {
+	of := map[string]string{"mail": "mail", "markets": "markets", "vault": "obsidian"}
+	var out []string
+	for _, k := range ipc.CardKinds {
+		if p, ok := of[k]; ok {
+			if _, built := Find(p); !built {
+				continue
+			}
+		}
+		out = append(out, k)
+	}
+	return out
+}
+
 // Names are the plugins' names, for messages.
 func Names() []string {
 	var out []string

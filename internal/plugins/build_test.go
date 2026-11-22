@@ -59,10 +59,17 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	// documents are a person's own reading, and Jammin plays a person's own
 	// music accounts, so they go with the other personal plugins.
 	company := "-tags=noprivacy,nowriting,nomarkets,nomail,noterms,noextension,noyoink,nofounding,nojammin"
-	build = exec.Command(goBin, "build", "-o", filepath.Join(t.TempDir(), "irie"), company, "./cmd/irie")
+	copyBin := filepath.Join(t.TempDir(), "irie")
+	build = exec.Command(goBin, "build", "-o", copyBin, company, "./cmd/irie")
 	build.Dir = list.Dir
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build %s ./cmd/irie: %v\n%s", company, err, out)
+	}
+	// It offers no card of a plugin it leaves out: ctl card without a kind
+	// says which kinds there are, asking no core.
+	cards, _ := exec.Command(copyBin, "ctl", "card").CombinedOutput()
+	if !strings.Contains(string(cards), "terminal") || strings.Contains(string(cards), "mail") || strings.Contains(string(cards), "markets") {
+		t.Errorf("a company's copy offers these cards: %s", cards)
 	}
 	list = exec.Command(goBin, "list", "-deps", company, "./cmd/irie")
 	list.Dir = build.Dir
