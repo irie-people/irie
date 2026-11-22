@@ -477,6 +477,7 @@ enum Snapshot {
 
             try zenShots(store, into: dir)
             try reversedShots(store, into: dir)
+            try longTitleShots(store, into: dir)
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
@@ -527,7 +528,45 @@ enum Snapshot {
             FileHandle.standardError.write(Data("snapshot: \(error.localizedDescription)\n".utf8))
             exit(1)
         }
+        // A title bar that put a button in its overflow menu fails the run,
+        // once every picture is drawn: the button is out of sight.
+        if overflowed > 0 {
+            FileHandle.standardError.write(Data("snapshot: \(overflowed) picture\(overflowed == 1 ? "" : "s") put title bar items in the overflow menu, said above\n".utf8))
+            exit(1)
+        }
         exit(0)
+    }
+
+    /// How many pictures' title bars put an item in their overflow menu.
+    private static var overflowed = 0
+
+    /// The session's name over a subtitle that asks for more than the title
+    /// bar has, as the subtitle of a session waiting on you with a long ask
+    /// does (2026-11-22): in the narrowest window and the default one beside
+    /// the sidebar, and in the narrowest with the sidebar folded away, where
+    /// the window's own buttons share the session's part of the bar. The
+    /// subtitle trails off and every button stays in the bar
+    /// (SessionBarItems.titleWidth); one that doesn't fails the run.
+    private static func longTitleShots(_ store: Store, into dir: String) throws {
+        store.loadFixture(Fixture.sessions.map { s in
+            var s = s
+            if s.id == Fixture.selected {
+                s.state = "needs_you"
+                s.reason = "turn"
+                s.detail = Fixture.longAsk
+                s.tokens = Tokens(input: 1_200_000, output: 2_400_000, cacheRead: 67_000_000, cacheWrite: 400_000)
+            }
+            return s
+        }, selection: Fixture.selected)
+        Theme.use(Palette.standard.id)
+        for (base, width, folded) in [("titlebar-long-820", 820.0, false), ("titlebar-long-1100", 1100.0, false), ("titlebar-long-folded", 820.0, true)] {
+            UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false, NotesPanel.openKey: true, NotesPanel.draftKey: ""], forName: UserDefaults.argumentDomain)
+            let (rep, _) = window(ContentView().environment(store), dark: false, width: CGFloat(width), height: 720, folded: folded)
+            let name = base + ".png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print(name)
+        }
+        store.loadFixture(Fixture.sessions, selection: Fixture.selected)
     }
 
     /// Zen (Zen.swift): each layout at a laptop screen's size, as Fn+Z
@@ -740,7 +779,7 @@ enum Snapshot {
     /// brings any titled window ordered in onto a screen, however far off
     /// it was placed, so it is see-through, takes no clicks and goes to a
     /// desktop the user cannot see first (Desktops.swift): it never shows.
-    private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat, zen: Bool = false) -> (NSBitmapImageRep, CGFloat) {
+    private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat, zen: Bool = false, folded: Bool = false) -> (NSBitmapImageRep, CGFloat) {
         let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
@@ -752,16 +791,19 @@ enum Snapshot {
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
         w.orderFrontRegardless()
-        if zen {
+        if zen || folded {
             // As zen's full screen shows it: no window buttons, no toolbar,
             // and the sidebar folded away, once the window's first layout
             // has made them, which a busy machine takes a while over.
-            for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(b)?.isHidden = true }
+            // Folded alone keeps the buttons and the bar.
+            if zen {
+                for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(b)?.isHidden = true }
+            }
             let until = Date().addingTimeInterval(5)
             while (WindowPanes.window !== w || WindowPanes.sidebar == nil || w.toolbar == nil) && Date() < until {
                 RunLoop.main.run(until: Date().addingTimeInterval(0.1))
             }
-            w.toolbar?.isVisible = false
+            if zen { w.toolbar?.isVisible = false }
             WindowPanes.setSidebar(shown: false, width: nil)
         }
         RunLoop.main.run(until: Date().addingTimeInterval(0.8))
@@ -782,6 +824,7 @@ enum Snapshot {
         if !over.isEmpty, w.toolbar?.isVisible == true {
             let named = over.map { $0.label.isEmpty ? "\(Int($0.view?.fittingSize.width ?? 0)) pt wide" : $0.label }
             print("  title bar: \(over.count) item\(over.count == 1 ? "" : "s") in its overflow menu: \(named.joined(separator: ", "))")
+            overflowed += 1
         }
         let titlebar = w.frame.height - w.contentLayoutRect.height
         w.orderOut(nil)
@@ -844,6 +887,9 @@ enum Fixture {
     }
 
     static let selected = "s02docsguide"
+    /// A session's ask as long as one can be: the core cuts a detail at
+    /// about this length (2026-11-22's, which hid the title bar's buttons).
+    static let longAsk = "Your turn: In internal/raphael/alerts.go, write the body of asksLevel(asks, waited int, adhoc bool) string; look for TODO(human). Return OK (a quiet line among what’s well"
 
     /// The selected session's card of where it stands, being made again
     /// while the session works (docs/proposals/materialized-cards.md).
