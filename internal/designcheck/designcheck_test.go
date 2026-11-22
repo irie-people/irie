@@ -233,3 +233,90 @@ func TestShadowsAreNeutral(t *testing.T) {
 		}
 	}
 }
+
+// toolbarItem finds a toolbar item and the brace its content starts at.
+var toolbarItem = regexp.MustCompile(`ToolbarItem(?:Group)?\([^)]*\)\s*\{`)
+
+// anyWidth finds a frame that may take any width: a maxWidth that is, or
+// may be, .infinity.
+var anyWidth = regexp.MustCompile(`maxWidth:[^,)\n]*\.infinity`)
+
+// braced is src's block that opens with the brace at open, up to the brace
+// that closes it; braces in strings and comments don't count.
+func braced(src string, open int) string {
+	depth := 0
+	for i := open; i < len(src); i++ {
+		switch c := src[i]; {
+		case c == '/' && i+1 < len(src) && src[i+1] == '/':
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+		case c == '"':
+			for i++; i < len(src) && src[i] != '"' && src[i] != '\n'; i++ {
+				if src[i] == '\\' {
+					i++
+				}
+			}
+		case c == '{':
+			depth++
+		case c == '}':
+			depth--
+			if depth == 0 {
+				return src[open : i+1]
+			}
+		}
+	}
+	return src[open:]
+}
+
+// anyWidthToolbarItems finds the toolbar items in src whose content may
+// take any width, by the line each starts on.
+func anyWidthToolbarItems(src string) []int {
+	var lines []int
+	for _, m := range toolbarItem.FindAllStringIndex(src, -1) {
+		if anyWidth.MatchString(braced(src, m[1]-1)) {
+			lines = append(lines, strings.Count(src[:m[0]], "\n")+1)
+		}
+	}
+	return lines
+}
+
+// TestToolbarItemsKeepToAWidth: no toolbar item in the Mac app may take
+// any width (Roots' principles §4.10, a control never gives way to text).
+// macOS's toolbar judges an item by its full width, so a title whose frame
+// may take any width asks for the whole of a long subtitle, and every
+// button after it goes into the overflow menu: on 2026-11-22 a session's
+// long ask hid all four of the title bar's buttons. Text in the bar keeps
+// to the room its buttons leave (SessionBarItems.titleWidth) and trails
+// off. mac/snapshot.sh draws such a subtitle, and fails when a button goes.
+func TestToolbarItemsKeepToAWidth(t *testing.T) {
+	planted := `ToolbarItem(placement: reversed ? .automatic : .principal) {
+    VStack(alignment: .leading) {
+        Text(name) // a } in a comment
+        Text("a { in a string")
+    }
+    .frame(idealWidth: reversed ? 300 : nil, maxWidth: reversed ? 360 : .infinity, alignment: .leading)
+}
+ToolbarItem(placement: .principal) {
+    Text(name).frame(maxWidth: width, alignment: .leading)
+}
+ToolbarItem(placement: .primaryAction) { Button("Go") {} }
+let wide = Text("x").frame(maxWidth: .infinity)
+`
+	if got := anyWidthToolbarItems(planted); !slices.Equal(got, []int{1}) {
+		t.Fatalf("the check finds a toolbar item that may take any width on lines %v of the sample, want [1]", got)
+	}
+	files, _ := filepath.Glob(filepath.Join(root, "mac", "Sources", "Irie", "*.swift"))
+	if len(files) == 0 {
+		t.Skip("no mac/Sources/Irie")
+	}
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range anyWidthToolbarItems(string(src)) {
+			t.Errorf("%s:%d: a toolbar item that may take any width: a long title asks for all of it, and pushes the bar's buttons into its overflow menu; keep it to the room the buttons leave, as SessionBarItems.titleWidth does", filepath.Base(f), n)
+		}
+	}
+}

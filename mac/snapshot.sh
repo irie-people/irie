@@ -19,8 +19,15 @@ eval "$(../tools/brand.sh)"
 
 app="$PWD/build/snapshot/$BRAND_NAME Preview.app"
 ./build.sh --hot build/snapshot/obj "$app" >&2
-# Each drawing exits once its pictures are written, so each runs alone.
+# Each drawing exits once its pictures are written, so each runs alone. One
+# that fails, such as a title bar that put a button in its overflow menu,
+# fails the script once every drawing has run.
+failed=
 for mode in --snapshot --render-conversation --render-onboarding; do
-	"$app/Contents/MacOS/${BRAND_EXE}Preview" "$mode" "$dir" >&2
+	"$app/Contents/MacOS/${BRAND_EXE}Preview" "$mode" "$dir" >&2 || failed="$failed $mode"
 done
 ls "$dir"
+if [ -n "$failed" ]; then
+	echo "snapshot.sh: failed:$failed" >&2
+	exit 1
+fi
