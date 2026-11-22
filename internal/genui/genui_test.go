@@ -74,7 +74,7 @@ type fakeOllama struct {
 	reply string
 	asked struct {
 		Model    string
-		Format   string
+		Format   json.RawMessage
 		Think    *bool
 		Messages []struct{ Role, Content string }
 	}
@@ -105,8 +105,9 @@ func TestALocalModelMakesTheCard(t *testing.T) {
 	if _, err := Check(spec); err != nil || strings.ContainsAny(string(spec), "\n`") {
 		t.Errorf("the card made: %s, %v; want it compacted and whole", spec, err)
 	}
-	if f.asked.Format != "json" || f.asked.Model != "qwen3:4b" {
-		t.Errorf("asked %q for format %q; want json", f.asked.Model, f.asked.Format)
+	// Held to the card's schema, so a part cannot leave its type out.
+	if !strings.Contains(string(f.asked.Format), `"enum":["Text","List","Facts","Table","Progress","Divider"]`) || f.asked.Model != "qwen3:4b" {
+		t.Errorf("asked %q for format %s; want the summary card's schema", f.asked.Model, f.asked.Format)
 	}
 	user := f.asked.Messages[len(f.asked.Messages)-1].Content
 	if !strings.Contains(user, "Which store") || !strings.Contains(user, "5000 writes") {
@@ -206,6 +207,13 @@ func TestACardThatDoesNotDrawIsAskedForAgainWithWhatToFix(t *testing.T) {
 	if f.last[0].Content != explain {
 		t.Errorf("an explaining card was made with the instructions %q", f.last[0].Content[:40])
 	}
+	f.n = 0
+	if _, err := Make(context.Background(), m, KindExplain, "Explain this: gaps", "Person: what is a gap?"); err != nil {
+		t.Fatal(err)
+	}
+	if ask := f.last[1].Content; !strings.HasPrefix(ask, "The context, for background:") || !strings.HasSuffix(ask, "The card to make: Explain this: gaps") {
+		t.Errorf("asked %q; want the background first and what is asked last", ask)
+	}
 	fix := f.last[len(f.last)-1].Content
 	if !strings.Contains(fix, `part 1 is a "Chart"`) || f.last[len(f.last)-2].Role != "assistant" {
 		t.Errorf("the second ask: %q; want the first reply, then what to fix", fix)
@@ -296,5 +304,34 @@ func TestACardIsKeptAsTheCatalogReadsIt(t *testing.T) {
 	}
 	if want := `{"title":"Out of date","body":[{"type":"Text","text":"A clock shows the time."},{"type":"Diagram","links":[{"from":"Fresh","to":"Stale"}]}]}`; string(spec) != want {
 		t.Errorf("kept %s\nwant %s", spec, want)
+	}
+}
+
+func TestACardThatExplainsIsHeldToThePictures(t *testing.T) {
+	var sc struct {
+		Required   []string
+		Properties struct {
+			Body struct {
+				Items struct {
+					Required   []string
+					Properties map[string]json.RawMessage
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal(schema(KindExplain), &sc); err != nil {
+		t.Fatal(err)
+	}
+	part := sc.Properties.Body.Items
+	if strings.Join(sc.Required, ",") != "title,body" || strings.Join(part.Required, ",") != "type" {
+		t.Errorf("required: card %v, part %v", sc.Required, part.Required)
+	}
+	if got := string(part.Properties["type"]); !strings.Contains(got, `["Flow","Diagram","Compare","Code","Text","List","Facts"]`) {
+		t.Errorf("an explaining card's types: %s", got)
+	}
+	for _, field := range []string{"links", "sides", "language", "items"} {
+		if part.Properties[field] == nil {
+			t.Errorf("the schema has no %s", field)
+		}
 	}
 }

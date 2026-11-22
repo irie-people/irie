@@ -53,9 +53,25 @@ func (c *Core) explainCardArgs(a ipc.MaterializeArgs) (ipc.MaterializeArgs, erro
 		return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
 	a.ID = explainIDs + a.Session + "/" + explainKey(topic)
-	a.Context = sessionContext(row, conv)
+	a.Context = explainContext(row, conv)
 	a.Inputs = explainInputs(conv)
 	return a, nil
+}
+
+// explainContext is what a card that explains reads of its session: what
+// the person and the agent said, oldest first, the newest kept when they
+// run past what a model reads. Its steps are left out: a small model given
+// them draws what the session did, not what was asked.
+func explainContext(row ipc.Session, conv ipc.Conversation) string {
+	said := conv
+	said.Items, said.Needs = nil, nil
+	for _, it := range conv.Items {
+		if it.Kind == ipc.ItemUser || it.Kind == ipc.ItemText {
+			said.Items = append(said.Items, it)
+		}
+	}
+	row.Detail = ""
+	return sessionContext(row, said)
 }
 
 // explainInputs is the digest of what a card that explains reads from its

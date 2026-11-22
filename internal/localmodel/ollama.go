@@ -383,6 +383,11 @@ type ChatOptions struct {
 	// JSON asks for a reply that is one well-formed JSON object (format
 	// "json"); the messages must ask for JSON too, as Ollama's docs say.
 	JSON bool
+	// Schema, when set, holds the reply to this JSON schema (format: the
+	// schema, Ollama's structured outputs): the server decodes only what
+	// it allows, so a small model cannot leave out a field it requires.
+	// It goes in place of JSON.
+	Schema json.RawMessage
 }
 
 // Chat is POST /api/chat, streamed: part, when set, gets each piece of the
@@ -400,7 +405,10 @@ func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt 
 	if opt.Keep != "" {
 		body["keep_alive"] = opt.Keep
 	}
-	if opt.JSON {
+	switch {
+	case len(opt.Schema) > 0:
+		body["format"] = opt.Schema
+	case opt.JSON:
 		body["format"] = "json"
 	}
 	resp, err := o.do(ctx, http.MethodPost, "/api/chat", body)

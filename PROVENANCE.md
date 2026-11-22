@@ -914,6 +914,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-22 | Office of the United Nations High Commissioner for Human Rights, Convention on the Rights of Persons with Disabilities (web page, the Wayback Machine's copy), https://www.ohchr.org/en/instruments-mechanisms/instruments/convention-rights-persons-disabilities | The founding documents plugin: checking the Disabilities Convention's words and marks against OHCHR's web page |
 | 2026-11-22 | Office of the United Nations High Commissioner for Human Rights, Convention on the Rights of Persons with Disabilities, the Secretary-General's certified true copy (PDF), https://www.ohchr.org/sites/default/files/Ch_IV_15.pdf | The founding documents plugin: checking the Disabilities Convention against the certified true copy, its English pages rendered and read by text recognition |
 | 2026-11-22 | Organization of American States, General Secretariat, Terms and Conditions, https://www.oas.org/en/terms_conditions.asp, and the Inter-American Commission on Human Rights' disclaimer, https://www.cidh.oas.org/disclaimer.htm | The founding documents plugin: why the American Declaration of the Rights and Duties of Man is held out (docs/proposals/founding-documents.md) |
+| 2026-11-22 | https://docs.ollama.com/capabilities/structured-outputs | Ollama's structured outputs: a JSON schema as /api/chat's format holds the reply to it (localmodel.ChatOptions.Schema), which genui uses so a small model's card parts always carry a type from the catalog |
 
 ## Third-party code
 

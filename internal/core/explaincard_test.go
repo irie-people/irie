@@ -126,3 +126,22 @@ func TestAnExplanationIsBehindWhenTheSessionSaysMore(t *testing.T) {
 		t.Errorf("an empty conversation gives %q", got)
 	}
 }
+
+func TestAnExplanationReadsWhatWasSaidNotTheSteps(t *testing.T) {
+	conv := ipc.Conversation{Items: []ipc.Item{
+		{ID: "u1", Kind: ipc.ItemUser, Text: "how is a card kept?"},
+		{ID: "x1", Kind: ipc.ItemTool, Phrase: "Searched for Reverse", Detail: "Looks.swift"},
+		{ID: "t1", Kind: ipc.ItemText, Text: "In cards.json, by its name."},
+	}, Needs: &ipc.Item{Text: "Allow git push?"}}
+	got := explainContext(ipc.Session{Name: "Teach tile", State: "working", Detail: "Running the tests"}, conv)
+	for _, want := range []string{"Session: Teach tile", "Person: how is a card kept?", "Agent: In cards.json, by its name."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the context lacks %q:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"Searched for Reverse", "Running the tests", "Allow git push"} {
+		if strings.Contains(got, not) {
+			t.Errorf("the context has %q, a step or a wait, which a small model would draw:\n%s", not, got)
+		}
+	}
+}
