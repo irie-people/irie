@@ -87,7 +87,7 @@ type FoundingDoc struct {
 	Title  string          `json:"title"`  // The Declaration of Independence
 	Short  string          `json:"short"`  // its name in the tab's choice: Declaration
 	When   string          `json:"when"`   // the date it is of, as RFC 3339 writes one, or a year
-	Kind   string          `json:"kind"`   // charter, statute, declaration, articles, ordinance, constitution, amendments, proclamation, address or covenant
+	Kind   string          `json:"kind"`   // charter, statute, declaration, articles, ordinance, constitution, amendments, proclamation, address, covenant or convention
 	About  string          `json:"about"`  // where its text comes from, in a sentence
 	SHA512 string          `json:"sha512"` // of its file's bytes, in hex
 	Blocks []FoundingBlock `json:"blocks"`
