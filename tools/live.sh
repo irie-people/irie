@@ -506,7 +506,7 @@ if [ -z "$gonew" ]; then
 elif [ -n "$up" ]; then
 	say "$what is live; every agent kept running"
 else
-	say "$what is installed; Irie is not running, and $bin starts it"
+	say "$what is installed; $BRAND_NAME is not running, and $bin starts it"
 fi
 if [ -n "$pids" ]; then
 	say "$BRAND_NAME.app is rebuilt and relaunched"
