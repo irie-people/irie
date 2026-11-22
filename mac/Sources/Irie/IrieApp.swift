@@ -63,7 +63,7 @@ struct IrieApp: App {
         .defaultSize(width: 1200, height: 760)
         .windowToolbarStyle(.unifiedCompact(showsTitle: Self.showsTitle))
         .commands {
-            LearnCommands(store: store)
+            LearnCommands(store: store, menu: store.menu)
             IrieCommands(store: store, menu: store.menu)
             PluginCommands(store: store, menu: store.menu)
             MarketsCommands(menu: store.menu)
@@ -331,6 +331,9 @@ struct ContentView: View {
         // reads left to right again inside. Zen folds the sidebar away and
         // lays out its own side, so the split view keeps to the layout's.
         .environment(\.layoutDirection, store.reversed ? .rightToLeft : .leftToRight)
+        // The Teach tile, a picture of what you want explained, wherever
+        // it was put (TeachTile.swift).
+        .overlay { TeachTileView(tile: store.teach) }
         // The look-ahead at keys, over everything, like an alert
         // (KeyPeek.swift).
         .overlay { KeyPeekView(peek: KeyPeek.shared) }

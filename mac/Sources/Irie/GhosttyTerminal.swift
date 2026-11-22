@@ -283,7 +283,7 @@ final class GhosttySurfaceBox {
 }
 
 /// One terminal: a Ghostty surface running a tmux client of `target`.
-final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
+final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen, TerminalExplaining {
     struct Attach: Equatable {
         var tmux: String
         var socket: String
@@ -517,16 +517,27 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
     /// on. With no selection, or only blanks, the pasteboard keeps what it
     /// has.
     private func copySelection(asked: Bool) {
-        guard asked || TerminalSelection.copies, let surface, ghostty_surface_has_selection(surface) else { return }
+        guard asked || TerminalSelection.copies, let text = selectedText(), TerminalSelection.worthCopying(text) else { return }
+        _ = binding("copy_to_clipboard")
+        TerminalSelection.copied(text)
+    }
+
+    /// The selection's text, as Ghostty reads it; nil with none.
+    private func selectedText() -> String? {
+        guard let surface, ghostty_surface_has_selection(surface) else { return nil }
         var selected = ghostty_text_s()
-        guard ghostty_surface_read_selection(surface, &selected) else { return }
+        guard ghostty_surface_read_selection(surface, &selected) else { return nil }
         let text = selected.text.map {
             String(decoding: UnsafeRawBufferPointer(start: $0, count: Int(selected.text_len)), as: UTF8.self)
         } ?? ""
         ghostty_surface_free_text(surface, &selected)
-        guard TerminalSelection.worthCopying(text) else { return }
-        _ = binding("copy_to_clipboard")
-        TerminalSelection.copied(text)
+        return text
+    }
+
+    /// Explain in the terminal's menu: the selection, explained with a
+    /// picture in the Teach tile.
+    @objc func explainSelection(_ sender: Any?) {
+        if let text = selectedText() { TerminalSelection.explain(text) }
     }
 
     @objc func paste(_ sender: Any?) {

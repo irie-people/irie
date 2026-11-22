@@ -63,9 +63,71 @@ func Text(c Card, width int) string {
 			b.WriteString(cut(line, width) + "\n")
 		case PartDivider:
 			b.WriteString(strings.Repeat("─", width) + "\n")
+		case PartFlow:
+			b.WriteString(flow(p.Items, width))
+		case PartDiagram:
+			for _, l := range p.Links {
+				line := plain(l.From) + " → " + plain(l.To)
+				if l.Label != "" {
+					line += "  (" + plain(l.Label) + ")"
+				}
+				b.WriteString(cut(line, width) + "\n")
+			}
+		case PartCompare:
+			b.WriteString(compare(p.Sides, width))
+		case PartCode:
+			if p.Language != "" {
+				b.WriteString(cut(plain(p.Language)+":", width) + "\n")
+			}
+			for _, l := range strings.Split(strings.TrimRight(p.Text, "\n"), "\n") {
+				b.WriteString(cut("    "+plain(l), width) + "\n")
+			}
 		}
 	}
 	return b.String()
+}
+
+// flow draws a Flow's steps one under another, numbered, with an arrow
+// down between each two.
+func flow(steps []Item, width int) string {
+	var b strings.Builder
+	for i, st := range steps {
+		if i > 0 {
+			b.WriteString("   ↓\n")
+		}
+		line := strconv.Itoa(i+1) + ". " + plain(st.Title)
+		if st.Detail != "" {
+			line += " — " + plain(st.Detail)
+		}
+		for j, l := range wrap(line, width-3) {
+			if j > 0 {
+				l = "   " + l
+			}
+			b.WriteString(l + "\n")
+		}
+	}
+	return b.String()
+}
+
+// compare draws a Compare's sides side by side, as a table whose columns
+// are the sides and whose rows are their points, in order.
+func compare(sides []Side, width int) string {
+	columns := make([]Cell, len(sides))
+	rows := 0
+	for i, sd := range sides {
+		columns[i] = Cell(sd.Title)
+		rows = max(rows, len(sd.Points))
+	}
+	cells := make([][]Cell, rows)
+	for r := range cells {
+		cells[r] = make([]Cell, len(sides))
+		for i, sd := range sides {
+			if r < len(sd.Points) {
+				cells[r][i] = "• " + sd.Points[r]
+			}
+		}
+	}
+	return table(columns, cells, width)
 }
 
 // bar draws value of total as a bar width cells wide: █ for what is done

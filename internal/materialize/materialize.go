@@ -34,6 +34,9 @@ type Recipe struct {
 	Prompt  string // what the model is to make
 	Profile string // the profile that makes it; "" for the router's pick
 	Catalog int    // the version of the catalog the card is drawn from
+	// Kind is the kind of card, which says how it is made, such as
+	// genui.KindExplain; "" for a summary of its context.
+	Kind string
 
 	// Inputs is a digest of what the card reads, such as a session's turn
 	// count: a card made from other inputs is behind, not wrong. "" when it
@@ -48,12 +51,17 @@ type Recipe struct {
 	Context string
 }
 
-// Hash versions what makes the card: its prompt, its profile and its
-// catalog. A card made from another hash answers another question. Inputs,
-// Every and Gap stay out of it: a change to them can put a card out of
-// date, never make it wrong.
+// Hash versions what makes the card: its prompt, its profile, its catalog
+// and its kind. A card made from another hash answers another question.
+// Inputs, Every and Gap stay out of it: a change to them can put a card out
+// of date, never make it wrong. A recipe of no kind hashes as one did
+// before there were kinds.
 func (r Recipe) Hash() string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%q %q %d", r.Prompt, r.Profile, r.Catalog))
+	b := fmt.Appendf(nil, "%q %q %d", r.Prompt, r.Profile, r.Catalog)
+	if r.Kind != "" {
+		b = fmt.Appendf(b, " %q", r.Kind)
+	}
+	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -235,6 +243,41 @@ func (s *Store) Forget(id string) error {
 		return nil
 	}
 	delete(s.cards, id)
+	return s.save()
+}
+
+// Trim keeps no more than keep of the cards whose names start with prefix:
+// the newest, by when they were last made or tried. A card being made is
+// kept, since it is the newest. It bounds a kind of card asked for by
+// many names, such as the questions of the Teach tile, which no sweep
+// forgets yet.
+func (s *Store) Trim(prefix string, keep int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var some []*Card
+	for id, c := range s.cards {
+		if strings.HasPrefix(id, prefix) && c.Running.IsZero() {
+			some = append(some, c)
+		}
+	}
+	if len(some) <= keep {
+		return nil
+	}
+	last := func(c *Card) time.Time {
+		if c.Failed.After(c.Made) {
+			return c.Failed
+		}
+		return c.Made
+	}
+	slices.SortFunc(some, func(a, b *Card) int {
+		if n := last(b).Compare(last(a)); n != 0 {
+			return n
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	for _, c := range some[max(keep, 0):] {
+		delete(s.cards, c.ID)
+	}
 	return s.save()
 }
 

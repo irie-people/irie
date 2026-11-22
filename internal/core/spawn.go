@@ -485,7 +485,7 @@ func (c *Core) launch(j job) (*session, error) {
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
 		Arch:  c.archFor(profile, h.ID()),
-		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual,
+		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual, Tile: c.cfg().Learn.Pictures == config.PicturesTile,
 		Unattended: j.unattended,
 	}
 	// Irie's tips go under the agent's spinner, where its harness has one

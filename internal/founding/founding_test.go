@@ -693,6 +693,67 @@ func TestTheDisabilitiesAct(t *testing.T) {
 	}
 }
 
+// TestTheCharterOfTheUnitedNations: the UN's text as amended: the
+// preamble, nineteen chapters with Articles 1 to 111 in order under them,
+// the chapters' sub-headings, and the UN's note on the amendments as notes.
+func TestTheCharterOfTheUnitedNations(t *testing.T) {
+	c := docs(t)["un-charter"]
+	if c.Title != "The Charter of the United Nations" || !strings.Contains(c.About, "26 June 1945") || !strings.Contains(c.About, "Statute of the International Court of Justice") {
+		t.Errorf("the Charter: %q, %q", c.Title, c.About)
+	}
+	chapters, subs, notes := 0, 0, 0
+	var articles []string
+	for _, b := range c.Blocks {
+		switch {
+		case b.Kind == "h2" && strings.HasPrefix(b.Text, "Chapter "):
+			chapters++
+		case b.Kind == "h3" && strings.HasPrefix(b.Text, "Article "):
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case b.Kind == "h3":
+			subs++
+		case b.Kind == "note":
+			notes++
+		}
+	}
+	var want []string
+	for i := 1; i <= 111; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if chapters != 19 || !slices.Equal(articles, want) || subs != 19 || notes != 4 {
+		t.Errorf("the Charter: %d chapters, %d articles, %d sub-headings, %d notes", chapters, len(articles), subs, notes)
+	}
+}
+
+// TestTheChildConvention: the UN's text: its preamble of twelve paragraphs,
+// then Parts I to III with Articles 1 to 54 in order under them.
+func TestTheChildConvention(t *testing.T) {
+	c := docs(t)["crc"]
+	if c.Title != "The Convention on the Rights of the Child" || !strings.Contains(c.About, "44/25") || !strings.Contains(c.About, "2 September 1990") {
+		t.Errorf("the Child Convention: %q, %q", c.Title, c.About)
+	}
+	var parts, articles []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, b.Text)
+		case "h3":
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case "text":
+			if len(parts) == 1 {
+				preamble++
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 54; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if strings.Join(parts, "|") != "Preamble|Part I|Part II|Part III" || !slices.Equal(articles, want) || preamble != 12 {
+		t.Errorf("the Child Convention: parts %v, %d articles, %d preamble paragraphs", parts, len(articles), preamble)
+	}
+}
+
 // TestTheRightToInformationAct: India's Act, as India Code sets it out:
 // its number and date, its long title, its six chapters and two schedules
 // in order, its 31 sections in order, and India Code's footnotes as notes.
@@ -895,6 +956,16 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		"icescr": {"conditions of work, which ensure", "legal guardians, to choose", "the right of everyone to education"},
 		"cerd":   {"the rights to participate", "shall be those nominees", "or in conventions"},
 		"cedaw":  {"connexion", "security, relaxation", "self-employment", "the equal right of men and women"},
+		// The UN's web text's own readings: as amended, in its spelling, with its slip "Vll".
+		"un-charter": {"The Security Council shall consist of fifteen Members", "under Chapter Vll.", "neighbours", "1 January 1942"},
+		// OHCHR's text's readings where the Treaty Series print differs.
+		"crc": {"with a view to re-establishing speedily", "breastfeeding", "the spirit of international cooperation"},
+		// Where OHCHR's text and the Treaty Series' print differ, the file follows OHCHR; and the words OHCHR's web page lacks.
+		"refugees": {"practise their religion", "For the purposes of this Convention", "any other Contracting States", "a final judgement", "restrictions on home work"},
+		// Where the UN's PDF and OHCHR's web page differ, the file follows the PDF.
+		"crpd": {"non spoken languages", "Liberty and security of person", "lifelong learning", "privacy, family, home or correspondence", "IN WITNESS THEREOF"},
+		// Thorpe's print, where Avalon's transcription slipped ("Anno Domini; 1620").
+		"mayflower": {"civil Body Politick", "Anno Domini, 1620.", "Defender of the Faith, &c.", "at Cape-Cod the eleventh of November", "the fifty-fourth"},
 		// The Court's print's own slips, kept.
 		"echr": {"10th December 1948", "under paragraph1.", "the provisions of Article 1 to 6 of this Protocol", "the licensing of broadcasting, television or cinema enterprises"},
 		// India Code's own readings, where the 2005 Gazette differs.
@@ -996,6 +1067,11 @@ func TestFindAnySpelling(t *testing.T) {
 		"lawful judgment of his peers":                         "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
 		"securing the liberty of the subject":                  "habeas: ",
 		"all men and women are created equal":                  "seneca: ",
+		"reaffirm faith in fundamental human rights":           "un-charter: Preamble › WE THE PEOPLES OF THE UNITED NATIONS DETERMINED",
+		"rights of the child":                                  "crc: Part II › Article 43",
+		"well-founded fear of being persecuted":                "refugees: Chapter I: General Provisions › Article 1. - Definition of the term \"refugee\"",
+		"universal design":                                     "crpd: Article 2 – Definitions",
+		"covenant and combine ourselves together":              "mayflower: ",
 		"qualified individual with a disability":               "ada: Title I. Employment",
 		"without interference by public authority":             "echr: Section I. Rights and freedoms › Article 10 – Freedom of expression",
 		"discrimination against women":                         "cedaw: Part I › Article 1",
@@ -1028,5 +1104,94 @@ func TestFindAnySpelling(t *testing.T) {
 	// equip"), and nowhere else, where "Arms" and "Armies" are.
 	if got := find("arm"); len(got) != 1 || !got["articles: Article IX."] {
 		t.Errorf(`"arm" found %v: whole words only`, got)
+	}
+}
+
+func TestTheRefugeeConvention(t *testing.T) {
+	c := docs(t)["refugees"]
+	if c.Title != "The Convention relating to the Status of Refugees" || !strings.Contains(c.About, "28 July 1951") || !strings.Contains(c.About, "22 April 1954") {
+		t.Errorf("the Refugee Convention: %q, %q", c.Title, c.About)
+	}
+	var chapters, articles []string
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			chapters = append(chapters, b.Text)
+		case "h3":
+			articles = append(articles, b.Text)
+		}
+	}
+	want := []string{"Preamble", "Chapter I: General Provisions", "Chapter II: Juridical Status", "Chapter III: Gainful Employment", "Chapter IV: Welfare", "Chapter V: Administrative Measures", "Chapter VI: Executory and Transitory Provisions", "Chapter VII: Final Clauses"}
+	if !slices.Equal(chapters, want) {
+		t.Errorf("chapters: %q", chapters)
+	}
+	if len(articles) != 46 || articles[0] != `Article 1. - Definition of the term "refugee"` || articles[32] != `Article 33. - Prohibition of expulsion or return ("refoulement")` || articles[45] != "Article 46. - Notifications by the Secretary-General of the United Nations" {
+		t.Errorf("%d articles: %q", len(articles), articles)
+	}
+	for i, a := range articles {
+		if !strings.HasPrefix(a, "Article "+strconv.Itoa(i+1)+". - ") {
+			t.Errorf("article %d: %q", i+1, a)
+		}
+	}
+	if n := count(c, "text", func(s string) bool { return strings.HasPrefix(s, "Considering ") }); n != 4 {
+		t.Errorf("%d paragraphs of considering, want 4", n)
+	}
+	if n := count(c, "text", func(s string) bool {
+		return strings.HasPrefix(s, "Done at Geneva, this twenty-eighth day of July, one thousand nine hundred and fifty-one")
+	}); n != 1 {
+		t.Errorf("the testimonium: %d", n)
+	}
+}
+
+func TestTheDisabilitiesConvention(t *testing.T) {
+	c := docs(t)["crpd"]
+	if c.Title != "The Convention on the Rights of Persons with Disabilities" || !strings.Contains(c.About, "61/106") || !strings.Contains(c.About, "3 May 2008") {
+		t.Errorf("the Disabilities Convention: %q, %q", c.Title, c.About)
+	}
+	var heads []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			heads = append(heads, b.Text)
+		case "text":
+			if len(heads) == 1 && len(b.Text) > 3 && b.Text[0] == '(' && b.Text[2] == ')' {
+				preamble++
+			}
+		}
+	}
+	if len(heads) != 51 || heads[0] != "Preamble" || heads[1] != "Article 1 – Purpose" || heads[15] != "Article 15 – Freedom from torture or cruel, inhuman or degrading treatment or punishment" || heads[50] != "Article 50 – Authentic texts" {
+		t.Errorf("%d headings: %q", len(heads), heads)
+	}
+	for i, h := range heads[1:] {
+		if !strings.HasPrefix(h, "Article "+strconv.Itoa(i+1)+" – ") {
+			t.Errorf("article %d: %q", i+1, h)
+		}
+	}
+	if preamble != 25 {
+		t.Errorf("%d lettered paragraphs in the preamble, want 25, (a) to (y)", preamble)
+	}
+	if last := c.Blocks[len(c.Blocks)-1]; last.Kind != "text" || !strings.HasPrefix(last.Text, "IN WITNESS THEREOF the undersigned plenipotentiaries") {
+		t.Errorf("the last block: %q %q", last.Kind, last.Text)
+	}
+}
+
+func TestTheMayflowerCompact(t *testing.T) {
+	c := docs(t)["mayflower"]
+	if c.Title != "The Mayflower Compact" || !strings.Contains(c.About, "Thorpe") || !strings.Contains(c.About, "November 11, 1620") {
+		t.Errorf("the Mayflower Compact: %q, %q", c.Title, c.About)
+	}
+	texts := count(c, "text", func(string) bool { return true })
+	compact := count(c, "text", func(s string) bool {
+		return strings.HasPrefix(s, "IN THE NAME OF GOD, AMEN. We, whose names are underwritten") && strings.Contains(s, "covenant and combine ourselves together into a civil Body Politick") && strings.HasSuffix(s, "Anno Domini, 1620.")
+	})
+	if texts != 1 || compact != 1 {
+		t.Errorf("%d paragraphs, %d the Compact", texts, compact)
+	}
+	if n := items(c); n != 41 {
+		t.Errorf("%d signers, want 41", n)
+	}
+	if n := count(c, "h2", func(s string) bool { return s == "The signers" }); n != 1 {
+		t.Errorf("headings: %d", n)
 	}
 }

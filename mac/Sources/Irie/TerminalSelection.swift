@@ -63,6 +63,11 @@ enum TerminalSelection {
         }
         let menu = NSMenu()
         menu.autoenablesItems = false
+        // What is selected, explained with a picture in the Teach tile.
+        if target is TerminalExplaining {
+            menu.addItem(withTitle: "Explain", action: #selector(TerminalExplaining.explainSelection(_:)), keyEquivalent: "").isEnabled = canCopy
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "").isEnabled = canCopy
         menu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "")
         menu.addItem(.separator())
@@ -70,6 +75,18 @@ enum TerminalSelection {
         for item in menu.items where !item.isSeparatorItem { item.target = target }
         return menu
     }
+
+    /// Asks the Teach tile to explain text, a terminal's selection
+    /// (TeachTile.swift).
+    static func explain(_ text: String) {
+        guard worthCopying(text) else { return }
+        NotificationCenter.default.post(name: .irieExplain, object: nil, userInfo: ["text": text])
+    }
+}
+
+/// A terminal whose selection the Teach tile can explain.
+@objc protocol TerminalExplaining {
+    func explainSelection(_ sender: Any?)
 }
 
 extension Notification.Name {

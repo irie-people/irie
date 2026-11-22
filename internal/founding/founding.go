@@ -45,6 +45,7 @@ type Document struct {
 var Documents = []Document{
 	{ID: "magna-carta", File: "magna-carta.md", Short: "Magna Carta", When: "1215-06-15", Kind: "charter"},
 	{ID: "magna-carta-1297", File: "magna-carta-1297.md", Short: "Magna Carta 1297", When: "1297-10-12", Kind: "charter"},
+	{ID: "mayflower", File: "mayflower-compact.md", Short: "Mayflower Compact", When: "1620-11-11", Kind: "covenant"},
 	{ID: "petition", File: "petition-of-right.md", Short: "Petition of Right", When: "1628-06-07", Kind: "statute"},
 	{ID: "body-of-liberties", File: "body-of-liberties.md", Short: "Body of Liberties", When: "1641-12-10", Kind: "statute"},
 	{ID: "habeas", File: "habeas-corpus-act.md", Short: "Habeas Corpus Act", When: "1679-05-27", Kind: "statute"},
@@ -63,8 +64,10 @@ var Documents = []Document{
 	{ID: "seneca", File: "declaration-of-sentiments.md", Short: "Declaration of Sentiments", When: "1848-07-20", Kind: "declaration"},
 	{ID: "emancipation", File: "emancipation-proclamation.md", Short: "Emancipation Proclamation", When: "1863-01-01", Kind: "proclamation"},
 	{ID: "gettysburg", File: "gettysburg-address.md", Short: "Gettysburg Address", When: "1863-11-19", Kind: "address"},
+	{ID: "un-charter", File: "charter-of-the-united-nations.md", Short: "UN Charter", When: "1945-06-26", Kind: "charter"},
 	{ID: "udhr", File: "universal-declaration-of-human-rights.md", Short: "Universal Declaration", When: "1948-12-10", Kind: "declaration"},
 	{ID: "echr", File: "european-convention-on-human-rights.md", Short: "European Convention", When: "1950-11-04", Kind: "convention"},
+	{ID: "refugees", File: "convention-relating-to-the-status-of-refugees.md", Short: "Refugee Convention", When: "1951-07-28", Kind: "convention"},
 	{ID: "civil-rights", File: "civil-rights-act.md", Short: "Civil Rights Act", When: "1964-07-02", Kind: "statute"},
 	{ID: "voting-rights", File: "voting-rights-act.md", Short: "Voting Rights Act", When: "1965-08-06", Kind: "statute"},
 	{ID: "cerd", File: "convention-on-racial-discrimination.md", Short: "Racial Discrimination Convention", When: "1965-12-21", Kind: "convention"},
@@ -73,9 +76,11 @@ var Documents = []Document{
 	{ID: "icescr", File: "international-covenant-on-economic-social-and-cultural-rights.md", Short: "Economic and Social Rights Covenant", When: "1966-12-16", Kind: "covenant"},
 	{ID: "privacy", File: "privacy-act.md", Short: "Privacy Act", When: "1974-12-31", Kind: "statute"},
 	{ID: "cedaw", File: "convention-on-discrimination-against-women.md", Short: "Women's Rights Convention", When: "1979-12-18", Kind: "convention"},
+	{ID: "crc", File: "convention-on-the-rights-of-the-child.md", Short: "Rights of the Child", When: "1989-11-20", Kind: "convention"},
 	{ID: "ada", File: "americans-with-disabilities-act.md", Short: "Disabilities Act", When: "1990-07-26", Kind: "statute"},
 	{ID: "uk-foia", File: "freedom-of-information-act-2000.md", Short: "UK Freedom of Information Act", When: "2000-11-30", Kind: "statute"},
 	{ID: "rti", File: "right-to-information-act.md", Short: "Right to Information Act", When: "2005-06-15", Kind: "statute"},
+	{ID: "crpd", File: "convention-on-the-rights-of-persons-with-disabilities.md", Short: "Disabilities Convention", When: "2006-12-13", Kind: "convention"},
 }
 
 // ByID is the document named, if there is one.

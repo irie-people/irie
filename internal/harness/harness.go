@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/learn"
@@ -116,6 +117,11 @@ type Spawn struct {
 	// Visual asks an agent in a tutor mode to draw a diagram where a picture
 	// helps (learn.visual).
 	Visual bool
+	// Tile leaves the pictures to the Teach tile, which draws them on a
+	// local model (learn.pictures = "tile"): the agent is told to draw
+	// none, which saves the tokens they cost, and to explain in words that
+	// a picture can be made from.
+	Tile bool
 	// Tips are Irie's tips, for a harness that can show them, as Claude
 	// Code does under its spinner (learn.agent_tips).
 	Tips []learn.Tip
@@ -169,14 +175,34 @@ func TutorNote(mode string) string {
 // together teach better than words alone (docs/proposals/learning.md §2).
 const VisualNote = "When a picture would help the user follow an explanation, such as how parts of the code connect, what happens in what order, or how branches and commits relate, draw it as a small Mermaid diagram in a ```mermaid code block, and go on explaining in words beside it."
 
-// WithTutor puts mode's note before task, with VisualNote when visual.
-func WithTutor(mode string, visual bool, task string) string {
+// TileNote tells an agent in a tutor mode that Irie draws its pictures. A
+// diagram in a reply costs output tokens; the Teach tile makes one on a
+// local model from the session's conversation, for what the person asks.
+// Words that name the parts and their order are what it is made from.
+const TileNote = brand.Name + " draws pictures for the user on a local model, in its Teach tile, from this conversation, when they ask to have something explained. So draw no diagrams yourself, in Mermaid or in text: explain in words, and name the parts, how they connect and in what order, plainly, since a picture is made from those words."
+
+// PictureNote is what an agent in the tutor mode tutor is told of pictures:
+// to draw them (VisualNote), to leave them to the Teach tile (TileNote),
+// or nothing, outside a tutor mode or with learn.visual off.
+func PictureNote(tutor string, visual, tile bool) string {
+	switch {
+	case tutor == "" || tutor == config.TutorOff || !visual:
+		return ""
+	case tile:
+		return TileNote
+	}
+	return VisualNote
+}
+
+// WithTutor puts mode's note before task, with pictures, the note on
+// pictures (PictureNote), after it.
+func WithTutor(mode, pictures, task string) string {
 	n := TutorNote(mode)
 	if n == "" {
 		return task
 	}
-	if visual {
-		n += " " + VisualNote
+	if pictures != "" {
+		n += " " + pictures
 	}
 	return n + "\n\n" + task
 }

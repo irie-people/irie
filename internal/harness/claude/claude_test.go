@@ -543,6 +543,13 @@ func TestVisualAsksForDiagramsInTutorModeOnly(t *testing.T) {
 	if appends(s) {
 		t.Error("a CLI without the flag gets it")
 	}
+	// With the Teach tile drawing them, it is told to draw none instead.
+	s.Probe.Flags["--append-system-prompt"] = true
+	s.Tile = true
+	argv, _, _ := launchSpawn(t, defaultProfile(), s)
+	if i := slices.Index(argv, "--append-system-prompt"); i < 0 || i+1 >= len(argv) || argv[i+1] != harness.TileNote {
+		t.Errorf("the tile draws the pictures, yet the note is not TileNote: %q", argv)
+	}
 }
 
 func TestWhatOfMikaelASessionTakes(t *testing.T) {

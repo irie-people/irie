@@ -119,7 +119,10 @@ var Links = []Link{
 		Why: "Ten months after the Proclamation declared that persons held as slaves “are, and henceforward shall be free”, the Address resolves that the nation “shall have a new birth of freedom”."},
 	{From: "gettysburg", To: "declaration", How: Follows,
 		Why: "“Four score and seven years ago” counts from the Declaration, and the Address holds the nation “dedicated to the proposition that all men are created equal”, the Declaration's “all men are created equal”, as what the war would decide."},
-	// The Universal Declaration of Human Rights, 1948.
+	// The Universal Declaration of Human Rights, 1948, which the Charter of
+	// the United Nations of 1945 called for.
+	{From: "udhr", To: "un-charter", How: Follows,
+		Why: "The Declaration's preamble rests on the Charter, whose peoples “have in the Charter reaffirmed their faith in fundamental human rights, in the dignity and worth of the human person and in the equal rights of men and women”, the Charter's own “to reaffirm faith in fundamental human rights, in the dignity and worth of the human person, in the equal rights of men and women and of nations large and small”, and sets out the rights the Charter named but did not list."},
 	{From: "udhr", To: "declaration", How: DrewOn,
 		Why: "Article 1's “All human beings are born free and equal in dignity and rights” and the Preamble's “equal and inalienable rights” carry the Declaration's “all men are created equal” and “unalienable Rights” to everyone."},
 	{From: "udhr", To: "french", How: DrewOn,
@@ -166,6 +169,9 @@ var Links = []Link{
 		Why: "An Act of Congress under Article I, set out as 5 U.S.C. § 552a, on the records agencies keep about individuals."},
 	{From: "privacy", To: "udhr", How: Follows,
 		Why: "Article 12 holds that “No one shall be subjected to arbitrary interference with his privacy”; the Act gives that right form for the records the government keeps on a person."},
+	// The Convention on the Rights of the Child, November 1989.
+	{From: "crc", To: "udhr", How: DrewOn,
+		Why: "The Convention recalls that “in the Universal Declaration of Human Rights, the United Nations has proclaimed that childhood is entitled to special care and assistance”, the Declaration's “Motherhood and childhood are entitled to special care and assistance”, and sets out what that care is in fifty-four articles."},
 	// The Americans with Disabilities Act of 1990.
 	{From: "ada", To: "civil-rights", How: Follows,
 		Why: "Title I takes Title VII's form for disability: where the Act of 1964 holds that “It shall be an unlawful employment practice for an employer” to discriminate by race, colour, religion, sex or national origin, the Act of 1990 holds that “No covered entity shall discriminate against a qualified individual with a disability because of the disability of such individual in regard to job application procedures, the hiring, advancement, or discharge of employees”."},
@@ -189,4 +195,26 @@ var Links = []Link{
 		Why: "Section 3, “all citizens shall have the right to information”, does for India what FOIA did for the United States in 1966, where an agency's records go “to any person”; both set out what may be withheld and who hears an appeal."},
 	{From: "privacy", To: "foia", How: Beside,
 		Why: "The Privacy Act is § 552a, the section after the Freedom of Information Act's § 552 in the Code, and lets a record out without the person's consent only where, among its exceptions, disclosure is “required under section 552 of this title”."},
+	{From: "massachusetts", To: "mayflower", How: Follows,
+		Why: "Massachusetts's preamble, “it is a social compact, by which the whole people covenants with each citizen, and each citizen with the whole people”, says in 1780 what the settlers did in 1620, when they did “covenant and combine ourselves together into a civil Body Politick”."},
+	{From: "refugees", To: "un-charter", How: DrewOn,
+		Why: "The Convention opens “Considering that the Charter of the United Nations and the Universal Declaration of Human Rights approved on 10 December 1948 by the General Assembly have affirmed the principle that human beings shall enjoy fundamental rights and freedoms without discrimination”, the Charter's “respect for human rights and for fundamental freedoms for all without distinction as to race, sex, language, or religion”, and secures those rights to refugees."},
+	{From: "refugees", To: "udhr", How: DrewOn,
+		Why: "The Declaration's “Everyone has the right to seek and to enjoy in other countries asylum from persecution” is the right the Convention gives form, “Considering that the grant of asylum may place unduly heavy burdens on certain countries”: it says who is a refugee and what a refugee is owed."},
+	{From: "iccpr", To: "refugees", How: Follows,
+		Why: "The Covenant's Article 13, “An alien lawfully in the territory of a State Party to the present Covenant may be expelled therefrom only in pursuance of a decision reached in accordance with law”, extends to every alien the Convention's Article 32, “The expulsion of such a refugee shall be only in pursuance of a decision reached in accordance with due process of law”."},
+	{From: "crpd", To: "udhr", How: DrewOn,
+		Why: "The Convention recalls “that the United Nations, in the Universal Declaration of Human Rights and in the International Covenants on Human Rights, has proclaimed and agreed that everyone is entitled to all the rights and freedoms set forth therein, without distinction of any kind”, the Declaration's “Everyone is entitled to all the rights and freedoms set forth in this Declaration, without distinction of any kind”, and secures them to persons with disabilities."},
+	{From: "crpd", To: "iccpr", How: DrewOn,
+		Why: "The Convention recalls “the International Covenant on Civil and Political Rights” among the instruments it builds on, and the Covenant's rule, “without distinction of any kind, such as race, colour, sex, language, religion, political or other opinion”, is the one it applies to disability, with its own articles on liberty, justice, expression and taking part in public life."},
+	{From: "crpd", To: "icescr", How: DrewOn,
+		Why: "The Convention recalls “the International Covenant on Economic, Social and Cultural Rights” and takes up its rights to education, work, health and an adequate standard of living; the Covenant's rule, “without discrimination of any kind as to race, colour, sex, language, religion, political or other opinion”, is the one it applies to disability."},
+	{From: "crpd", To: "cerd", How: DrewOn,
+		Why: "Its definition, “any distinction, exclusion or restriction on the basis of disability which has the purpose or effect of impairing or nullifying the recognition, enjoyment or exercise” of rights, follows the form the racial discrimination Convention set in 1965: “any distinction, exclusion, restriction or preference based on race, colour, descent, or national or ethnic origin which has the purpose or effect of nullifying or impairing the recognition, enjoyment or exercise”."},
+	{From: "crpd", To: "cedaw", How: DrewOn,
+		Why: "Its definition follows the women's Convention's too, “any distinction, exclusion or restriction made on the basis of sex which has the effect or purpose of impairing or nullifying the recognition, enjoyment or exercise”, and its Article 6 recognizes “that women and girls with disabilities are subject to multiple discrimination”."},
+	{From: "crpd", To: "crc", How: DrewOn,
+		Why: "The Convention recalls “obligations to that end undertaken by States Parties to the Convention on the Rights of the Child”, whose Article 23 recognizes “that a mentally or physically disabled child should enjoy a full and decent life”, and its Article 7 secures children with disabilities every right on an equal basis with other children."},
+	{From: "crpd", To: "ada", How: Follows,
+		Why: "The Act's qualified individual is one who “with or without reasonable accommodation, can perform the essential functions of the employment position”, short of “an undue hardship” on the employer; sixteen years on, the Convention carries the term into international law, as “necessary and appropriate modification and adjustments not imposing a disproportionate or undue burden”."},
 }

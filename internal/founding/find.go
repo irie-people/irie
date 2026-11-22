@@ -82,7 +82,7 @@ var oldSpellings = map[string]string{
 	"soe": "so", "alwayes": "always", "vertue": "virtue", "committments": "commitments", "sixe": "six",
 	// The originals write "any Thing", "re-examined" and "co-operation",
 	// which fold splits at their hyphens.
-	"anything": "any thing", "reexamined": "re examined", "cooperation": "co operation",
+	"anything": "any thing", "reexamined": "re examined", "cooperation": "co operation", "politick": "politic",
 }
 
 // fold makes a passage and a query comparable, so a search finds a passage

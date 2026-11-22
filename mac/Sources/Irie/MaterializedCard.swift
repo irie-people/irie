@@ -79,12 +79,7 @@ struct MaterializedCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             if let card = result.spec {
-                Text(card.title)
-                    .font(Theme.font(12.5, .bold))
-                    .foregroundStyle(Theme.ink)
-                ForEach(Array(card.body.prefix(8).enumerated()), id: \.offset) { _, part in
-                    GenPartView(part: part)
-                }
+                GenCardBody(card: card)
             } else if let err = result.err {
                 Text("No card yet: \(err)")
                     .font(Theme.font(11.5))
@@ -103,6 +98,24 @@ struct MaterializedCardView: View {
     }
 }
 
+/// A card's title over its parts, at most eight of them, as the session's
+/// card and the Teach tile draw it.
+struct GenCardBody: View {
+    let card: GenCard
+    var spacing: CGFloat = 7
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            Text(card.title)
+                .font(Theme.font(12.5, .bold))
+                .foregroundStyle(Theme.ink)
+            ForEach(Array(card.body.prefix(8).enumerated()), id: \.offset) { _, part in
+                GenPartView(part: part)
+            }
+        }
+    }
+}
+
 /// One part of a card. A kind the app does not know draws nothing.
 struct GenPartView: View {
     let part: GenPart
@@ -115,6 +128,11 @@ struct GenPartView: View {
         case "Table": table
         case "Progress": progress
         case "Divider": Divider().overlay(Theme.edge)
+        // The pictures (GenPictures.swift).
+        case "Flow": GenFlowView(steps: part.items ?? [])
+        case "Diagram": GenDiagramView(links: part.links ?? [])
+        case "Compare": GenCompareView(sides: part.sides ?? [])
+        case "Code": GenCodeView(text: part.text ?? "", language: part.language)
         default: EmptyView()
         }
     }

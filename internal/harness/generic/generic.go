@@ -34,7 +34,7 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 		return nil, nil, nil, errors.New("generic: anonymous research runs only on Claude Code, which can shut its paths")
 	}
 	// With no output styles, a tutor mode is a note before the task.
-	task := harness.WithTutor(s.Tutor, s.Visual, s.Task)
+	task := harness.WithTutor(s.Tutor, harness.PictureNote(s.Tutor, s.Visual, s.Tile), s.Task)
 	argv := append([]string{p.Command}, slices.Clone(p.Args)...)
 	if p.Task != config.TaskPaste {
 		argv = append(argv, harness.TaskArg(task, s.Dir))
