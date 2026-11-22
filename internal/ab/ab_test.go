@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/proc"
 )
 
 // build writes a shell script that stands in for a build of a program.
@@ -145,6 +147,22 @@ func TestEachRunIsMeasured(t *testing.T) {
 	}
 	if r.Time.Unit != "s" || r.Memory.Unit != "bytes" {
 		t.Errorf("units %q and %q", r.Time.Unit, r.Memory.Unit)
+	}
+}
+
+// A run in macOS's background state says so: its times measure the
+// machine as much as the builds.
+func TestARunHeldBackSaysSo(t *testing.T) {
+	if !proc.CanBackground || proc.InBackground() {
+		t.Skip("no background state here, or the test runs in it already")
+	}
+	if err := proc.SetBackground(os.Getpid(), true); err != nil {
+		t.Fatal(err)
+	}
+	defer proc.SetBackground(os.Getpid(), false)
+	gold := build(t, "gold", `true`)
+	if r := ab(t, Options{Gold: gold, New: gold, Runs: 1}); !r.HeldBack {
+		t.Error("a run in the background state did not say so")
 	}
 }
 

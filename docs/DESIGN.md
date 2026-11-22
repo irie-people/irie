@@ -1582,6 +1582,7 @@ Every change to how your sessions are organised is kept as a version, as git kee
 - For time, CPU (user and system) and peak resident memory: each build's median run, quickest and slowest, and how far new's median is from gold's. Memory is getrusage's `ru_maxrss`, which macOS gives in bytes and Linux in kilobytes.
 - Whether each difference is more than noise. It is when the medians are more than three standard errors apart and at least 1% apart. The standard error is √(π/2)·σ/√n, with σ read from the middle half of the runs (IQR/1.349), so a stray run counts for little and more runs show a smaller change. With fewer than 3 runs there is no noise to measure, so only a change of more than double counts.
 - Naming one build twice shows the noise on its own: the same `sort` on the same file moved 6–10% between its two names.
+- When the times measure the machine as much as the builds, a note says so before the verdict: the run was in macOS's background state, as when Gabriel holds its session back (§4.11), or more work waited to run than there are CPUs as the runs ended. `--json` gives `held_back`, and `run_queue` with `cpus`.
 - `--json` gives the same report for scripts and agents.
 - Exits 0 when the outputs are the same, 1 when they differ, 2 on a usage error, and 3 when a build could not run or ran past `--timeout` (10m).
 
@@ -1589,12 +1590,9 @@ Every change to how your sessions are organised is kept as a version, as git kee
 
 **`tools/live.sh` times itself the same way.** A finished install says how long it took and where the time went: the merge that restarted it, preparing, waiting for a place to test, the checks, the build, what was left of the app's build, the lock, the swap, the relaunch and the push. Phases under a second are left out. Each install adds a line of the same to `live.times` in Irie's data directory, and one that fails says which phase it stopped in.
 
-**Not yet.**
-- `irie ab` does not say when Gabriel holds its session back (§4.11). That slows both builds alike but widens their ranges.
-
 **Tests:**
 - `internal/ab`: the same output, `--ignore`, the first difference (a line, a missing line, a missing newline), exit statuses, Windows line endings, a gold that varies, standard input, turns, measures, a build that cannot run or times out, and `Compare` on a clear change, noise, a stray run, too few runs and a tiny change.
-- `cmd/irie/ab_test.go`: the report, the exit codes and JSON.
+- `cmd/irie/ab_test.go`: the report, the exit codes and JSON, and the notes before the verdict when the times measure the machine. `internal/ab`: a run in macOS's background state says so. `internal/proc`: `InBackground` follows the state in and out.
 - `internal/ab` (verdict_test.go): the command by its name, a path or `$IRIE_BIN`, and not a near miss; a verdict from each report line, the error and JSON; plain claims of speed and of the same output, and hedged ones. `internal/harness/claude`: a run's verdict in the journal, and none for one in the background. `internal/core` (dog_test.go): a jot sent back for "faster" against a slower run and for "the same" against a differing one, with its card's words, and one whose run backs it left alone.
 
 ---

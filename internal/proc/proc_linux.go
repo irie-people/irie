@@ -133,3 +133,6 @@ func started(start int64) (time.Time, bool) {
 
 // SetBackground is not available on Linux; see CanBackground.
 func SetBackground(pid int, on bool) error { return errors.ErrUnsupported }
+
+// InBackground is false where there is no background state.
+func InBackground() bool { return false }
