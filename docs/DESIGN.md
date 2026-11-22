@@ -213,7 +213,7 @@ The Mac app shows a session that has teammates beside them in its terminal view,
 
 ### 2.4 Socket API
 
-The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in a 0700 directory. The core has no TCP listener; the phone app reaches it through its own gateway, `irie remote serve`, a client of this socket that lets a phone use only a phone's ops ([PHONE.md](PHONE.md)). Messages are NDJSON, one object per line:
+The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in a 0700 directory. The core's one TCP listener is the Terms in short page, on 127.0.0.1:7393 while that plugin is on ([SECURITY.md](../SECURITY.md#network) lists every listener); the phone app reaches the core through its own gateway, `irie remote serve`, a client of this socket that lets a phone use only a phone's ops ([PHONE.md](PHONE.md)). Messages are NDJSON, one object per line:
 - Request: `{"id":1,"op":"spawn","args":{…}}`.
 - Reply: `{"id":1,"ok":true,"result":{…}}` or `{"id":1,"ok":false,"error":{"code":"…","msg":"…"}}`.
 - `subscribe` replies once, then streams frames until the client closes:
