@@ -471,6 +471,7 @@ const (
 	MaxMaterializeID     = ipc.MaxMaterializeID
 	MaxMaterializePrompt = ipc.MaxMaterializePrompt
 	MaxMaterializeText   = ipc.MaxMaterializeText
+	MaxExplain           = ipc.MaxExplain
 	MaxMaterializeWait   = ipc.MaxMaterializeWait
 	OpNotepad            = ipc.OpNotepad
 	FrameNotepad         = ipc.FrameNotepad
@@ -543,6 +544,7 @@ const (
 	FeatureSpawnTop      = ipc.FeatureSpawnTop
 	FeatureBoostAlways   = ipc.FeatureBoostAlways
 	FeatureWatch         = ipc.FeatureWatch
+	FeatureExplain       = ipc.FeatureExplain
 	FeatureUndoConfirm   = ipc.FeatureUndoConfirm
 	ViewApp              = ipc.ViewApp
 	ViewWatch            = ipc.ViewWatch
