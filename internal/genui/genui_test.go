@@ -265,3 +265,36 @@ func TestWrapKeepsToTheWidth(t *testing.T) {
 		t.Errorf("wrap: %q, want %q", got, want)
 	}
 }
+
+func TestAPartASmallModelWroteLooselyIsReadAsMeant(t *testing.T) {
+	c, err := Check([]byte(`{"title":"Out of date","body":["A clock shows the time.",` +
+		`{"links":[{"from":"Fresh","to":"Stale"}]},{"items":[{"title":"Check"}]},{"text":"Plain words."},{"language":"go","text":"x := 1"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{PartText, PartDiagram, PartList, PartText, PartCode}
+	for i, p := range c.Body {
+		if p.Type != want[i] {
+			t.Errorf("part %d read as a %q, want %s", i+1, p.Type, want[i])
+		}
+	}
+	if c.Body[0].Text != "A clock shows the time." {
+		t.Errorf("a sentence alone reads %+v", c.Body[0])
+	}
+	if _, err := Check([]byte(`{"title":"t","body":[{}]}`)); err == nil || !strings.Contains(err.Error(), "part 1 has no type") {
+		t.Errorf("an empty part: %v; want it refused, saying it needs a type", err)
+	}
+}
+
+func TestACardIsKeptAsTheCatalogReadsIt(t *testing.T) {
+	f := &fakeOllama{reply: `{"title": "Out of date", "body": ["A clock shows the time.", {"links": [{"from": "Fresh", "to": "Stale"}]}]}`}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	spec, err := Make(context.Background(), localmodel.ChatModel{URL: srv.URL, Name: "bonsai-2:9b"}, KindExplain, "Out of date?", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"title":"Out of date","body":[{"type":"Text","text":"A clock shows the time."},{"type":"Diagram","links":[{"from":"Fresh","to":"Stale"}]}]}`; string(spec) != want {
+		t.Errorf("kept %s\nwant %s", spec, want)
+	}
+}

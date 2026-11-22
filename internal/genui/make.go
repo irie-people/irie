@@ -65,8 +65,8 @@ func instructions(kind string) string {
 }
 
 // Make has the local model m make the card prompt asks for, of the kind
-// given, from text alone, the card's context, and gives the card's JSON,
-// compacted, once it passes Check. A card that does not is asked for once
+// given, from text alone, the card's context, and gives the card's JSON
+// as the catalog reads it (Check), compacted, once it passes. A card that does not is asked for once
 // more, with what to fix, since a small model often gets it right the
 // second time. m runs on this computer (localmodel.FindChatModel never
 // picks a cloud model), so a card costs no tokens. The caller bounds how
@@ -94,8 +94,11 @@ func Make(ctx context.Context, m localmodel.ChatModel, kind, prompt, text string
 		}
 		var spec json.RawMessage
 		if spec, err = cardJSON(reply); err == nil {
-			if _, err = Check(spec); err == nil {
-				return spec, nil
+			var c Card
+			if c, err = Check(spec); err == nil {
+				// Kept as the catalog reads it, every part with its type,
+				// so a view that needs one draws it.
+				return json.Marshal(c)
 			}
 		}
 		msgs = append(msgs,

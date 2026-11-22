@@ -75,6 +75,54 @@ type Part struct {
 	Language string   `json:"language,omitempty"` // Code: such as go or swift; "" when it is not code of one
 }
 
+// UnmarshalJSON reads a part as a model writes it: an object of the
+// catalog; or, as a small model will, a sentence alone, which is a Text
+// part, or an object that left its type out, which takes the type its
+// fields name (inferred). What a model meant is plain in both, as a
+// number written "3" is (Number), so the card is taken, not refused.
+func (p *Part) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*p = Part{Type: PartText, Text: s}
+		return nil
+	}
+	type plain Part
+	var q plain
+	if err := json.Unmarshal(b, &q); err != nil {
+		return err
+	}
+	*p = Part(q)
+	if p.Type == "" {
+		p.Type = p.inferred()
+	}
+	return nil
+}
+
+// inferred is the type a part's fields name, for a part that left its
+// type out: "" when they name none. Items are a List's, not a Flow's,
+// which would draw an order the model never said.
+func (p Part) inferred() string {
+	switch {
+	case len(p.Links) > 0:
+		return PartDiagram
+	case len(p.Sides) > 0:
+		return PartCompare
+	case len(p.Facts) > 0:
+		return PartFacts
+	case len(p.Rows) > 0 || len(p.Columns) > 0:
+		return PartTable
+	case len(p.Items) > 0:
+		return PartList
+	case p.Language != "":
+		return PartCode
+	case p.Label != "" && p.Total != 0:
+		return PartProgress
+	case p.Text != "":
+		return PartText
+	}
+	return ""
+}
+
 // Item is one line of a List, or one step of a Flow: a title, a detail
 // beside it, and a status mark: ok, warn, note or none.
 type Item struct {
@@ -166,6 +214,8 @@ func Check(spec []byte) (Card, error) {
 	}
 	for i, p := range c.Body {
 		switch {
+		case p.Type == "":
+			return Card{}, fmt.Errorf("part %d has no type and nothing to show: give each part a type, one of %s", i+1, strings.Join(parts, ", "))
 		case !slices.Contains(parts, p.Type):
 			return Card{}, fmt.Errorf("part %d is a %q, which the catalog does not have: use %s", i+1, p.Type, strings.Join(parts, ", "))
 		case len(p.Rows) > MaxRows || len(p.Items) > MaxRows:

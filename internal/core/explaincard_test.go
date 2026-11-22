@@ -37,6 +37,11 @@ func TestACardExplainsWhatIsAskedAndIsKeptForTheQuestion(t *testing.T) {
 	if other, _ := c.materializeOp(ipc.MaterializeArgs{Explain: "What is a gap?"}); other.ID == r.ID || other.State != "cold" || !other.Began {
 		t.Errorf("another question: %+v; want a card of its own, begun", other)
 	}
+	// Its remake writes the cards' file: let it finish before the test's
+	// folder goes.
+	if done, _ := c.materializeOp(ipc.MaterializeArgs{Explain: "What is a gap?", Wait: 10 * time.Second}); done.State != "fresh" {
+		t.Errorf("the other question's card is %s; want it made", done.State)
+	}
 	// Forget finds the card by its question.
 	if gone, err := c.materializeOp(ipc.MaterializeArgs{Explain: "How is a card kept?", Forget: true}); err != nil || gone.ID != r.ID || gone.State != "cold" {
 		t.Errorf("forget: %+v, %v", gone, err)
