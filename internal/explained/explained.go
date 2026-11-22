@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/genui"
 )
@@ -214,7 +215,7 @@ func Markdown(e Explanation, data string) string {
 			fmt.Fprintf(&b, "%d. Then: %s\n", i+2, oneLine(x.Asked))
 		}
 	}
-	fmt.Fprintf(&b, "\nEvery version, as Irie made it, is in %s.\n", data)
+	fmt.Fprintf(&b, "\nEvery version, as %s made it, is in %s.\n", brand.Name, data)
 	return b.String()
 }
 
