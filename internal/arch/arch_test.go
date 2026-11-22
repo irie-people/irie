@@ -2,6 +2,7 @@ package arch
 
 import (
 	"encoding/json"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -76,6 +77,86 @@ func TestMikaelKeepsTheDoor(t *testing.T) {
 		}
 		seen[r] = true
 	}
+}
+
+// The door weighs each way an agent writes to let code past Gatekeeper, as
+// a README or an installer asks: the quarantine mark stripped, every
+// attribute cleared, Gatekeeper switched off or told to let an app run, and
+// each of them under sudo. What only reads passes: it changes nothing.
+// Raphael runs such reads himself (spctl --status, spctl -a -vv -t exec),
+// in the core, where no hook sees them (DESIGN §4.11).
+func TestMikaelWeighsWhatGetsPastGatekeeper(t *testing.T) {
+	m, _ := Get("mikael")
+	for _, cmd := range []string{
+		"xattr -d com.apple.quarantine /Applications/Foo.app",
+		"xattr -r -d com.apple.quarantine Foo.app",
+		"xattr -d -r com.apple.quarantine Foo.app",
+		"xattr -dr com.apple.quarantine ~/.foo",
+		"xattr -rd com.apple.quarantine Foo.app",
+		`xattr -d "com.apple.quarantine" Foo.app`,
+		"xattr -c Foo.app",
+		"xattr -cr /Applications/Foo.app",
+		"xattr -rc Foo.app",
+		"xattr -r -c Foo.app",
+		"xattr -c -r Foo.app",
+		"spctl --master-disable",
+		"spctl --global-disable",
+		`spctl --disable --label "Mac App Store"`,
+		"spctl --add /Applications/Foo.app",
+		`spctl --add --label "My Stuff" /Applications/Foo.app`,
+		"sudo xattr -rd com.apple.quarantine /Applications/Foo.app",
+		"sudo xattr -cr /Applications/Foo.app",
+		"sudo spctl --master-disable",
+		"sudo spctl --global-disable",
+		"sudo spctl --add /Applications/Foo.app",
+	} {
+		if !weighs(m.Door.Rules, cmd) {
+			t.Errorf("the door does not weigh %s", cmd)
+		}
+	}
+	for _, cmd := range []string{
+		"xattr Foo.app",
+		"xattr -l Foo.app",
+		"xattr -lr /Users/alice/code/Foo.app",
+		"xattr -p com.apple.quarantine Foo.app",
+		"xattr -px com.apple.quarantine /Users/alice/Downloads/Foo.app",
+		"spctl --status",
+		"spctl -a /Applications/Mail.app",
+		"spctl --assess --type execute /Applications/Mail.app",
+		"spctl -a -vv -t exec /Applications/Mail.app",
+		"spctl --global-enable",
+	} {
+		if weighs(m.Door.Rules, cmd) {
+			t.Errorf("the door weighs %s, which only reads or keeps Gatekeeper on", cmd)
+		}
+	}
+}
+
+// weighs says whether one of rules matches a Bash command the way Claude
+// Code matches a permission rule (permissions.md, "Wildcard patterns"): a *
+// stands for any text, spaces too, and the rest is matched as written; a
+// trailing " *" that is the rule's only * also matches the bare command.
+// The commands here are single, so splitting compound commands and
+// stripping wrappers such as timeout are left out.
+func weighs(rules []string, command string) bool {
+	for _, r := range rules {
+		pattern, ok := strings.CutPrefix(r, "Bash(")
+		if !ok {
+			continue
+		}
+		pattern = strings.TrimSuffix(pattern, ")")
+		if bare, ok := strings.CutSuffix(pattern, " *"); ok && !strings.Contains(bare, "*") && command == bare {
+			return true
+		}
+		parts := strings.Split(pattern, "*")
+		for i, p := range parts {
+			parts[i] = regexp.QuoteMeta(p)
+		}
+		if regexp.MustCompile(`(?s)^` + strings.Join(parts, ".*") + `$`).MatchString(command) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMikaelsWord(t *testing.T) {

@@ -38,6 +38,17 @@ rules:
   - Bash(pip install *)
   - Bash(pip3 install *)
   - Bash(brew install *)
+  # Code from elsewhere let past Gatekeeper: its quarantine mark stripped
+  # (xattr -d com.apple.quarantine, with -r before or after), every
+  # attribute cleared (xattr -c, -cr, -rc), Gatekeeper switched off
+  # (spctl --master-disable, --global-disable, --disable) or told to let
+  # an app run (spctl --add). Reads pass: xattr -l and -p, spctl --status
+  # and --assess. Under sudo, the sudo rule weighs them.
+  - Bash(xattr -*d*com.apple.quarantine*)
+  - Bash(xattr -c*)
+  - Bash(xattr -*c *)
+  - Bash(spctl *-disable*)
+  - Bash(spctl *--add *)
   # Taking hold of the machine
   - Bash(sudo *)
   - Bash(crontab *)
@@ -70,7 +81,7 @@ $ARGUMENTS
 
 Weigh this one call. Stop it only if the call itself would clearly do evil:
 - send secrets, keys, tokens, passwords or anyone's personal data where they don't belong;
-- run code fetched from an unknown place, or code that hides what it does;
+- run code fetched from an unknown place, or code that hides what it does, or let such code past Gatekeeper by stripping its quarantine mark or switching Gatekeeper off;
 - destroy what the user would not want lost, such as their own files, other people's work or shared history;
 - spy on, harass, spam, deceive, defraud or impersonate anyone;
 - send or spend the user's money in a way they would not want, or hand control of this machine or an account to someone else;
