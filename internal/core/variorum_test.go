@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
@@ -95,14 +96,14 @@ func TestTheVariorumOp(t *testing.T) {
 		}
 		return r
 	}
-	if r := op(ipc.VariorumArgs{}); r.State != ipc.VariorumOff || !strings.Contains(r.Text, "irie plugins on writing") || !r.Installed {
+	if r := op(ipc.VariorumArgs{}); r.State != ipc.VariorumOff || !strings.Contains(r.Text, brand.Slug+" plugins on writing") || !r.Installed {
 		t.Fatalf("plugin off: %+v", r)
 	}
 
 	// The op is the tab's: off with the tab's switch.
 	cfg.Plugins.Writing, cfg.Variorum.Tab = true, false
 	c.useConfig(cfg)
-	if r := op(ipc.VariorumArgs{Action: ipc.VariorumNotes}); r.State != ipc.VariorumOff || !strings.Contains(r.Text, "irie plugins on writing tab") || r.Notes != nil {
+	if r := op(ipc.VariorumArgs{Action: ipc.VariorumNotes}); r.State != ipc.VariorumOff || !strings.Contains(r.Text, brand.Slug+" plugins on writing tab") || r.Notes != nil {
 		t.Fatalf("tab off: %+v", r)
 	}
 
@@ -132,7 +133,7 @@ func TestTheVariorumOp(t *testing.T) {
 	if r := op(ipc.VariorumArgs{Action: ipc.VariorumNotes}); r.Error != "" || len(r.Notes) != 1 || r.Notes[0] != (ipc.VariorumNoteRef{ID: "n1", Title: "Chapter 3", Edited: "2026-11-14T10:00:00Z"}) {
 		t.Errorf("notes: %+v", r)
 	}
-	if r := op(ipc.VariorumArgs{Action: ipc.VariorumRead}); r.Error != "No note yet: pick one from the notes shared with Irie." || r.Note != nil {
+	if r := op(ipc.VariorumArgs{Action: ipc.VariorumRead}); r.Error != "No note yet: pick one from the notes shared with "+brand.Name+"." || r.Note != nil {
 		t.Errorf("read with no note: %+v", r)
 	}
 	if r := op(ipc.VariorumArgs{Action: ipc.VariorumRead, Session: "s1"}); !strings.HasPrefix(r.Error, "No note yet") {

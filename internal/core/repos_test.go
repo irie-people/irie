@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -87,8 +88,8 @@ func TestAnAtRepoTaskRunsInANewWorktree(t *testing.T) {
 	c := setup(t)
 	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: repo})
 	wt := filepath.Join(c.paths.Worktrees(), "website", "prompt")
-	if s.Worktree != wt || s.Cwd != wt || s.Branch != "irie/prompt" || s.Name != "Prompt" || !sameDir(s.Repo, repo) {
-		t.Errorf("session = %+v, want the worktree %s on irie/prompt", s, wt)
+	if s.Worktree != wt || s.Cwd != wt || s.Branch != brand.Slug+"/prompt" || s.Name != "Prompt" || !sameDir(s.Repo, repo) {
+		t.Errorf("session = %+v, want the worktree %s on "+brand.Slug+"/prompt", s, wt)
 	}
 	if want := []string{".claude/settings.local.json", ".env", "CLAUDE.local.md"}; !slices.Equal(s.Copied, want) {
 		t.Errorf("copied %q, want %q", s.Copied, want)
@@ -110,7 +111,7 @@ func TestAnAtRepoTaskRunsInANewWorktree(t *testing.T) {
 	if a, b := testutil.Git(t, wt, "rev-parse", "HEAD"), testutil.Git(t, repo, "rev-parse", "HEAD"); a != b {
 		t.Errorf("worktree HEAD %s, main checkout HEAD %s", a, b)
 	}
-	if b := testutil.Git(t, wt, "rev-parse", "--abbrev-ref", "HEAD"); b != "irie/prompt" {
+	if b := testutil.Git(t, wt, "rev-parse", "--abbrev-ref", "HEAD"); b != brand.Slug+"/prompt" {
 		t.Errorf("worktree branch %q", b)
 	}
 
@@ -120,20 +121,20 @@ func TestAnAtRepoTaskRunsInANewWorktree(t *testing.T) {
 	}
 	// The journal says where the task runs.
 	for _, e := range c.events(s.ID) {
-		if e.Kind == event.SpawnRequested && (e.Str("worktree") != wt || e.Str("branch") != "irie/prompt" || !sameDir(e.Str("repo"), repo)) {
+		if e.Kind == event.SpawnRequested && (e.Str("worktree") != wt || e.Str("branch") != brand.Slug+"/prompt" || !sameDir(e.Str("repo"), repo)) {
 			t.Errorf("spawn.requested = %+v", e.Data)
 		}
 	}
 
 	// The same task in the same repo gets the next slug.
 	again := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: repo})
-	if again.Name != "Prompt-2" || again.Branch != "irie/prompt-2" || again.Worktree != wt+"-2" {
+	if again.Name != "Prompt-2" || again.Branch != brand.Slug+"/prompt-2" || again.Worktree != wt+"-2" {
 		t.Errorf("second session = %+v", again)
 	}
 
 	// A restarted core knows each row's worktree.
 	c.restartCore()
-	if r, ok := c.row(s.ID); !ok || r.Worktree != wt || r.Branch != "irie/prompt" || !slices.Equal(r.Copied, s.Copied) || !sameDir(r.Repo, repo) {
+	if r, ok := c.row(s.ID); !ok || r.Worktree != wt || r.Branch != brand.Slug+"/prompt" || !slices.Equal(r.Copied, s.Copied) || !sameDir(r.Repo, repo) {
 		t.Errorf("row after a restart = %+v", r)
 	}
 }
@@ -174,7 +175,7 @@ func TestNamesAndTargets(t *testing.T) {
 	if s.Cwd != site || s.Worktree != "" || s.Branch != "" || !sameDir(s.Repo, site) {
 		t.Errorf("@web! = %+v, want the main checkout %s", s, site)
 	}
-	if out := testutil.Git(t, site, "branch", "--list", "irie/*"); out != "" {
+	if out := testutil.Git(t, site, "branch", "--list", brand.Slug+"/*"); out != "" {
 		t.Errorf("@web! made a branch: %q", out)
 	}
 	// A path git does not know runs in place.
@@ -309,7 +310,7 @@ func TestAGenericProfileGetsItsTask(t *testing.T) {
 	// Each profile says what it runs and costs, a profile with live sessions
 	// what one takes in memory too, and auto where it sends each class.
 	if len(r.Notes) != len(r.Items) || !strings.Contains(r.Notes[0], "hard→claude") || !strings.Contains(r.Notes[1], "no llama-server") || !strings.HasPrefix(r.Notes[2], "/bin/cat") ||
-		!strings.Contains(r.Notes[3], "opus-5-5 high · runs /irie:chaos") || !strings.Contains(r.Notes[4], "opus-5-5 max") || !strings.Contains(r.Notes[8], "local, $0") || !strings.Contains(r.Notes[9], "opus-5-5 high") || !strings.Contains(r.Notes[10], "opus-5-5 high") || !strings.Contains(r.Notes[11], "sonnet-5-5 medium") {
+		!strings.Contains(r.Notes[3], "opus-5-5 high · runs /"+brand.Slug+":chaos") || !strings.Contains(r.Notes[4], "opus-5-5 max") || !strings.Contains(r.Notes[8], "local, $0") || !strings.Contains(r.Notes[9], "opus-5-5 high") || !strings.Contains(r.Notes[10], "opus-5-5 high") || !strings.Contains(r.Notes[11], "sonnet-5-5 medium") {
 		t.Errorf("notes = %q", r.Notes)
 	}
 }
@@ -346,7 +347,7 @@ func TestTheCommandBarCompletesAndPastes(t *testing.T) {
 		out, _ := c.TryTmux("capture-pane", "-p", "-t", tmux.Sidebar)
 		return out
 	}
-	testutil.Eventually(t, 5*time.Second, "the sidebar did not draw", func() bool { return strings.Contains(screen(), "☀ Irie") })
+	testutil.Eventually(t, 5*time.Second, "the sidebar did not draw", func() bool { return strings.Contains(screen(), "☀ "+brand.Name) })
 
 	c.Tmux(t, "send-keys", "-t", tmux.Sidebar, "-l", "@webs")
 	c.Tmux(t, "send-keys", "-t", tmux.Sidebar, "Tab")

@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/focus"
 	"github.com/irie-people/irie/internal/ipc"
@@ -100,7 +102,7 @@ func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
 	}, selected: "s-shown", log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	c.useConfig(config.Default())
 	// With Gabriel off, as in a test core, a show leaves his state be.
-	t.Setenv("IRIE_GABRIEL", "off")
+	t.Setenv(brand.Env("GABRIEL"), "off")
 	c.gab.focus = map[string]bool{"s-before": true}
 	c.refocus()
 	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) || c.gab.top != nil {
@@ -110,7 +112,7 @@ func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
 	// before steps back with the rest, before the show returns rather than
 	// at the next sweep. An install stays in it. The session on show is
 	// the top of the focus at once too.
-	t.Setenv("IRIE_GABRIEL", "")
+	t.Setenv(brand.Env("GABRIEL"), "")
 	c.gab.holding, c.gab.present, c.gab.irieFront = true, true, true
 	c.gab.installs = map[string]bool{"s-install": true}
 	c.refocus()
@@ -140,7 +142,7 @@ func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
 }
 
 func TestShowingAPeerRowTakesTheTopAway(t *testing.T) {
-	t.Setenv("IRIE_GABRIEL", "")
+	t.Setenv(brand.Env("GABRIEL"), "")
 	c := &Core{sessions: map[string]*session{"s-shown": {id: "s-shown"}}, selected: "s-shown",
 		log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	c.useConfig(config.Default())
@@ -429,7 +431,7 @@ func TestOutsideSurvivesTheCore(t *testing.T) {
 
 func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 	// A boost wakes a sweep, which must not slow this machine's processes.
-	t.Setenv("IRIE_GABRIEL", "off")
+	t.Setenv(brand.Env("GABRIEL"), "off")
 	cfg := config.Default()
 	cfg.Local.URL = "http://127.0.0.1:1" // not Irie's own Ollama: no models to free
 	c := &Core{sessions: map[string]*session{}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
@@ -462,7 +464,7 @@ func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 }
 
 func TestTheHeaderSaysHowGabrielBoosts(t *testing.T) {
-	t.Setenv("IRIE_GABRIEL", "")
+	t.Setenv(brand.Env("GABRIEL"), "")
 	cfg := config.Default()
 	c := &Core{sessions: map[string]*session{}}
 	c.useConfig(cfg)
@@ -490,11 +492,14 @@ func TestTheHeaderSaysHowGabrielBoosts(t *testing.T) {
 		t.Errorf("always: %+v", b)
 	}
 	// With Gabriel off nothing boosts, always or not.
-	t.Setenv("IRIE_GABRIEL", "off")
+	t.Setenv(brand.Env("GABRIEL"), "off")
 	if b := c.boostHeader(now); b != nil {
 		t.Errorf("Gabriel off: %+v", b)
 	}
 }
+
+// ownNames puts the product's names into a command a test lists as Irie's.
+var ownNames = strings.NewReplacer("Irie", brand.Name, "$IRIE_BIN", "$"+brand.Env("BIN"), "irie away", brand.Slug+" away")
 
 func TestStealsFocus(t *testing.T) {
 	for cmd, want := range map[string]bool{
@@ -538,6 +543,7 @@ func TestStealsFocus(t *testing.T) {
 		"PATH=/usr/bin:/bin open -a Safari":                                 true,
 		"/Applications/Simulator.app/Contents/MacOS/Simulator --background": true, // only Irie.app's own flags keep a window away
 	} {
+		cmd = ownNames.Replace(cmd)
 		if got := stealsFocus(cmd); got != want {
 			t.Errorf("stealsFocus(%q) = %v, want %v", cmd, got, want)
 		}
@@ -590,6 +596,7 @@ func TestOpensInSight(t *testing.T) {
 		"irie away --for 30s --app Simulator -- xcrun simctl boot 'iPhone 15'": false,
 		"irie away -- open -g -n -a 'Google Chrome' --args --user-data-dir=/tmp/p http://localhost:3000": false,
 	} {
+		cmd = ownNames.Replace(cmd)
 		if got := opensInSight(cmd); got != want {
 			t.Errorf("opensInSight(%q) = %v, want %v", cmd, got, want)
 		}

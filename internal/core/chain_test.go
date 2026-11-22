@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/keyring"
@@ -681,8 +682,8 @@ func TestTheVaultsKeyIsNeverMadeOverWhatItSealed(t *testing.T) {
 	}
 	// With IRIE_KEYCHAIN=off, a chain whose key the Keychain keeps is
 	// away, not lost.
-	t.Setenv("IRIE_KEYCHAIN", "off")
-	if _, why, err := openVault(chain.Store{Dir: dir}, keyring.Files{Dir: keysDir}, keysDir); why != lockAway || !strings.Contains(lockedWords(dir, why, err), "IRIE_KEYCHAIN=off") {
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
+	if _, why, err := openVault(chain.Store{Dir: dir}, keyring.Files{Dir: keysDir}, keysDir); why != lockAway || !strings.Contains(lockedWords(dir, why, err), brand.Env("KEYCHAIN")+"=off") {
 		t.Errorf("off: %d %v", why, err)
 	}
 }

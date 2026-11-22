@@ -20,6 +20,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapserver"
 	"github.com/emersion/go-imap/v2/imapserver/imapmemserver"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/tmux"
@@ -72,7 +73,7 @@ func bridge(t *testing.T, user, password string) (string, *imapmemserver.User) {
 // lists; :mail says how the accounts stand; and the account goes out
 // whole, its password too (docs/proposals/mail.md).
 func TestTheMailOp(t *testing.T) {
-	t.Setenv("IRIE_KEYCHAIN", "off")
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
 	c := bareCore(t, config.Default())
 	t.Cleanup(c.mailClose)
 	r, err := c.mailOp(0, ipc.MailArgs{})
@@ -152,7 +153,7 @@ func TestTheMailOp(t *testing.T) {
 // inside an agent is refused, typed words too; and the plugin off refuses
 // every call.
 func TestAnAgentCannotReadMail(t *testing.T) {
-	t.Setenv("IRIE_KEYCHAIN", "off")
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
 	c := bareCore(t, config.Default())
 	// This test's own parent stands for an agent's host.
 	c.snap = tmux.Snapshot{Panes: []tmux.Pane{{ID: "%1", Role: tmux.RoleAgent, PID: os.Getppid()}}}

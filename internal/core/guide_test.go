@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -65,7 +66,7 @@ func TestTheGuideSaysWhyItIsOff(t *testing.T) {
 			p := c.Profiles["claude"]
 			p.Command = old
 			c.Profiles["claude"] = p
-		}, "needs Claude Code to load Irie's skills"},
+		}, "needs Claude Code to load " + brand.Name + "'s skills"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := config.Default()
@@ -113,7 +114,7 @@ func TestTheSwitchGuideRunsIriesSkill(t *testing.T) {
 			t.Fatal(err)
 		}
 		i := slices.Index(spec.Argv, "--plugin-dir")
-		if spec.Profile != "claude" || i < 0 || first && spec.Argv[len(spec.Argv)-1] != "/irie:dead-mans-switch" || spec.Cwd != filepath.Join(c.paths.Data, "guides", "dead-mans-switch") {
+		if spec.Profile != "claude" || i < 0 || first && spec.Argv[len(spec.Argv)-1] != "/"+brand.Slug+":dead-mans-switch" || spec.Cwd != filepath.Join(c.paths.Data, "guides", "dead-mans-switch") {
 			t.Fatalf("spec = %+v", spec)
 		}
 		return spec.Argv[i+1]
@@ -156,8 +157,8 @@ func TestTheWriteGuideTakesATask(t *testing.T) {
 	c.up()
 
 	for _, tc := range []struct{ text, name, task string }{
-		{":write", "Variorum", "/irie:variorum"},
-		{":write notes on Chapter 3", "Notes on Chapter 3", "/irie:variorum notes on Chapter 3"},
+		{":write", "Variorum", "/" + brand.Slug + ":variorum"},
+		{":write notes on Chapter 3", "Notes on Chapter 3", "/" + brand.Slug + ":variorum notes on Chapter 3"},
 	} {
 		var r ipc.InputResult
 		if err := c.call(ipc.OpInput, ipc.InputArgs{Text: tc.text}, &r); err != nil {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -52,7 +53,7 @@ func TestThePluginsOp(t *testing.T) {
 			t.Errorf("%s = %q with the plugin off", x.Name, x.State)
 		}
 	}
-	if _, err := c.pluginsOp(ipc.PluginsArgs{Plugin: "bitwarden", Part: "vault", On: &on}); err == nil || !strings.Contains(err.Error(), "isn't in Irie yet") {
+	if _, err := c.pluginsOp(ipc.PluginsArgs{Plugin: "bitwarden", Part: "vault", On: &on}); err == nil || !strings.Contains(err.Error(), "isn't in "+brand.Name+" yet") {
 		t.Errorf("vault on: %v", err)
 	}
 }
@@ -63,7 +64,7 @@ func TestAnonymousResearchWaitsForItsPlugin(t *testing.T) {
 	cfg := config.Default()
 	cfg.Anon.On, cfg.Plugins.Privacy = true, false
 	c := bareCore(t, cfg)
-	if _, _, err := c.prepareAnon("leads", "mullvad"); err == nil || !strings.Contains(err.Error(), "irie plugins on privacy") {
+	if _, _, err := c.prepareAnon("leads", "mullvad"); err == nil || !strings.Contains(err.Error(), brand.Slug+" plugins on privacy") {
 		t.Errorf("err = %v", err)
 	}
 }

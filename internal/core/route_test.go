@@ -176,7 +176,7 @@ func TestDelegationRunsASubtaskOnACheaperProfile(t *testing.T) {
 	delegate := func(task string) (string, string, int) {
 		cmd := exec.Command(c.bin, "ctl", "delegate", "--timeout", "20s", task)
 		cmd.Dir = t.TempDir()
-		cmd.Env = append(os.Environ(), "IRIE_SESSION="+parent.ID)
+		cmd.Env = append(os.Environ(), brand.Env("SESSION")+"="+parent.ID)
 		var out, errOut strings.Builder
 		cmd.Stdout, cmd.Stderr = &out, &errOut
 		err := cmd.Run()
@@ -248,7 +248,7 @@ func TestAUsageLimitFailsOver(t *testing.T) {
 		t.Errorf("continuation named %q, pane %v; want %q", cont.Name, c.pane(cont.Pane), s.Name+"-2")
 	}
 	task, _ := os.ReadFile(c.paths.TaskFile(cont.ID))
-	if !strings.HasPrefix(string(task), "[Irie] This task ran on +fake, which stopped at its usage limit.") || !strings.Contains(string(task), "fix the typo") {
+	if !strings.HasPrefix(string(task), "["+brand.Name+"] This task ran on +fake, which stopped at its usage limit.") || !strings.Contains(string(task), "fix the typo") {
 		t.Errorf("continuation task = %q", task)
 	}
 	testutil.Eventually(t, 5*time.Second, "no failover event", func() bool {

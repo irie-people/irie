@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
@@ -28,7 +29,7 @@ exec sleep 600
 
 func TestTeammatesRunOnTheTeamServer(t *testing.T) {
 	agent := filepath.Join(t.TempDir(), "claude")
-	if err := os.WriteFile(agent, []byte(teamAgent), 0o755); err != nil {
+	if err := os.WriteFile(agent, []byte(strings.NewReplacer("IRIE_SESSION", brand.Env("SESSION"), "IRIE_TEAM_OF", brand.Env("TEAM_OF")).Replace(teamAgent)), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	c := setupWith(t, agentConfig{command: agent, spawn: "teammates = \"panes\"\n"})

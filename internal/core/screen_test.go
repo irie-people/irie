@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -284,7 +285,7 @@ func TestPairOpensACodeTheGatewayTakes(t *testing.T) {
 	if len(r.Code) != 6 || r.Name == "" || r.On || time.Until(r.Until) < 59*time.Minute || len(r.Fingerprint) != 23 {
 		t.Errorf("pair = %+v", r)
 	}
-	if len(r.URLs) > 0 && (!strings.HasPrefix(r.Link, "irie://pair?") || !strings.Contains(r.Link, "c="+r.Code)) {
+	if len(r.URLs) > 0 && (!strings.HasPrefix(r.Link, brand.Slug+"://pair?") || !strings.Contains(r.Link, "c="+r.Code)) {
 		t.Errorf("link %q", r.Link)
 	}
 	for _, u := range r.URLs {

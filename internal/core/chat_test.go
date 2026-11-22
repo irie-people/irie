@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/tmux"
@@ -71,7 +72,7 @@ func newDiscordStandIn(t *testing.T) *discordStandIn {
 // that agent's.
 func chatCore(t *testing.T, cfg config.Config) (*Core, *discordStandIn) {
 	t.Helper()
-	t.Setenv("IRIE_KEYCHAIN", "off")
+	t.Setenv(brand.Env("KEYCHAIN"), "off")
 	c := bareCore(t, cfg)
 	d := newDiscordStandIn(t)
 	c.chatService().Bases = map[string]string{config.ChatDiscord: d.srv.URL}

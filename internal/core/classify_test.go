@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -201,7 +202,7 @@ fake = 1.0
 	delegate := func(task string) (string, string, int) {
 		cmd := exec.Command(c.bin, "ctl", "delegate", "--timeout", wait, task)
 		cmd.Dir = t.TempDir()
-		cmd.Env = append(os.Environ(), "IRIE_SESSION="+parent.ID)
+		cmd.Env = append(os.Environ(), brand.Env("SESSION")+"="+parent.ID)
 		var out, errOut strings.Builder
 		cmd.Stdout, cmd.Stderr = &out, &errOut
 		err := cmd.Run()
@@ -241,7 +242,7 @@ fake = 1.0
 		t.Errorf("the session that took it over is named %q; %q", second.Name, errOut)
 	}
 	task, _ := os.ReadFile(c.paths.TaskFile(second.ID))
-	if !strings.HasPrefix(string(task), "[Irie] This subtask ran on +slow, which was still at work after 8s, so Irie stopped it.") || !strings.Contains(string(task), "fix the typo") {
+	if !strings.HasPrefix(string(task), "["+brand.Name+"] This subtask ran on +slow, which was still at work after 8s, so "+brand.Name+" stopped it.") || !strings.Contains(string(task), "fix the typo") {
 		t.Errorf("the task it took over = %q", task)
 	}
 	// The stopped session's record says why, and the router now knows
