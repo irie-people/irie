@@ -242,6 +242,9 @@ type HookReply struct {
 	// Allow lets a model switch that Irie asked for go ahead without the
 	// user's confirmation (DESIGN §6.4).
 	Allow bool
+	// Ask is a reason to ask the user before the call runs, shown in the
+	// harness's permission prompt (DESIGN §4.11). Deny wins over it.
+	Ask string
 }
 
 // Harness is one agent CLI.

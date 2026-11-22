@@ -249,6 +249,13 @@ func TestRespond(t *testing.T) {
 		{"PreToolUse", harness.HookReply{Deny: "[Irie] Still paused by the user; this call did not run. Retry the same call to keep waiting."},
 			`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"[Irie] Still paused by the user; this call did not run. Retry the same call to keep waiting."}}`},
 		{"PreToolUse", harness.HookReply{}, ``},
+		// Ask puts the call to the user, whose prompt shows the reason; a
+		// deny wins over it, as it does in Claude Code.
+		{"PreToolUse", harness.HookReply{Ask: "[Irie] Mikael asks you first: this writes ~/proj/.git/hooks/pre-commit."},
+			`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"[Irie] Mikael asks you first: this writes ~/proj/.git/hooks/pre-commit."}}`},
+		{"PreToolUse", harness.HookReply{Deny: "no", Ask: "yes?"},
+			`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no"}}`},
+		{"PostToolUse", harness.HookReply{Ask: "yes?"}, ``},
 		{"PostToolUse", harness.HookReply{Deny: "no"}, ``},
 		{"Stop", note, ``},
 		{"Stop", harness.HookReply{Unfinished: "[Irie] The jot dog: 2 commits are not in live yet."},

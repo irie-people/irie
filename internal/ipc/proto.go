@@ -1810,6 +1810,11 @@ type HookResult struct {
 	// Allow answers a PreModelSwitch: the switch is Irie's own, at a usage
 	// limit, and needs no confirmation (DESIGN §6.4).
 	Allow bool `json:"allow,omitempty"`
+	// Ask answers a PreToolUse with a reason to ask the user before the call
+	// runs, which the harness shows them in its permission prompt, as
+	// Mikael does before a change to what their own git runs (DESIGN §4.11).
+	// Deny wins over it.
+	Ask string `json:"ask,omitempty"`
 }
 
 // Frame types streamed after subscribe.

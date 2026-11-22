@@ -323,10 +323,12 @@ type hookSpecific struct {
 }
 
 // Respond renders a reply as Claude Code's hook output (DESIGN §3.3): context
-// on the events that take it, a deny on PreToolUse, on Stop what is left to
-// finish (DESIGN §4.8), and an allow on PreModelSwitch for Irie's own switch
-// (DESIGN §6.4). It never allows a tool call, which would bypass the user's
-// permission rules, and it says nothing on other events.
+// on the events that take it, a deny on PreToolUse or an ask, which Claude
+// Code puts to the user in its permission prompt with the reason (DESIGN
+// §4.11), on Stop what is left to finish (DESIGN §4.8), and an allow on
+// PreModelSwitch for Irie's own switch (DESIGN §6.4). It never allows a tool
+// call, which would bypass the user's permission rules, and it says nothing
+// on other events.
 func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 	name := ""
 	if e.Vendor != nil {
@@ -335,8 +337,11 @@ func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 	out := hookSpecific{HookEventName: name}
 	switch name {
 	case "PreToolUse":
-		if r.Deny != "" {
+		switch {
+		case r.Deny != "":
 			out.PermissionDecision, out.PermissionDecisionReason = "deny", r.Deny
+		case r.Ask != "":
+			out.PermissionDecision, out.PermissionDecisionReason = "ask", r.Ask
 		}
 		out.AdditionalContext = r.Context
 	case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "SubagentStart":
