@@ -99,7 +99,7 @@ func (c *Core) findLost(now time.Time) {
 		data := map[string]any{
 			"name": r.Name, "named": r.Named, "created": r.Created.Format(time.RFC3339Nano), "vendor_id": r.VendorID, "resume": r.Resume, "lost": true,
 		}
-		for k, on := range map[string]bool{"parked": r.Parked, "pinned": r.Pinned, "frozen": r.Frozen} {
+		for k, on := range map[string]bool{"parked": r.Parked, "pinned": r.Pinned, "frozen": r.Frozen, "working": r.Working} {
 			if on {
 				data[k] = true
 			}
@@ -120,7 +120,7 @@ func (c *Core) findLost(now time.Time) {
 			continue
 		}
 		c.addClosed(r)
-		c.log.Info("lost", "session", r.ID, "name", r.Name, "resume", r.Resume, "parked", r.Parked, "pinned", r.Pinned, "frozen", r.Frozen)
+		c.log.Info("lost", "session", r.ID, "name", r.Name, "resume", r.Resume, "parked", r.Parked, "pinned", r.Pinned, "frozen", r.Frozen, "working", r.Working)
 	}
 }
 
@@ -272,6 +272,10 @@ func (c *Core) lostRecord(l lostOne, evs []event.Event, now time.Time) closedRec
 	// holds even what a journal that could not be written lacks.
 	_, noFreeze := os.Stat(c.paths.FreezeFile(l.id))
 	r.Pinned, r.Parked, r.Frozen = t.pinned, t.parked, noFreeze == nil
+	// At work when it was lost, or boosted, it starts again at a restore;
+	// the rest come back resting (rest.go). One frozen, or resting, was
+	// not at work.
+	r.Working = t.rest == nil && (t.atWork() && !r.Frozen || t.priority > 0)
 	r.Space, r.Group = t.space, t.group
 	return r
 }

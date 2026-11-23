@@ -174,6 +174,14 @@ func (c *Core) sendFollowUps(now time.Time) {
 		if len(x.followUps) == 0 || x.sending {
 			continue
 		}
+		// A resting session's agent starts again for them (rest.go); one
+		// that rests frozen keeps them for its thaw.
+		if rests, frozen := c.resting(x.id); rests {
+			if !frozen && !c.rest.waking[x.id] {
+				c.wakeLater(x.id, "jot")
+			}
+			continue
+		}
 		if st := x.track.state(x.dead); st == ipc.StateExited || st == ipc.StateFailed {
 			c.log.Warn("jots not sent: the session ended", "session", x.id, "jots", len(x.followUps))
 			x.followUps = nil

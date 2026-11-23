@@ -26,6 +26,8 @@
 # testrunner/, which every worktree shares.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+# A turn among the machine's test and build runs, and room on the disk.
+sh tools/heavy.sh $$ test.sh
 if [ $# -eq 0 ]; then set -- ./...; fi
 
 # go test, for a machine without cargo or a flag the runner leaves to it:

@@ -11,6 +11,7 @@ import (
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/rebuild"
 )
 
@@ -19,6 +20,12 @@ import (
 const controlUsage = `  ` + brand.Slug + ` ctl freeze SESSION|--all          stop a session's whole process tree at
                                          once, or every session's
   ` + brand.Slug + ` ctl thaw SESSION|--all            continue it
+  ` + brand.Slug + ` ctl rest SESSION|--idle           end an idle session's agent to free
+                                         memory, keeping its card and its
+                                         conversation; --idle rests every one
+                                         that may rest, the longest idle first
+  ` + brand.Slug + ` ctl wake SESSION                  start a resting session's agent again;
+                                         showing it or a message does too
   ` + brand.Slug + ` ctl boost SESSION [REASON...]     give a session's process tree the
                                          machine first, the others' in the
                                          background; its card stays where it
@@ -90,6 +97,57 @@ func ctlFreeze(args []string, on bool) error {
 		thawed := slices.Contains(r.Sessions, s.ID) || slices.Contains(r.Queued, s.ID) ||
 			len(r.Sessions) == 0 && len(r.Queued) == 0 && (s.ID == fs.Arg(0) || strings.EqualFold(s.Name, fs.Arg(0)))
 		if c := s.Cold; c != nil && s.Frozen != nil && thawed {
+			fmt.Fprintf(os.Stderr, "%s: its prompt cache has run out, so its next turn writes %s tokens into it again, ~%s\n",
+				s.Name, rebuild.Tokens(c.Tokens), rebuild.Dollars(c.USD))
+		}
+	}
+	return nil
+}
+
+// ctlRest is `irie ctl rest` and `irie ctl wake` (DESIGN §4.3): a rest
+// ends an idle session's agent and keeps its card; a wake starts it again,
+// carrying its conversation on.
+func ctlRest(args []string, rest bool) error {
+	name, op := "wake", ipc.OpWake
+	if rest {
+		name, op = "rest", ipc.OpRest
+	}
+	fs := flag.NewFlagSet("ctl "+name, flag.ContinueOnError)
+	idle := new(bool)
+	if rest {
+		fs.BoolVar(idle, "idle", false, "every session that may rest now, the longest idle first")
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *idle == (fs.NArg() == 1) || fs.NArg() > 1 {
+		if rest {
+			return errors.New("usage: " + brand.Slug + " ctl rest SESSION|--idle")
+		}
+		return errors.New("usage: " + brand.Slug + " ctl wake SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	// What waking it costs, when its prompt cache has run out.
+	var before ipc.ListResult
+	if !rest {
+		ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &before)
+	}
+	var r ipc.RestResult
+	if err := ipc.Call(sock, 2*time.Minute, op, ipc.RestArgs{Session: fs.Arg(0), Idle: *idle}, &r); err != nil {
+		return err
+	}
+	fmt.Println(strings.Join(r.Sessions, "\n"))
+	if rest && r.Freed > 0 {
+		fmt.Fprintf(os.Stderr, "their agents took %s, which is free once they have ended\n", localmodel.Bytes(r.Freed))
+	}
+	if rest && len(r.Sessions) == 0 && *idle {
+		fmt.Fprintln(os.Stderr, "no session may rest now: those left are at work, in your focus or wait on you")
+	}
+	for _, s := range before.Sessions {
+		if c := s.Cold; c != nil && slices.Contains(r.Sessions, s.ID) {
 			fmt.Fprintf(os.Stderr, "%s: its prompt cache has run out, so its next turn writes %s tokens into it again, ~%s\n",
 				s.Name, rebuild.Tokens(c.Tokens), rebuild.Dollars(c.USD))
 		}
