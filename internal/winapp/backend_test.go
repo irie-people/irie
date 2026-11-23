@@ -354,6 +354,40 @@ func TestAnOldIrieInsideLinuxAsksForTheUpdate(t *testing.T) {
 	p.await(t, "the update running", is("setup", "fixing", "install"))
 }
 
+// TestABridgeThatEndsSaysWhatItWroteLast: a bridge that ends with no hello
+// leaves the window its last words, the reason and the lines before it,
+// for Try again, Repair and Copy details.
+func TestABridgeThatEndsSaysWhatItWroteLast(t *testing.T) {
+	m := &machine{state: ready()}
+	m.bridge = func() (Process, error) {
+		r, w := io.Pipe()
+		w.Close()
+		ex := make(chan struct{})
+		close(ex)
+		return &proc{r: r, w: io.Discard, exited: ex, code: 1, stderr: "first\r\nsecond\nirie: up.lock: busy\n"}, nil
+	}
+	p := newPage()
+	b := New(p, m)
+	hello(b)
+	l := p.await(t, "the link down", is("link", "state", LinkDown))
+	if l["text"] != "irie: up.lock: busy" || l["detail"] != "first\nsecond\nirie: up.lock: busy" {
+		t.Fatalf("link = %v", l)
+	}
+	// Its repair is the install step, though the plan has none.
+	b.Receive([]byte(`{"q":"fix","step":"install"}`))
+	p.await(t, "the repair running", is("setup", "fixing", "install"))
+}
+
+func TestLastLinesKeepsTheEndAndCutsLongLines(t *testing.T) {
+	long := strings.Repeat("x", 400)
+	if got := lastLines("a\nb\nc\n", 2); got != "b\nc" {
+		t.Errorf("lastLines = %q", got)
+	}
+	if got := lastLines(long, 3); got != strings.Repeat("x", 300)+"…" {
+		t.Errorf("lastLines of a long line = %d runes", len([]rune(got)))
+	}
+}
+
 func TestPumpBatchesABurst(t *testing.T) {
 	r, w := io.Pipe()
 	var got [][]byte
