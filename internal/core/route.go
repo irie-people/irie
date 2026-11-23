@@ -11,7 +11,6 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -30,7 +29,6 @@ import (
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/route"
-	"github.com/irie-people/irie/internal/statusline"
 )
 
 // settle is how long after its first turn ended a session counts as a
@@ -67,7 +65,7 @@ type outcome struct {
 	escalated  bool
 	failedOver bool
 	waited     time.Duration // the wait a delegation ran past, when it did
-	cost       *float64      // from status.json, for a session that is gone
+	cost       *float64      // what a session that is gone cost, from its ledger (ledger.go)
 }
 
 func (o *outcome) apply(e event.Event) {
@@ -147,7 +145,7 @@ func (c *Core) outcome(id string) *outcome {
 }
 
 // loadOutcomes folds the journal into every session's outcome, those gone
-// included, and reads what a gone session cost from its status.json.
+// included, and reads what a gone session cost from its ledger.
 func (c *Core) loadOutcomes() {
 	evs, err := journal.Read(c.paths.Journal(), time.Time{})
 	if err != nil {
@@ -164,12 +162,8 @@ func (c *Core) loadOutcomes() {
 		}
 	}
 	for id, o := range c.outcomes {
-		if o.class == "" {
-			continue
-		}
-		var u statusline.Usage
-		if b, err := os.ReadFile(c.paths.StatusFile(id)); err == nil && json.Unmarshal(b, &u) == nil {
-			o.cost = u.CostUSD
+		if o.class != "" {
+			o.cost = c.goneCost(id)
 		}
 	}
 }
@@ -188,11 +182,7 @@ func (c *Core) stats(now time.Time) route.Stats {
 		}
 		cost := o.cost
 		if x := c.sessions[id]; x != nil {
-			if x.local {
-				cost = nil
-			} else if x.usage.CostUSD != nil {
-				cost = x.usage.CostUSD
-			}
+			cost = x.costUSD()
 		}
 		s.Add(o.profile, o.class, good, cost)
 	}

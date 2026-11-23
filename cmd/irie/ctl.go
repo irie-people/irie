@@ -70,7 +70,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          own in the last day. A jot you close is
                                          done, listed only for a week after, when
                                          you closed it with commits not landed
-` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + costsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -223,6 +223,8 @@ func ctl(args []string) error {
 		return ctlDog(args[1:])
 	case "rebuilds":
 		return ctlRebuilds(args[1:])
+	case "costs":
+		return ctlCosts(args[1:])
 	case "materialize":
 		return ctlMaterialize(args[1:])
 	case "zen":

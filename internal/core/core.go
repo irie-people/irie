@@ -165,6 +165,7 @@ type Core struct {
 	lastThaw   time.Time             // when Irie last thawed a session, which a thaw in turn waits thawGap after: the trod bot's and a thaw of several (freeze.go)
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
+	own        ownCalls              // Irie's own calls to models, which ledger.jsonl keeps (ledger.go); its own lock
 	locks      lockState             // what the agent locks' checks found (locks.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
@@ -395,6 +396,7 @@ func Run(o Options) error {
 	c.loadClosed()
 	c.loadDrops()
 	c.loadMeter(time.Now())
+	c.loadLedger(time.Now())
 	c.loadLocks()
 	c.loadState()
 	c.loadTrodHand()
@@ -447,6 +449,7 @@ func Run(o Options) error {
 	go c.ctxSweep()
 	go c.leftoverSweep()
 	go c.lockSweep()
+	go c.ledgerSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -657,7 +660,7 @@ func (c *Core) sync(s tmux.Snapshot) {
 // does for every session, and replays the session's journal into its state.
 func (c *Core) adopt(p tmux.Pane) *session {
 	created, _ := time.Parse(time.RFC3339Nano, p.Created)
-	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession)}
+	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession), tally: tokenTally{since: created}}
 	if x.name == "" {
 		x.name = x.id
 	}
@@ -951,7 +954,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpCosts, ipc.OpNotepad,
 			ipc.OpLock, ipc.OpMaterialize, ipc.FeatureExplain, ipc.OpZen,
 			ipc.OpWorktrees,
 			ipc.OpObsidian,
@@ -1052,6 +1055,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return c.dogList()
 	case ipc.OpRebuilds:
 		return c.rebuildsOp(), nil
+	case ipc.OpCosts:
+		return c.costsOp(), nil
 	case ipc.OpChain:
 		var a ipc.ChainArgs
 		if err := decode(raw, &a); err != nil {

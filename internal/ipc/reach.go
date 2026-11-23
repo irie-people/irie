@@ -35,7 +35,7 @@ var reaches = map[string]Reach{
 	// What only reads.
 	OpHello: ReachRead, OpList: ReachRead, OpSubscribe: ReachRead, OpComplete: ReachRead,
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
-	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
+	OpRebuilds: ReachRead, OpCosts: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
 	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
 	OpObsidian: ReachRead, OpFind: ReachRead,
 	// What of the work of the sessions a close would close has not landed.
