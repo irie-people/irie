@@ -336,3 +336,24 @@ func TestARestoreBringsBackRestingWhatWasNotAtWork(t *testing.T) {
 	c.freeze(frozen.ID, false)
 	testutil.Eventually(t, 10*time.Second, "the thaw did not wake it", func() bool { return len(c.runs(frozen.ID)) == 2 })
 }
+
+func TestANewSessionWaitsWhileTheDiskIsUnderItsFloor(t *testing.T) {
+	c := prepare(t, agentConfig{readyTimeout: "1s"})
+	// 18 GiB of RAM, 8 GiB free on the disk and swap in use: under the
+	// 10 GiB floor, as on 2026-11-23.
+	t.Setenv(FakeRoomEnv, "18/8/1")
+	c.up()
+	var r ipc.SpawnResult
+	err := c.call(ipc.OpSpawn, ipc.SpawnArgs{Task: "prompt,stop"}, &r)
+	if code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), "of the disk is free, under the 10.7 GB floor") {
+		t.Fatalf("spawn below the floor: %v", err)
+	}
+	if ls := c.list(); len(ls) != 0 {
+		t.Errorf("rows %+v", ls)
+	}
+	// Force starts it all the same.
+	if err := c.call(ipc.OpSpawn, ipc.SpawnArgs{Task: "prompt,stop", Force: true}, &r); err != nil {
+		t.Fatal(err)
+	}
+	c.waitState(r.Session.ID, ipc.StateDone)
+}

@@ -174,6 +174,11 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	if a.Cwd != "" && a.Repo != "" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "a task runs in a cwd or in a repo, not both")
 	}
+	// Below the disk's floor the swap may not grow, so a new agent waits
+	// until there is room (DESIGN §2.9); force starts it all the same.
+	if why := c.roomNow().HeavyWaits(); why != "" && !a.Force {
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBusy, "not started: %s", why)
+	}
 	profileName := a.Profile
 	if profileName == "" {
 		profileName = c.cfg().Spawn.DefaultProfile
