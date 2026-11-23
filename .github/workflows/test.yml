@@ -62,8 +62,8 @@ jobs:
   # Irie for Windows (cmd/windows-app) and the wrapper (cmd/windows, docs/WINDOWS.md) on Windows
   # itself: their checks, then site/install.ps1 from a local mirror of the downloads, irie.exe's
   # own look at the machine, and the app's window drawn into PNGs against a stand-in for Irie in
-  # Linux (tools/winpreview -bridge), which the run keeps. GitHub's Windows has no WSL 2 to run
-  # Irie in, so the look says what is missing and changes nothing.
+  # Linux (tools/winpreview -bridge), which the run keeps. Its windows-latest has no WSL 2 to run
+  # Irie in, so the look says what is missing and changes nothing; windows-wsl runs it in WSL 2.
   windows:
     runs-on: windows-latest
     timeout-minutes: 25
@@ -149,4 +149,101 @@ jobs:
         with:
           name: irie-for-windows-snapshots
           path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+  # Irie for Windows on a real WSL 2, as on a person's computer: Ubuntu from wsl --install with a
+  # user of its own, Irie put in it by site/install.sh from this checkout's build, then
+  # Irie.exe --snapshot with nothing standing in, from a cold start of Linux. It must start the
+  # core through irie bridge and draw the window. windows-2025's runners run WSL 2. The run keeps
+  # the pictures; the step prints app.log and the core's log.
+  windows-wsl:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    env:
+      WSL_UTF8: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Ubuntu in WSL 2, with a user of its own
+        run: |
+          # Linux runs a script in Ubuntu, sent as base64 so that no quoting goes through wsl.exe.
+          @'
+          function Linux([string]$script, [string]$user = '') {
+            $b = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($script -replace "`r", '')))
+            $as = @(); if ($user) { $as = '-u', $user }
+            wsl.exe -d Ubuntu @as --cd ~ -e sh -c "echo $b | base64 -d | sh -l"
+          }
+          '@ | Set-Content "$env:RUNNER_TEMP\linux.ps1"
+          . "$env:RUNNER_TEMP\linux.ps1"
+          wsl.exe --version
+          wsl.exe --install -d Ubuntu --no-launch --web-download
+          if ($LASTEXITCODE -ne 0) { throw "wsl --install exited $LASTEXITCODE" }
+          # As Ubuntu's first start makes one: uid 1000 with sudo, here with no password to type.
+          Linux -user root @'
+          set -eu
+          name=$(getent passwd 1000 | cut -d: -f1)
+          if [ -z "$name" ]; then name=alice; useradd -m -s /bin/bash -u 1000 -G sudo "$name"; fi
+          echo "$name ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-"$name"
+          printf '\n[user]\ndefault=%s\n' "$name" >> /etc/wsl.conf
+          head -2 /etc/os-release
+          if command -v tmux >/dev/null; then tmux -V; else echo 'no tmux'; fi
+          '@
+          if ($LASTEXITCODE -ne 0) { throw "making Ubuntu's user failed" }
+          wsl.exe --terminate Ubuntu
+          wsl.exe -l -v
+          Linux 'id; echo "PATH=$PATH"; echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"; ps -p 1 -o comm='
+      - name: Irie in Ubuntu, from site/install.sh and this checkout's build
+        run: |
+          . "$env:RUNNER_TEMP\linux.ps1"
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          New-Item -ItemType Directory -Force $dist | Out-Null
+          $env:CGO_ENABLED = '0'; $env:GOOS = 'linux'; $env:GOARCH = 'amd64'
+          go build -trimpath -o "$dist\irie" ./cmd/irie
+          if ($LASTEXITCODE -ne 0) { throw 'go build of irie for Linux failed' }
+          Remove-Item Env:GOOS, Env:GOARCH
+          Copy-Item LICENSE "$dist\LICENSE"
+          $d = (wsl.exe -d Ubuntu -e wslpath -a $dist).Trim()
+          $sh = (wsl.exe -d Ubuntu -e wslpath -a (Resolve-Path site\install.sh).Path).Trim()
+          # The tarball is made in Linux, where irie keeps its executable bit, as tools/release.sh makes it.
+          $script = @'
+          set -e
+          t=$(mktemp -d); cp 'DIST/irie' 'DIST/LICENSE' "$t"; chmod +x "$t/irie"
+          tar -czf 'DIST/irie-linux-amd64.tar.gz' -C "$t" irie LICENSE
+          cd 'DIST' && sha256sum irie-linux-amd64.tar.gz > SHA256SUMS && cd
+          IRIE_DOWNLOADS='file://DIST' IRIE_NO_SETUP=1 sh 'SITE' </dev/null
+          ~/.local/bin/irie version </dev/null
+          ~/.local/bin/irie setup --check </dev/null || true
+          '@
+          Linux $script.Replace('DIST', $d).Replace('SITE', $sh)
+          if ($LASTEXITCODE -ne 0) { throw 'install.sh failed' }
+      - name: Irie.exe, from a cold start of Linux
+        run: |
+          . "$env:RUNNER_TEMP\linux.ps1"
+          # A console build, so a panic as it starts shows here.
+          go build -o "$env:RUNNER_TEMP\Irie.exe" ./cmd/windows-app
+          if ($LASTEXITCODE -ne 0) { throw 'go build of the app failed' }
+          wsl.exe --shutdown
+          $shots = Join-Path $env:RUNNER_TEMP 'wsl-shots'
+          $start = Get-Date
+          & "$env:RUNNER_TEMP\Irie.exe" --snapshot $shots
+          $code = $LASTEXITCODE
+          "Irie.exe --snapshot exited $code after $([int]((Get-Date) - $start).TotalSeconds) s"
+          Get-Content (Join-Path $env:LOCALAPPDATA 'irie\app.log')
+          Linux @'
+          for f in ~/.local/state/irie/*.log; do echo "--- $f"; tail -n 80 "$f"; done
+          echo '--- tmux'; tmux -L irie list-panes -a -F '#{session_name}:#{window_name} #{pane_dead} #{pane_current_command}' 2>&1
+          echo '--- processes'; ps -eo pid,etime,args | grep -v ' \[' | head -40
+          '@
+          if ($code -ne 0) { throw "Irie.exe --snapshot exited $code" }
+          $png = Join-Path $shots 'window.png'
+          if (-not (Test-Path $png) -or (Get-Item $png).Length -lt 20000) { throw 'window.png is missing or blank' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: irie-for-windows-on-wsl
+          path: ${{ runner.temp }}/wsl-shots
           if-no-files-found: ignore
