@@ -1,3 +1,4 @@
+#if !NOJAMMIN
 import AppKit
 import SwiftUI
 
@@ -1012,3 +1013,4 @@ enum JamminLogo {
         Bundle.main.url(forResource: name, withExtension: "png").flatMap { NSImage(contentsOf: $0) }
     }
 }
+#endif

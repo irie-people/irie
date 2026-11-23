@@ -162,14 +162,20 @@ struct PluginPaneContent: View {
             PluginWebPane(pane: pane)
         // A pane of a part of Irie's own draws its own view here, by its
         // kind, as the Writing plugin's Variorum tab will.
+        #if !NOYOINK
         case "yoink":
             YoinkTab()
+        #endif
         case "chat":
             ChatTab()
+        #if !NOFOUNDING
         case "founding":
             FoundingTab()
+        #endif
+        #if !NOJAMMIN
         case "jammin":
             JamminTab()
+        #endif
         default:
             SideNote(title: pane.title, text: "This app can't draw a \(pane.kind) pane yet: it comes with a newer build of \(Brand.name).")
         }

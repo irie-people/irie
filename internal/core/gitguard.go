@@ -16,7 +16,7 @@ import (
 // prompt when Mikael asks them first: what the call changes, and why it is
 // theirs to say.
 func gitAskNote(what string) string {
-	return "[" + brand.Name + "] Mikael asks you first: this " + what + ". Your own git runs that as you, outside any sandbox, from your terminal, its prompt and your git apps. Allow it only if you asked for it."
+	return "[" + brand.Name + "] " + brand.Mikael + " asks you first: this " + what + ". Your own git runs that as you, outside any sandbox, from your terminal, its prompt and your git apps. Allow it only if you asked for it."
 }
 
 // gitGuard says what to ask the user before a call an agent is about to

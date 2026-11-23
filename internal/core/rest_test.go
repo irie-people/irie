@@ -162,8 +162,16 @@ func TestARestingFrozenSessionWakesOnlyAtItsThaw(t *testing.T) {
 	if row.Frozen == nil || !strings.HasPrefix(row.Detail, "Frozen and resting") {
 		t.Errorf("row %+v", row)
 	}
-	// A frozen agent ends too: it is continued, then sent SIGTERM.
+	// A frozen agent ends too, gently: it is continued, then sent SIGTERM,
+	// and nothing stops it again on the way out.
 	testutil.Eventually(t, 10*time.Second, "the frozen agent did not end", func() bool { return c.paneDead(a.Pane) })
+	exited := false
+	for _, l := range c.agentLog(a.ID) {
+		exited = exited || l["t"] == "exit"
+	}
+	if !exited || !slices.Contains(c.signals(a.ID), "terminated") {
+		t.Errorf("the frozen agent did not end at its SIGTERM: %v", c.agentLog(a.ID))
+	}
 	// Opening it, or a message, leaves it be: it waits for its thaw.
 	c.show(a.ID, false)
 	if err := c.call(ipc.OpSend, ipc.SendArgs{Session: a.ID, Text: "hello"}, nil); code(err) != ipc.CodeBusy {
@@ -196,6 +204,11 @@ func TestOnlyAnIdleSessionWithAConversationRests(t *testing.T) {
 	}
 	if _, err := c.rest(ipc.RestArgs{Session: asks.ID}); code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), "waits on you") {
 		t.Errorf("rest of a session that waits on you: %v", err)
+	}
+	// Work of its own in the background would end with its agent.
+	bg := c.idle("prompt,stop:bg")
+	if _, err := c.rest(ipc.RestArgs{Session: bg.ID}); code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), "background") {
+		t.Errorf("rest of a session with work in the background: %v", err)
 	}
 	// You may rest a finished turn you have not looked at; Raffi leaves it.
 	r, err := c.rest(ipc.RestArgs{Idle: true})
@@ -246,21 +259,24 @@ func TestRestShortStartsAtTheWarningAndStopsWithRoomToSpare(t *testing.T) {
 		name     string
 		m        localmodel.Machine
 		pressure int
+		warned   time.Duration
 		room     sysload.Room
 		was      bool
 		short    bool
 		atOnce   int
 	}{
-		{"room to spare", m(9), sysload.PressureNormal, disk, false, false, 0},
-		{"under restBelow", m(2), sysload.PressureNormal, disk, false, true, restAtOnce},
-		{"the kernel's warning", m(9), sysload.PressureWarn, disk, false, true, restAtOnce},
-		{"critical", m(9), sysload.PressureCritical, disk, false, true, restAtOnceDire},
-		{"short until restUntil", m(4), sysload.PressureNormal, disk, true, true, restAtOnce},
-		{"not short past restUntil", m(5), sysload.PressureNormal, disk, true, false, 0},
-		{"swap with no room to grow", m(9), sysload.PressureNormal, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib, SwapUsed: gib}, false, true, restAtOnceDire},
-		{"a full disk without swap", m(9), sysload.PressureNormal, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib}, false, false, 0},
+		{"room to spare", m(9), sysload.PressureNormal, 0, disk, false, false, 0},
+		{"under restBelow", m(2), sysload.PressureNormal, 0, disk, false, true, restAtOnce},
+		{"a warning that passes, as a build raises", m(9), sysload.PressureWarn, 5 * time.Second, disk, false, false, 0},
+		{"the kernel's warning that lasts", m(9), sysload.PressureWarn, restWarnFor, disk, false, true, restAtOnce},
+		{"the warning while short", m(9), sysload.PressureWarn, 0, disk, true, true, restAtOnce},
+		{"critical", m(9), sysload.PressureCritical, 0, disk, false, true, restAtOnceDire},
+		{"short until restUntil", m(4), sysload.PressureNormal, 0, disk, true, true, restAtOnce},
+		{"not short past restUntil", m(5), sysload.PressureNormal, 0, disk, true, false, 0},
+		{"swap with no room to grow", m(9), sysload.PressureNormal, 0, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib, SwapUsed: gib}, false, true, restAtOnceDire},
+		{"a full disk without swap", m(9), sysload.PressureNormal, 0, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib}, false, false, 0},
 	} {
-		short, atOnce := restShort(c.m, c.pressure, c.room, c.was)
+		short, atOnce := restShort(c.m, c.pressure, c.warned, c.room, c.was)
 		if short != c.short || atOnce != c.atOnce {
 			t.Errorf("%s: short %v, %d at once; want %v, %d", c.name, short, atOnce, c.short, c.atOnce)
 		}
@@ -335,4 +351,25 @@ func TestARestoreBringsBackRestingWhatWasNotAtWork(t *testing.T) {
 	}
 	c.freeze(frozen.ID, false)
 	testutil.Eventually(t, 10*time.Second, "the thaw did not wake it", func() bool { return len(c.runs(frozen.ID)) == 2 })
+}
+
+func TestANewSessionWaitsWhileTheDiskIsUnderItsFloor(t *testing.T) {
+	c := prepare(t, agentConfig{readyTimeout: "1s"})
+	// 18 GiB of RAM, 8 GiB free on the disk and swap in use: under the
+	// 10 GiB floor, as on 2026-11-23.
+	t.Setenv(FakeRoomEnv, "18/8/1")
+	c.up()
+	var r ipc.SpawnResult
+	err := c.call(ipc.OpSpawn, ipc.SpawnArgs{Task: "prompt,stop"}, &r)
+	if code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), "of the disk is free, under the 10.7 GB floor") {
+		t.Fatalf("spawn below the floor: %v", err)
+	}
+	if ls := c.list(); len(ls) != 0 {
+		t.Errorf("rows %+v", ls)
+	}
+	// Force starts it all the same.
+	if err := c.call(ipc.OpSpawn, ipc.SpawnArgs{Task: "prompt,stop", Force: true}, &r); err != nil {
+		t.Fatal(err)
+	}
+	c.waitState(r.Session.ID, ipc.StateDone)
 }

@@ -15,8 +15,9 @@ import (
 )
 
 // Version is the way the ledger prices calls. A session's totals written
-// another way are priced again from its transcripts.
-const Version = 1
+// another way are priced again from its transcripts. Version 2 leaves out
+// Claude Code's own replies, and prices fallbacks and refusals as billed.
+const Version = 2
 
 // Row is one of a Sum's tallies as a file keeps it.
 type Row struct {

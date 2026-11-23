@@ -76,7 +76,7 @@ func memoryFinding(m Memory, ps []Proc, o Owner) Finding {
 		}
 		f.Evidence = []string{"Taking the most: " + strings.Join(what, ", ") + "."}
 	}
-	f.Advice = "Quit the apps you don't need now, and run fewer sessions at once. Gabriel's boost frees the memory of idle local models."
+	f.Advice = "Quit the apps you don't need now, and run fewer sessions at once. " + brand.Gabriel + "'s boost frees the memory of idle local models."
 	return f
 }
 

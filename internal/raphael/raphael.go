@@ -1,12 +1,13 @@
 // Package raphael is Raphael's health check (DESIGN §4.11): he looks over
 // the computer Irie runs on and says, in plain words with advice, what
-// slows it down, fills it up or may have got in. He finds processes that
-// run hot for a long time, memory hogs and swap, a disk nearly full and the
-// biggest caches that are safe to clear, login items that are unsigned, not
-// notarized or look like known kinds of suspicious persistence, the state
-// of macOS's own protections, and macOS's own alerts: the ones that stay
-// until they are closed, the background items and access it asked about
-// lately, and why it asks again.
+// slows it down, fills it up or may have got in. He finds what agents left
+// running, processes that run hot for a long time, memory hogs and swap, a
+// disk nearly full and the biggest caches that are safe to clear, login
+// items that are unsigned, not notarized or look like known kinds of
+// suspicious persistence, the state of macOS's own protections, and
+// macOS's own alerts: the ones that stay until they are closed, the
+// background items and access it asked about lately, and why it asks
+// again.
 //
 // He only looks. A Finding may carry a Fix, which shows first what it will
 // run; the core runs one only on the person's OK, one at a time (Do). He
@@ -76,12 +77,13 @@ type Fix struct {
 	About string   `json:"about"`          // what it does and what it frees, in a line or two
 	Undo  string   `json:"undo,omitempty"` // how to undo it; "" when there is nothing to undo
 
-	kind  string // the fix's kind, one of the fix constants (fix.go)
-	path  string // the folder to put in the Trash, or the plist of a login item
-	pid   int    // the process to stop
-	start int64  // when it started, so that a pid used again is never touched
-	ident string // the launch agent's label, or the bundle id of the app whose cache it is
-	tool  string // the tool that clears its own cache, by its full path
+	kind  string    // the fix's kind, one of the fix constants (fix.go)
+	path  string    // the folder to put in the Trash, the plist of a login item, or the program of a process to stop
+	pid   int       // the process to stop
+	start int64     // when it started, so that a pid used again is never touched
+	tree  []procRef // what the process to stop ran when he looked, which goes after it
+	ident string    // the launch agent's label, or the bundle id of the app whose cache it is
+	tool  string    // the tool that clears its own cache, by its full path
 	busy  []string
 	names []string // the entries of path it acts on, such as old downloads (own.go)
 }
@@ -89,23 +91,31 @@ type Fix struct {
 // fixJSON is a Fix as the core keeps it between its runs (raphael.json),
 // with what it acts on: a later core checks it all again before it runs.
 type fixJSON struct {
-	Label string   `json:"label"`
-	Run   []string `json:"run"`
-	About string   `json:"about"`
-	Undo  string   `json:"undo,omitempty"`
-	Kind  string   `json:"kind"`
-	Path  string   `json:"path,omitempty"`
-	PID   int      `json:"pid,omitempty"`
-	Start int64    `json:"start,omitempty"`
-	Ident string   `json:"ident,omitempty"`
-	Tool  string   `json:"tool,omitempty"`
-	Busy  []string `json:"busy,omitempty"`
-	Names []string `json:"names,omitempty"`
+	Label string    `json:"label"`
+	Run   []string  `json:"run"`
+	About string    `json:"about"`
+	Undo  string    `json:"undo,omitempty"`
+	Kind  string    `json:"kind"`
+	Path  string    `json:"path,omitempty"`
+	PID   int       `json:"pid,omitempty"`
+	Start int64     `json:"start,omitempty"`
+	Ident string    `json:"ident,omitempty"`
+	Tool  string    `json:"tool,omitempty"`
+	Busy  []string  `json:"busy,omitempty"`
+	Tree  []procRef `json:"tree,omitempty"`
+	Names []string  `json:"names,omitempty"`
+}
+
+// procRef is a process by its pid and when it started, which tell it from
+// a later one that took its pid.
+type procRef struct {
+	PID   int   `json:"pid"`
+	Start int64 `json:"start"`
 }
 
 // MarshalJSON writes the fix with what it acts on.
 func (f Fix) MarshalJSON() ([]byte, error) {
-	return json.Marshal(fixJSON{Label: f.Label, Run: f.Run, About: f.About, Undo: f.Undo, Kind: f.kind, Path: f.path, PID: f.pid, Start: f.start, Ident: f.ident, Tool: f.tool, Busy: f.busy, Names: f.names})
+	return json.Marshal(fixJSON{Label: f.Label, Run: f.Run, About: f.About, Undo: f.Undo, Kind: f.kind, Path: f.path, PID: f.pid, Start: f.start, Ident: f.ident, Tool: f.tool, Busy: f.busy, Tree: f.tree, Names: f.names})
 }
 
 // UnmarshalJSON reads a fix MarshalJSON wrote.
@@ -114,7 +124,7 @@ func (f *Fix) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &j); err != nil {
 		return err
 	}
-	*f = Fix{Label: j.Label, Run: j.Run, About: j.About, Undo: j.Undo, kind: j.Kind, path: j.Path, pid: j.PID, start: j.Start, ident: j.Ident, tool: j.Tool, busy: j.Busy, names: j.Names}
+	*f = Fix{Label: j.Label, Run: j.Run, About: j.About, Undo: j.Undo, kind: j.Kind, path: j.Path, pid: j.PID, start: j.Start, ident: j.Ident, tool: j.Tool, busy: j.Busy, tree: j.Tree, names: j.Names}
 	return nil
 }
 

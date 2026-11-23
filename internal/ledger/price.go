@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -74,6 +75,31 @@ var searchPrices = []struct {
 	USD  float64
 }{
 	{USD: 10.0 / 1000},
+}
+
+// billedRefusals are the refusal categories whose refusals are billed even
+// before any output, by the day that took effect: those where Anthropic
+// measures few false positives, as of September 2026. Any other category,
+// or none, costs nothing before output; a refusal mid-stream bills its
+// input and the output already streamed.
+var billedRefusals = []struct {
+	From       time.Time
+	Categories []string
+}{
+	{Categories: []string{"bio", "frontier_llm", "reasoning_extraction"}},
+}
+
+// RefusalBilled reports whether a refusal of category, before any output,
+// was billed at at.
+func RefusalBilled(category string, at time.Time) bool {
+	var cats []string
+	from, found := time.Time{}, false
+	for _, b := range billedRefusals {
+		if !b.From.After(at) && (!found || b.From.After(from)) {
+			cats, from, found = b.Categories, b.From, true
+		}
+	}
+	return slices.Contains(cats, category)
 }
 
 // At is model's list prices for a request whose prompt is prompt tokens

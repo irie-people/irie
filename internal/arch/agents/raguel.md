@@ -1,5 +1,6 @@
 ---
 name: raguel
+called: Raguel
 nickname: Ragu
 icon: 🤝
 rank: 5

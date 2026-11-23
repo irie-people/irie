@@ -3,6 +3,7 @@ package raphael
 import (
 	"context"
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -148,7 +149,7 @@ func weighJob(ctx context.Context, r Runner, in startupInput, d launchDir, path 
 		if errorsIsPermission(err) {
 			// A daemon's plist only an administrator can read: odd, but
 			// some good apps install theirs so.
-			f.Level, f.Text = Note, fmt.Sprintf("%s is a launch daemon only an administrator can read, so Raffi can't tell what it starts.", tildePath(path, in.Home))
+			f.Level, f.Text = Note, fmt.Sprintf("%s is a launch daemon only an administrator can read, so "+brand.Raffi+" can't tell what it starts.", tildePath(path, in.Home))
 			f.Advice = "Its name says whose it may be. If you don't know it, ask whoever looks after your Mac."
 			f.Key = strings.TrimSuffix(base, ".plist")
 			return f, knownTo(in.Known, f.Key, path, "")
@@ -205,7 +206,7 @@ func weighJob(ctx context.Context, r Runner, in startupInput, d launchDir, path 
 		f.Evidence = append(f.Evidence, s.text)
 	}
 	if d.user {
-		f.Advice = "If you know it, mark it as yours and Raffi no longer flags it. If you don't, Raffi can turn it off: nothing is deleted, and it can be turned back on."
+		f.Advice = "If you know it, mark it as yours and " + brand.Raffi + " no longer flags it. If you don't, " + brand.Raffi + " can turn it off: nothing is deleted, and it can be turned back on."
 		f.Fix = launchOffFix(j, in)
 	} else {
 		f.Advice = "If you know it, mark it as yours. If you don't, ask whoever looks after your Mac: turning it off needs an administrator. System Settings > General > Login Items lists it too."

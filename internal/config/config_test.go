@@ -107,7 +107,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30, Close: true}); c.Bench != want {
 		t.Errorf("bench = %+v, want %+v", c.Bench, want)
 	}
-	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
+	if want := (Local{Here: true, Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
 	if want := (Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4}); c.Usage != want {
@@ -157,7 +157,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
-	if want := (Learn{Tutor: "off", Visual: true, Pictures: "agent", Library: "~/Documents/Irie/Explained", AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
+	if want := (Learn{Tutor: "off", Visual: true, Pictures: "agent", Library: "~/Documents/" + brand.Name + "/Explained", AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
 		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
 	if err := c.Validate(); err != nil {
@@ -228,6 +228,7 @@ model = "qwen3.5:4b"
 local = { runtime = "ollama", min_context = 32768, enforce = false }
 
 [local]
+here = false
 ollama = "/home/alice/bin/ollama"
 port = 11500
 context = 131072
@@ -906,7 +907,7 @@ func TestArchValidation(t *testing.T) {
 	}
 	c, err := Load(writeFile(t, "[profiles.mikael-sonnet]\nmodel = \"claude-sonnet-5-5\"\narch = \"mikael\"\n"))
 	if err != nil || c.Profiles["mikael-sonnet"].Arch != "mikael" {
-		t.Errorf("a profile of the user's own that runs as Mikael: %+v, %v", c.Profiles["mikael-sonnet"], err)
+		t.Errorf("a profile of the user's own that runs as "+brand.Mikael+": %+v, %v", c.Profiles["mikael-sonnet"], err)
 	}
 }
 

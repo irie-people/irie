@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -233,13 +234,13 @@ func TestRaguelsArchRowListsTheWaitingPlans(t *testing.T) {
 			row = a
 		}
 	}
-	if row.Nickname != "Ragu" || row.Icon != "🤝" || !row.On || !strings.Contains(row.Status, "Last council 2026-11-21: 2 plans, 1 waiting for your word.") || !strings.Contains(row.Status, "He holds one when you ask.") {
+	if row.Nickname != brand.Ragu || row.Icon != "🤝" || !row.On || !strings.Contains(row.Status, "Last council 2026-11-21: 2 plans, 1 waiting for your word.") || !strings.Contains(row.Status, "He holds one when you ask.") {
 		t.Fatalf("row = %+v", row)
 	}
 	if len(row.Actions) != 1 || row.Actions[0].Label != "Hold a council now" || row.Actions[0].Op != ipc.OpCouncil || !strings.Contains(row.Actions[0].Ask, "Opus 5.5") || !strings.Contains(row.Actions[0].Ask, folder) || strings.Contains(string(row.Actions[0].Args), `"ok"`) {
 		t.Errorf("actions = %+v", row.Actions)
 	}
-	if len(row.Items) != 1 || row.Items[0].Text != "1. Fewer sleeps" || !strings.Contains(row.Items[0].Detail, "Gabriel 🪽") {
+	if len(row.Items) != 1 || row.Items[0].Text != "1. Fewer sleeps" || !strings.Contains(row.Items[0].Detail, brand.Gabriel+" 🪽") {
 		t.Fatalf("items = %+v", row.Items)
 	}
 	acts := row.Items[0].Actions
@@ -287,7 +288,7 @@ func TestAYesStartsThePlansBriefAsAJot(t *testing.T) {
 		t.Fatalf("jots = %+v", r.Jots)
 	}
 	task, err := os.ReadFile(c.paths.TaskFile(r.Jots[0].Session))
-	if err != nil || !strings.HasPrefix(string(task), "Write tools/wait.sh, and check it.") || !strings.Contains(string(task), `plan 1 of Raguel's council of 2026-11-21, "Fewer sleeps"`) {
+	if err != nil || !strings.HasPrefix(string(task), "Write tools/wait.sh, and check it.") || !strings.Contains(string(task), `plan 1 of `+brand.Raguel+`'s council of 2026-11-21, "Fewer sleeps"`) {
 		t.Errorf("task.md = %q, %v", task, err)
 	}
 	if r.Latest == nil || r.Latest.Plans[0].Said != council.Yes || r.Latest.Plans[0].Jot != r.Jots[0].Session {

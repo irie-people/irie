@@ -479,7 +479,8 @@ type ArchResult struct {
 
 // ArchAgent is one arch agent as a client shows him.
 type ArchAgent struct {
-	Name     string        `json:"name"`               // such as gabriel
+	Name     string        `json:"name"`               // such as gabriel: its key, the same in every copy
+	Called   string        `json:"called,omitempty"`   // its name as a person reads it, such as Gabriel; a copy's own
 	Nickname string        `json:"nickname,omitempty"` // what people may call him for short, such as Raffi
 	Icon     string        `json:"icon,omitempty"`     // his mark, one or two emoji
 	Title    string        `json:"title"`              // his work in a few words

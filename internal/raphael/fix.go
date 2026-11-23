@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +21,7 @@ const (
 	fixTool      = "tool"      // a tool clears its own cache: go clean -cache, brew cleanup
 	fixTrash     = "trash"     // a folder of caches goes to the Trash
 	fixStop      = "stop"      // a process is asked to stop
+	fixStopTree  = "stoptree"  // a process an agent left running is asked to stop, then what it runs (left.go)
 	fixLaunchOff = "launchoff" // a launch agent of the person's own is turned off
 	fixNCStyle   = "ncstyle"   // one of macOS's own senders shows its notices in another style (alerts.go)
 )
@@ -57,6 +61,8 @@ func Do(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 		return doTrash(ctx, r, f, in)
 	case fixStop:
 		return doStop(ctx, f)
+	case fixStopTree:
+		return doStopTree(ctx, f)
 	case fixLaunchOff:
 		return doLaunchOff(ctx, r, f, in)
 	case fixNCStyle:
@@ -119,7 +125,7 @@ func doTool(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 			break
 		}
 		if time.Now().After(end) {
-			return "", fmt.Errorf("%s is still at work (%s), so Raffi left its cache alone: try again once it is done", f.busy[0], who)
+			return "", fmt.Errorf("%s is still at work (%s), so "+brand.Raffi+" left its cache alone: try again once it is done", f.busy[0], who)
 		}
 		select {
 		case <-ctx.Done():
@@ -184,7 +190,7 @@ func busyWith(ps []Proc, tools []string) string {
 func doTrash(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	dir := cachesDir(in.Home)
 	if filepath.Dir(f.path) != dir {
-		return "", fmt.Errorf("%s is not in %s, so Raffi leaves it be", f.path, dir)
+		return "", fmt.Errorf("%s is not in %s, so "+brand.Raffi+" leaves it be", f.path, dir)
 	}
 	fi, err := os.Lstat(f.path)
 	switch {
@@ -193,7 +199,7 @@ func doTrash(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	case err != nil:
 		return "", err
 	case !fi.IsDir():
-		return "", fmt.Errorf("%s is no longer a folder, so Raffi leaves it be", tildePath(f.path, in.Home))
+		return "", fmt.Errorf("%s is no longer a folder, so "+brand.Raffi+" leaves it be", tildePath(f.path, in.Home))
 	}
 	ps, _ := Procs(ctx, r)
 	if appRunning(f.ident, appPath(ctx, r, f.ident), runningApps(ctx, r), ps) {
@@ -248,11 +254,108 @@ func doStop(ctx context.Context, f Fix) (string, error) {
 	return fmt.Sprintf("Asked %s (pid %d) to stop, but it still runs: it may be stuck. `kill -9 %d` makes it stop at once, losing what it was doing.", filepath.Base(f.path), f.pid, f.pid), nil
 }
 
+// stopGrace is how long doStopTree waits for what it asked to stop to go,
+// the root and then what it ran.
+var stopGrace = 5 * time.Second
+
+// doStopTree stops a process an agent left running, then what it runs: the
+// root first, so that a loop can't start its children again. What it runs
+// is read right before, while each still hangs under it, so that a child
+// it started again since goes too; each is asked to stop only while it is
+// the same process, by when it started. A root that still runs after
+// stopGrace may be stuck, and what it runs is left be.
+func doStopTree(ctx context.Context, f Fix) (string, error) {
+	t, err := readTable()
+	if err != nil {
+		return "", err
+	}
+	root := proc.Proc{PID: f.pid, Start: f.start}
+	if !t.Alive(root) {
+		return "", fmt.Errorf("%s (pid %d) is no longer running", f.path, f.pid)
+	}
+	kids := t.Tree(f.pid)
+	// What it ran when he looked and no longer hangs under it, as when a
+	// parent of it ended, goes too.
+	for _, r := range f.tree {
+		if p, ok := t.Get(r.PID); ok && p.Start == r.Start && !slices.ContainsFunc(kids, func(k proc.Proc) bool { return k.PID == r.PID }) {
+			kids = append(kids, p)
+		}
+	}
+	stopAll(t, []proc.Proc{root})
+	if left, err := waitStopped(ctx, []proc.Proc{root}); err != nil {
+		return "", err
+	} else if len(left) > 0 {
+		return fmt.Sprintf("Asked %s (pid %d) to stop, but it still runs: it may be stuck, so "+brand.Raffi+" left what it runs be. `kill -9 %d` makes it stop at once, losing what it was doing.", f.path, f.pid, f.pid), nil
+	}
+	if len(kids) == 0 {
+		return fmt.Sprintf("Stopped %s (pid %d).", f.path, f.pid), nil
+	}
+	t, err = readTable()
+	if err != nil {
+		return "", err
+	}
+	stopAll(t, kids)
+	left, err := waitStopped(ctx, kids)
+	if err != nil {
+		return "", err
+	}
+	ran := plural(len(kids), "the process it ran", "the %d processes it ran")
+	if len(left) == 0 {
+		return fmt.Sprintf("Stopped %s (pid %d) and %s.", f.path, f.pid, ran), nil
+	}
+	pids := make([]string, len(left))
+	for i, p := range left {
+		pids[i] = strconv.Itoa(p.PID)
+	}
+	return fmt.Sprintf("Stopped %s (pid %d), but %d of %s still %s: `kill -9 %s` makes %s stop at once.", f.path, f.pid, len(left), ran, plural(len(left), "runs", "run"), strings.Join(pids, " "), plural(len(left), "it", "them")), nil
+}
+
+// stopAll asks each of ps that is still the same process in t to stop, and
+// lets one that is stopped (ps's T) go on, so that it can.
+func stopAll(t proc.Table, ps []proc.Proc) {
+	for _, p := range ps {
+		q, ok := t.Get(p.PID)
+		if !ok || q.Start != p.Start || q.Zombie {
+			continue
+		}
+		signal(p.PID, syscall.SIGTERM)
+		if q.Stopped {
+			signal(p.PID, syscall.SIGCONT)
+		}
+	}
+}
+
+// waitStopped waits up to stopGrace for each of ps to go, and returns
+// those that still run.
+func waitStopped(ctx context.Context, ps []proc.Proc) ([]proc.Proc, error) {
+	deadline := time.Now().Add(stopGrace)
+	for {
+		t, err := readTable()
+		if err != nil {
+			return nil, err
+		}
+		var left []proc.Proc
+		for _, p := range ps {
+			if t.Alive(p) {
+				left = append(left, p)
+			}
+		}
+		if len(left) == 0 || time.Now().After(deadline) {
+			return left, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
 // doLaunchOff turns off a launch agent of the person's own: bootout stops
 // it now, disable keeps it from starting again. Its file stays.
 func doLaunchOff(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	if filepath.Dir(f.path) != filepath.Join(in.Home, "Library", "LaunchAgents") {
-		return "", fmt.Errorf("%s is not one of your own launch agents, so Raffi leaves it be", f.path)
+		return "", fmt.Errorf("%s is not one of your own launch agents, so "+brand.Raffi+" leaves it be", f.path)
 	}
 	target := fmt.Sprintf("gui/%d/%s", in.UID, f.ident)
 	// bootout fails for one that is not loaded, which is as good.

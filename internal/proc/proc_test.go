@@ -3,6 +3,7 @@ package proc
 import (
 	"encoding/binary"
 	"errors"
+	"github.com/irie-people/irie/internal/brand"
 	"os"
 	"os/exec"
 	"runtime"
@@ -239,7 +240,7 @@ func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 	// background and puts this child back there each second, so nothing
 	// here could show a difference.
 	if self, _ := exec.Command("ps", "-o", "pri=", "-p", strconv.Itoa(os.Getpid())).Output(); strings.TrimSpace(string(self)) == "4" {
-		t.Skip("the test runs in the background, as a session's processes do while another is promoted or Gabriel holds it back")
+		t.Skip("the test runs in the background, as a session's processes do while another is promoted or " + brand.Gabriel + " holds it back")
 	}
 	// Out of the background first: while a session is promoted, the others'
 	// processes, a test one of them runs too, start their children there.

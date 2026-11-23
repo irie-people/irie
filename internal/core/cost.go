@@ -41,6 +41,9 @@ const (
 // lists its models; Tab never waits for it.
 func (c *Core) tabModels() ([]ipc.LocalModel, string) {
 	o, own, err := c.ollama(false)
+	if errors.Is(err, localmodel.ErrOffHere) {
+		return nil, serverNone
+	}
 	if errors.Is(err, errLocalDown) {
 		if _, err := localmodel.FindOllama(c.cfg().Local.Ollama); err != nil {
 			return nil, serverNone

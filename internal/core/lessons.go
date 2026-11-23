@@ -218,7 +218,7 @@ func (c *Core) lessonsWord(peer int) error {
 	if !inAgent {
 		return nil
 	}
-	how := "with `" + brand.Slug + " ctl lessons keep N`, `no N` or `drop N` in their own terminal, or in Raffi's row of the Arch Agents tab"
+	how := "with `" + brand.Slug + " ctl lessons keep N`, `no N` or `drop N` in their own terminal, or in " + brand.Raffi + "'s row of the Arch Agents tab"
 	c.lessons.mu.Lock()
 	asked := c.lessons.book.Asked
 	c.lessons.mu.Unlock()
@@ -264,12 +264,12 @@ func (c *Core) draftLessons(days int, model string, journalOnly bool, asked stri
 	st.mu.Lock()
 	if st.drafting {
 		st.mu.Unlock()
-		return ipc.Errorf(ipc.CodeBusy, "A draft is under way: its lessons show in `%s ctl lessons` and Raffi's row when it is done.", brand.Slug)
+		return ipc.Errorf(ipc.CodeBusy, "A draft is under way: its lessons show in `%s ctl lessons` and "+brand.Raffi+"'s row when it is done.", brand.Slug)
 	}
 	st.drafting = true
 	kept := st.book.Texts()
 	st.mu.Unlock()
-	cfg := c.cfg()
+	servers := c.chatServers() // none while local models are off here (localhere.go)
 	go func() {
 		now := time.Now()
 		ev, err := lessons.Gather(c.paths.Journal(), now.Add(-time.Duration(days)*24*time.Hour), now, !journalOnly)
@@ -282,7 +282,7 @@ func (c *Core) draftLessons(days int, model string, journalOnly bool, asked stri
 		if err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), lessonsTimeout)
 			var m localmodel.ChatModel
-			if m, err = localmodel.FindChatModel(ctx, localmodel.ChatServers(cfg.Local.URL, cfg.Local.Port), model); err == nil {
+			if m, err = localmodel.FindChatModel(ctx, servers, model); err == nil {
 				by = m.Name
 				room := st.room
 				if room == nil {
@@ -380,7 +380,7 @@ func (c *Core) lessonsNow(n *archNow) {
 	} else {
 		draft, _ := json.Marshal(ipc.LessonsArgs{Do: ipc.LessonsDraft})
 		n.actions = append(n.actions, ipc.ArchAction{Label: "Draft lessons", Op: ipc.OpLessons, Args: draft, Ask: draftAsk(lessonsDays),
-			Done: "Raffi is drafting lessons: they show here when they are done."})
+			Done: brand.Raffi + " is drafting lessons: they show here when they are done."})
 	}
 	if b.Problem != "" && !r.Drafting {
 		n.items = append(n.items, ipc.ArchItem{Text: "The last draft of lessons brought none", Detail: b.Problem, Level: ipc.ArchWarn})
@@ -394,7 +394,7 @@ func (c *Core) lessonsNow(n *archNow) {
 			Level:  ipc.ArchNote,
 			Actions: []ipc.ArchAction{
 				{Label: "Keep", Op: ipc.OpLessons, Args: keep, Ask: keepAsk(b, []int{l.N}), Done: "Every session hears it from its next start."},
-				{Label: "No", Op: ipc.OpLessons, Args: no, Done: "Raffi lets it go."},
+				{Label: "No", Op: ipc.OpLessons, Args: no, Done: brand.Raffi + " lets it go."},
 			},
 		})
 	}

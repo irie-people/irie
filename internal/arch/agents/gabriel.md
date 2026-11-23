@@ -1,5 +1,6 @@
 ---
 name: gabriel
+called: Gabriel
 icon: 🪽
 rank: 2
 title: carries your focus to the machine

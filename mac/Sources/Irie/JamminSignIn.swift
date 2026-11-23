@@ -1,3 +1,4 @@
+#if !NOJAMMIN
 import AppKit
 import SwiftUI
 import WebKit
@@ -553,3 +554,4 @@ private struct JamminSignInFixturePage: View {
         .background(Color.white)
     }
 }
+#endif
