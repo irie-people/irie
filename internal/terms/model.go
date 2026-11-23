@@ -22,9 +22,16 @@ var PageAddress = "http://127.0.0.1:" + strconv.Itoa(PagePort) + "/"
 
 // Servers are the Ollama servers a model may word answers on, the first
 // that answers taking it: local.url, else Irie's own, then Ollama's usual
-// port (localmodel.ChatServers).
+// port (localmodel.ChatServers), less those on this computer while local
+// models are off here (local.here), which FindModel then says.
 func Servers(cfg config.Config) []string {
-	return localmodel.ChatServers(cfg.Local.URL, cfg.Local.Port)
+	var out []string
+	for _, u := range localmodel.ChatServers(cfg.Local.URL, cfg.Local.Port) {
+		if cfg.Local.LoadsAt(u) {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // Model is a local model that words answers: one on this computer, from
@@ -80,7 +87,7 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 	}
 	fmt.Fprintf(&b, "Question: %s", a.Question)
 	o := localmodel.Ollama{URL: m.URL}
-	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "10m"}
+	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "2m"}
 	if m.Thinks() {
 		off := false
 		opt.Think = &off

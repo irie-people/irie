@@ -147,9 +147,13 @@ func (c *Core) runtimePane() *tmux.Pane {
 // running. The caller holds neither c.mu nor c.localMu.
 func (c *Core) ollama(start bool) (localmodel.Ollama, bool, error) {
 	if c.cfg().Local.URL != "" {
-		return localmodel.Ollama{URL: c.cfg().Local.URL, HTTP: c.http}, false, nil
+		o := localmodel.Ollama{URL: c.cfg().Local.URL, HTTP: c.http}
+		return o, false, c.modelsOff(o.URL)
 	}
 	o := localmodel.Ollama{URL: c.ownURL(), HTTP: c.http}
+	if err := c.modelsOff(""); err != nil {
+		return o, true, err // never started (localhere.go)
+	}
 	c.mu.Lock()
 	p := c.runtimePane()
 	c.mu.Unlock()
@@ -176,10 +180,19 @@ var runnerCaps = map[string]string{
 	"LLAMA_ARG_CTX_CHECKPOINTS": "8",
 }
 
+// ownKeepAlive is how long Irie's own server keeps a model loaded after
+// a request that names no keep_alive of its own, as Claude Code's do:
+// Ollama's default is 5m. Of 14,240 tool calls agents made on 21 and 22
+// Nov 2026, 0.86% ran past 3 minutes and 1.49% past 2, so a session at
+// work rarely finds its model gone, and an idle one gives its memory back
+// two minutes sooner (DESIGN §6.3).
+const ownKeepAlive = "3m"
+
 // runtimeEnv is the environment of Irie's own server: its address,
-// context, cache type and slots, its runners' caps, then local.env. One
-// slot and one model at a time keep its memory to one model and one context
-// cache.
+// context, cache type and slots, its keep-alive, its runners' caps, then
+// local.env. One slot and one model at a time keep its memory to one
+// model and one context cache; the keep-alive, set here, is never one the
+// user set for their own Ollama, which the core's environment may carry.
 func (c *Core) runtimeEnv() []string {
 	l := c.cfg().Local
 	env := map[string]string{
@@ -188,6 +201,7 @@ func (c *Core) runtimeEnv() []string {
 		"OLLAMA_KV_CACHE_TYPE":     l.KVCache,
 		"OLLAMA_NUM_PARALLEL":      "1",
 		"OLLAMA_MAX_LOADED_MODELS": "1",
+		"OLLAMA_KEEP_ALIVE":        ownKeepAlive,
 	}
 	if l.KVCache != "f16" {
 		// A quantised cache needs flash attention.
@@ -216,6 +230,9 @@ func (c *Core) parallel() int {
 // until it answers. A server that dies first is an error with the last
 // lines it printed.
 func (c *Core) startRuntime(o localmodel.Ollama) error {
+	if err := c.modelsOff(""); err != nil {
+		return err
+	}
 	c.localMu.Lock()
 	defer c.localMu.Unlock()
 	bin, err := localmodel.FindOllama(c.cfg().Local.Ollama)
@@ -497,6 +514,7 @@ func (c *Core) check(ctx context.Context, o localmodel.Ollama, own bool, model s
 	w := localmodel.Want{
 		MinContext: p.Local.MinContext, KVCache: c.serverKV(own), Parallel: c.parallel(), Own: own,
 		Budget: localmodel.Budget(c.cfg().Local.MemoryGiB, m), Machine: m, Force: force,
+		Waits: c.loadWaits(),
 	}
 	if own {
 		w.Context = c.cfg().Local.Context

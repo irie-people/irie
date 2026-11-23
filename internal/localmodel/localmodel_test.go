@@ -480,6 +480,23 @@ func TestPreflight(t *testing.T) {
 			t.Errorf("second check = %+v, %d loads", c, f.loads)
 		}
 	})
+	t.Run("the disk under the swap's floor", func(t *testing.T) {
+		// On 2026-11-23 a model loaded into a Mac whose disk was 97% full,
+		// and the swap could not grow. Nothing loads then, forced or not; a
+		// model in memory already is used as it is.
+		f := newServer()
+		w := want(65536)
+		w.Waits, w.Force = "only 8.2 GB of the disk is free", true
+		if c := Preflight(ctx, serve(t, f), "qwen3.5:9b", w); c.OK() || !has(c.Problems, "only 8.2 GB of the disk is free, so qwen3.5:9b was not loaded") || f.loads != 0 {
+			t.Fatalf("check = %+v, %d loads; want it refused before loading", c, f.loads)
+		}
+		if c := Preflight(ctx, serve(t, f), "qwen3.5:9b", want(65536)); !c.OK() || f.loads != 1 {
+			t.Fatalf("check = %+v, %d loads", c, f.loads)
+		}
+		if c := Preflight(ctx, serve(t, f), "qwen3.5:9b", w); !c.OK() || f.loads != 1 {
+			t.Errorf("loaded already: check = %+v, %d loads; want it used, with no load", c, f.loads)
+		}
+	})
 	t.Run("unreachable", func(t *testing.T) {
 		c := Preflight(ctx, Ollama{URL: "http://127.0.0.1:1"}, "qwen3.5:9b", want(65536))
 		if c.OK() || !has(c.Problems, "not reachable at http://127.0.0.1:1") {
