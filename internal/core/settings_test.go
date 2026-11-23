@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"io"
 	"log/slog"
 	"os"
@@ -299,10 +300,10 @@ func TestAnAgentCannotLowerTheArchAgentsGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := from(agent, "arch.gabriel.on", "false"); err != nil || c.cfg().Arch.Gabriel.On {
-		t.Errorf("Gabriel off from an agent, with his guard down: %v", err)
+		t.Errorf(brand.Gabriel+" off from an agent, with his guard down: %v", err)
 	}
 	// The core's own calls, without a caller, are the person's.
 	if _, err := configure(c, "arch.mikael.on", "false"); err != nil || c.cfg().Arch.Mikael.On {
-		t.Errorf("Mikael off through Call: %v", err)
+		t.Errorf(brand.Mikael+" off through Call: %v", err)
 	}
 }

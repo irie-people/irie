@@ -126,7 +126,7 @@ func Seat(name string) string {
 	}
 	s := a.Nickname
 	if s == "" {
-		s = strings.ToUpper(a.Name[:1]) + a.Name[1:]
+		s = a.Called
 	}
 	if a.Icon != "" {
 		s += " " + a.Icon

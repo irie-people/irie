@@ -164,16 +164,16 @@ func weighs(rules []string, command string) bool {
 func TestMikaelsWord(t *testing.T) {
 	m, _ := Get("mikael")
 	plain := m.Word(WordData{})
-	if !strings.HasPrefix(plain, "["+brand.Name+"] Mikael, the first of "+brand.Name+"'s arch agents, is with you") || !strings.Contains(plain, "never orders") {
+	if !strings.HasPrefix(plain, "["+brand.Name+"] "+brand.Mikael+", the first of "+brand.Name+"'s arch agents, is with you") || !strings.Contains(plain, "never orders") {
 		t.Errorf("word:\n%s", plain)
 	}
-	if strings.Contains(plain, "mikael agent") || strings.Contains(plain, "never work around him") || strings.Contains(plain, "The good your user wants") {
+	if strings.Contains(plain, "mikael agent") || strings.Contains(plain, "never work around "+brand.Him) || strings.Contains(plain, "The good your user wants") {
 		t.Errorf("a word with nothing on call, no door and no good says more:\n%s", plain)
 	}
 	full := m.Word(WordData{OnCall: true, Door: true, Good: []string{"Give credit where it is due.", "Be honest with clients."}})
 	for _, want := range []string{
 		"ask the mikael agent before you act",
-		"never work around him",
+		"never work around " + brand.Him,
 		"The good your user wants to see in the world:\n- Give credit where it is due.\n- Be honest with clients.",
 	} {
 		if !strings.Contains(full, want) {
@@ -203,7 +203,7 @@ func TestDefinitionsPutMikaelOnCall(t *testing.T) {
 	if len(defs) != 1 || m.Description == "" || len(m.Tools) == 0 || m.Color == "" {
 		t.Fatalf("definitions = %+v", defs)
 	}
-	if !strings.HasPrefix(m.Prompt, "You are Mikael") || !strings.HasSuffix(m.Prompt, "## The good your user wants to see in the world\n\n- Pay contributors fairly.") {
+	if !strings.HasPrefix(m.Prompt, "You are "+brand.Mikael) || !strings.HasSuffix(m.Prompt, "## The good your user wants to see in the world\n\n- Pay contributors fairly.") {
 		t.Errorf("prompt:\n%s", m.Prompt)
 	}
 	// One line, so it goes as one argument as it is.
@@ -238,7 +238,7 @@ func TestLoadRefusesBrokenFiles(t *testing.T) {
 	}
 	got, err := load(fstest.MapFS{
 		"agents/uriel.md":   {Data: []byte(agent)},
-		"agents/gabriel.md": {Data: []byte("---\nname: gabriel\nrank: 2\ndescription: Helps too.\n# a comment\n---\nYou are Gabriel.")},
+		"agents/gabriel.md": {Data: []byte("---\nname: gabriel\nrank: 2\ndescription: Helps too.\n# a comment\n---\nYou are " + brand.Gabriel + ".")},
 	})
 	if err != nil || len(got) != 2 || got[0].Name != "uriel" || got[1].Name != "gabriel" || got[0].Door != nil || got[0].Word(WordData{}) != "" {
 		t.Errorf("load = %+v, %v; want uriel (rank 0) before gabriel (rank 2), with no door or word", got, err)
@@ -250,7 +250,7 @@ func TestGabrielWorksInTheCore(t *testing.T) {
 	if !ok || g.Call || g.Rank != 2 || g.Door != nil {
 		t.Fatalf("gabriel = %+v, %v; want rank 2, not called, no door", g, ok)
 	}
-	if w := g.Word(WordData{}); !strings.HasPrefix(w, "["+brand.Name+"] Gabriel") || !strings.Contains(w, "ctl gabriel") {
+	if w := g.Word(WordData{}); !strings.HasPrefix(w, "["+brand.Name+"] "+brand.Gabriel) || !strings.Contains(w, "ctl gabriel") {
 		t.Errorf("word:\n%s", w)
 	}
 	// Nobody calls him: he is left off --agents, and alone gives none.
@@ -258,7 +258,7 @@ func TestGabrielWorksInTheCore(t *testing.T) {
 		t.Errorf("definitions = %s, %v", raw, err)
 	}
 	if raw, err := Definitions([]string{"gabriel"}, nil); err != nil || raw != "" {
-		t.Errorf("Gabriel alone: %q, %v", raw, err)
+		t.Errorf(brand.Gabriel+" alone: %q, %v", raw, err)
 	}
 	// Raguel is callable so that a session may run as him (+raguel),
 	// though no agent need call on him.

@@ -17,7 +17,7 @@ import (
 // the light or dark appearance of whatever shows it, in the design
 // library's colours.
 func Minutes(c Council, t Tally) (page, md []byte, err error) {
-	title := "Raguel's council, " + c.Date
+	title := brand.Raguel + "'s council, " + c.Date
 	var m strings.Builder
 	fmt.Fprintf(&m, "# %s\n\n%s\n\n## The plans\n\n", title, strings.TrimSpace(c.Summary))
 	if len(c.Plans) == 0 {
@@ -65,7 +65,7 @@ func Minutes(c Council, t Tally) (page, md []byte, err error) {
 }
 
 // answer says how the user answers the plans.
-const answer = "Answer each plan in the Arch Agents tab, with `" + brand.Slug + " ctl council yes N` or `" + brand.Slug + " ctl council no N --why …` in a terminal of your own, or by telling Ragu in the council's card. A yes starts the plan's brief as a jot."
+const answer = "Answer each plan in the Arch Agents tab, with `" + brand.Slug + " ctl council yes N` or `" + brand.Slug + " ctl council no N --why …` in a terminal of your own, or by telling " + brand.Ragu + " in the council's card. A yes starts the plan's brief as a jot."
 
 // saidOf is what the user said to a plan, in a few words.
 func saidOf(p Plan) string {

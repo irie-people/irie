@@ -31,7 +31,7 @@ func TestAlwaysHoldsBackOnlyWhileTheUserIsThere(t *testing.T) {
 		{"a boost", true, true, false, true, false, true},
 		{"always, with room to spare", true, true, false, false, true, true},
 		{"always, while away", true, false, true, true, true, false},
-		{"always, with Gabriel off", false, true, true, true, true, false},
+		{"always, with " + brand.Gabriel + " off", false, true, true, true, true, false},
 	} {
 		if got := holds(tc.on, tc.present, tc.busy, tc.boosting, tc.always); got != tc.holds {
 			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.holds)
@@ -106,7 +106,7 @@ func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
 	c.gab.focus = map[string]bool{"s-before": true}
 	c.refocus()
 	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) || c.gab.top != nil {
-		t.Errorf("Gabriel off: focus %v, top %v", c.gab.focus, c.gab.top)
+		t.Errorf(brand.Gabriel+" off: focus %v, top %v", c.gab.focus, c.gab.top)
 	}
 	// Holding back: the session now on show is in the focus, and the one
 	// before steps back with the rest, before the show returns rather than
@@ -494,7 +494,7 @@ func TestTheHeaderSaysHowGabrielBoosts(t *testing.T) {
 	// With Gabriel off nothing boosts, always or not.
 	t.Setenv(brand.Env("GABRIEL"), "off")
 	if b := c.boostHeader(now); b != nil {
-		t.Errorf("Gabriel off: %+v", b)
+		t.Errorf(brand.Gabriel+" off: %+v", b)
 	}
 }
 

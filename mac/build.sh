@@ -23,6 +23,14 @@
 # tools/release.sh make: it takes a build number, the time it was built,
 # where any other build takes 0 (below, at the version).
 #
+# A build without a plugin (DESIGN §4.17) leaves its Swift code out too:
+# each go build tag noX in internal/brand's Tags compiles every swiftc here
+# with the condition NOX, in capitals (nomail, NOMAIL), which the plugin's
+# code is inside (#if !NOMAIL … #endif). IRIE_MAC_TAGS, comma-separated as
+# Tags is, takes Tags' place for a build, to check one without editing
+# brand.go: IRIE_MAC_TAGS=nomail,nojammin builds without Mail and Jammin,
+# and IRIE_MAC_TAGS= without leaving any out.
+#
 # `build.sh --hot OBJ APP` builds a preview for tools/hot.sh instead (docs/
 # MAC.md, "Hot loading"): APP, named Irie Preview, with IRIE_MAC_HOT_ID as
 # its bundle identifier, for this Mac's processor only and signed ad hoc.
@@ -44,6 +52,23 @@ cd "$(dirname "$0")"
 
 # The product's names, from internal/brand, the one place they are kept.
 eval "$(../tools/brand.sh)"
+# The Swift conditions of the plugins the build leaves out: -D NOMAIL for
+# nomail, and so on (above). Tags other than noX have none.
+conds=
+for t in $(printf '%s' "${IRIE_MAC_TAGS-$BRAND_TAGS}" | tr ',' ' '); do
+	case $t in
+	no?*)
+		c=$(printf '%s' "$t" | tr '[:lower:]' '[:upper:]')
+		case $c in
+		*[!A-Z0-9_]*)
+			echo "build.sh: $t is not a build tag" >&2
+			exit 2
+			;;
+		esac
+		conds="$conds -D $c"
+		;;
+	esac
+done
 # A file of its own per build: hot.sh and live.sh may build at once.
 mkdir -p build
 brandtmp=$(mktemp build/Brand.swift.XXXXXX)
@@ -154,6 +179,9 @@ if [ -n "$hot" ]; then
 else
 	set -- -O
 fi
+# The plugins left out (above); each condition is letters, digits and _
+# alone, so the list splits safely.
+set -- "$@" $conds
 if [ "$term" = 1 ]; then
 	set -- "$@" -I "$deps" -L "$deps" -lSwiftTerm
 	if [ -n "$ghostty" ]; then
@@ -171,7 +199,7 @@ if [ "$term" = 1 ]; then
 	if [ "${IRIE_MAC_UNIVERSAL:-}" = 1 ] && [ "$(uname -m)" = arm64 ] && [ -z "$hot" ]; then
 		native=$deps
 		swiftterm x86_64-apple-macos14.0
-		swiftc -O -parse-as-library -target x86_64-apple-macos14.0 -sdk "$sdk" \
+		swiftc -O $conds -parse-as-library -target x86_64-apple-macos14.0 -sdk "$sdk" \
 			-I "$deps" -L "$deps" -lSwiftTerm \
 			-o build/Irie-x86_64 Sources/Irie/*.swift
 		lipo -create "$app/Contents/MacOS/$exe" build/Irie-x86_64 -output build/Irie-universal
@@ -220,8 +248,11 @@ if [ -f "$mermaid/mermaid.min.js" ]; then
 fi
 # Spotify's full logo, black and white, as Spotify's design guidelines
 # give it: the Jammin tab shows it beside Spotify's music
-# (docs/proposals/jammin.md §3).
-cp Resources/Spotify_Full_Logo_RGB_Black.png Resources/Spotify_Full_Logo_RGB_White.png "$app/Contents/Resources/"
+# (docs/proposals/jammin.md §3). A build without Jammin has no tab for it.
+case "$conds " in
+*" NOJAMMIN "*) ;;
+*) cp Resources/Spotify_Full_Logo_RGB_Black.png Resources/Spotify_Full_Logo_RGB_White.png "$app/Contents/Resources/" ;;
+esac
 # Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs
 # it. A preview draws it once and keeps it with its objects.
 if [ -n "$hot" ] && [ -f "$obj/Irie.icns" ]; then

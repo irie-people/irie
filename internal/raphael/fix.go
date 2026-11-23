@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"os"
 	"path/filepath"
 	"slices"
@@ -67,7 +68,7 @@ func Do(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	case fixNCStyle:
 		return doNCStyle(ctx, r, f, in)
 	}
-	return "", errors.New("Raffi has no such fix")
+	return "", errors.New(brand.Raffi + " has no such fix")
 }
 
 // doNCStyle has one of macOS's own senders show its notices in the style
@@ -124,7 +125,7 @@ func doTool(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 			break
 		}
 		if time.Now().After(end) {
-			return "", fmt.Errorf("%s is still at work (%s), so Raffi left its cache alone: try again once it is done", f.busy[0], who)
+			return "", fmt.Errorf("%s is still at work (%s), so "+brand.Raffi+" left its cache alone: try again once it is done", f.busy[0], who)
 		}
 		select {
 		case <-ctx.Done():
@@ -189,7 +190,7 @@ func busyWith(ps []Proc, tools []string) string {
 func doTrash(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	dir := cachesDir(in.Home)
 	if filepath.Dir(f.path) != dir {
-		return "", fmt.Errorf("%s is not in %s, so Raffi leaves it be", f.path, dir)
+		return "", fmt.Errorf("%s is not in %s, so "+brand.Raffi+" leaves it be", f.path, dir)
 	}
 	fi, err := os.Lstat(f.path)
 	switch {
@@ -198,7 +199,7 @@ func doTrash(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	case err != nil:
 		return "", err
 	case !fi.IsDir():
-		return "", fmt.Errorf("%s is no longer a folder, so Raffi leaves it be", tildePath(f.path, in.Home))
+		return "", fmt.Errorf("%s is no longer a folder, so "+brand.Raffi+" leaves it be", tildePath(f.path, in.Home))
 	}
 	ps, _ := Procs(ctx, r)
 	if appRunning(f.ident, appPath(ctx, r, f.ident), runningApps(ctx, r), ps) {
@@ -354,7 +355,7 @@ func waitStopped(ctx context.Context, ps []proc.Proc) ([]proc.Proc, error) {
 // it now, disable keeps it from starting again. Its file stays.
 func doLaunchOff(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	if filepath.Dir(f.path) != filepath.Join(in.Home, "Library", "LaunchAgents") {
-		return "", fmt.Errorf("%s is not one of your own launch agents, so Raffi leaves it be", f.path)
+		return "", fmt.Errorf("%s is not one of your own launch agents, so "+brand.Raffi+" leaves it be", f.path)
 	}
 	target := fmt.Sprintf("gui/%d/%s", in.UID, f.ident)
 	// bootout fails for one that is not loaded, which is as good.
