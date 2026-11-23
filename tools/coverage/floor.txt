@@ -89,7 +89,7 @@ internal/yoink 82 0
 internal/zen 82 0
 tools/code 37 0
 tools/coverage 73 0
-tools/docpaths 75 0
+tools/docpaths 78 0
 tools/mkicon 78 0
 tools/perf 41 0
 tools/prune 87 0
