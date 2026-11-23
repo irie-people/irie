@@ -11,8 +11,14 @@
 //! the binary under test), which each test process would otherwise build
 //! for itself, and keeps each passing test's result until its binary or
 //! what it read changes, as go test's cache does for a whole package.
+//!
+//! Under -cover it measures each package's coverage as go test -cover
+//! does, from the blocks its processes ran, merged, and keeps it with the
+//! binary's results, so that a package whose tests are cached keeps its
+//! coverage too.
 
 mod cache;
+mod cover;
 mod exec;
 mod fnv;
 mod frame;
@@ -274,6 +280,13 @@ struct Package {
     failed: Vec<String>,
     reports: Vec<String>,
     problem: Option<String>,
+    /// Under -cover: the blocks this run's processes ran, merged; whether
+    /// a process left no profile to merge; how many tests skipped; and the
+    /// package's coverage once its last process has ended.
+    blocks: Option<cover::Blocks>,
+    unmerged: bool,
+    skipped: usize,
+    coverage: Option<cover::Summary>,
 }
 
 /// What a worker needs of a package.
@@ -287,6 +300,7 @@ struct Done {
     unit: plan::Unit,
     outcome: exec::Outcome,
     testlog: Option<PathBuf>,
+    cover: Option<PathBuf>,
 }
 
 fn run(o: &Opts) -> Result<i32, String> {
@@ -300,6 +314,14 @@ fn run(o: &Opts) -> Result<i32, String> {
         build_flags.push("-race".to_string());
     }
     let pkgs = gocmd::list(&build_flags, &o.packages)?;
+    // Only the test binaries measure coverage: a helper built with -cover
+    // would warn on every run that it had nowhere to write it.
+    let mut test_flags = build_flags.clone();
+    if o.cover {
+        test_flags.push("-cover".to_string());
+        let mode = if o.race { "atomic" } else { "set" };
+        test_flags.push(format!("-covermode={mode}"));
+    }
     if pkgs.is_empty() {
         println!("testrunner: no tests in {}", o.packages.join(" "));
         return Ok(0);
@@ -334,7 +356,7 @@ fn run(o: &Opts) -> Result<i32, String> {
     let (bins, helpers) = thread::scope(|s| {
         let h = want_helpers
             .then(|| s.spawn(|| gocmd::build_helpers(&o.helpers, &helpers_dir, &build_flags)));
-        let bins = gocmd::build_tests(&pkgs, &work.0.join("bins"), &build_flags);
+        let bins = gocmd::build_tests(&pkgs, &work.0.join("bins"), &test_flags);
         (bins, h.map(|h| h.join().expect("helpers build")))
     });
     let helpers_key = match helpers {
@@ -388,6 +410,10 @@ fn run(o: &Opts) -> Result<i32, String> {
             failed: Vec::new(),
             reports: Vec::new(),
             problem,
+            blocks: None,
+            unmerged: false,
+            skipped: 0,
+            coverage: None,
         });
     }
 
@@ -424,7 +450,9 @@ fn run(o: &Opts) -> Result<i32, String> {
         if p.problem.is_some() {
             continue;
         }
-        let held = if o.fresh {
+        // Under -cover, a binary with no coverage kept, as when a run of
+        // its tests was cut short, runs them all, so that it gets one.
+        let held = if o.fresh || o.cover && results.cover(&p.key).is_none() {
             HashSet::new()
         } else {
             let cx = cache::Context {
@@ -482,6 +510,27 @@ fn run(o: &Opts) -> Result<i32, String> {
     let mut failed_packages = 0;
     let finish = |p: &mut Package, failed_packages: &mut usize| {
         let ran = p.tests.len() - p.cached;
+        if o.cover && p.problem.is_none() && !p.tests.is_empty() {
+            p.coverage = if ran == p.tests.len() {
+                // Every test ran here: this run's blocks are the package's.
+                let s = (!p.unmerged)
+                    .then_some(p.blocks.as_ref())
+                    .flatten()
+                    .map(|b| b.summary(p.skipped));
+                if let Some(s) = s {
+                    results.set_cover(&p.key, s);
+                }
+                s
+            } else {
+                // The rest are cached with the coverage of the run that
+                // ran them all, from this binary.
+                results.cover(&p.key)
+            };
+        }
+        let covered = match &p.coverage {
+            Some(c) => format!("\t{}", c.words()),
+            None => String::new(),
+        };
         let span = p.secs;
         let mut notes = Vec::new();
         if p.units > 1 {
@@ -507,9 +556,9 @@ fn run(o: &Opts) -> Result<i32, String> {
         } else if p.tests.is_empty() {
             println!("ok  \t{}\t{:.3}s [no tests to run]", p.pkg.import, span);
         } else if ran == 0 {
-            println!("ok  \t{}\t(cached)", p.pkg.import);
+            println!("ok  \t{}\t(cached){covered}", p.pkg.import);
         } else {
-            println!("ok  \t{}\t{:.3}s{notes}", p.pkg.import, span);
+            println!("ok  \t{}\t{:.3}s{notes}{covered}", p.pkg.import, span);
         }
         if let Some(bin) = &p.bin {
             let _ = fs::remove_file(bin);
@@ -529,6 +578,7 @@ fn run(o: &Opts) -> Result<i32, String> {
         go_duration(&o.timeout).unwrap_or(Duration::from_secs(24 * 3600)) + Duration::from_secs(60);
     let logs = work.0.join("logs");
     let _ = fs::create_dir_all(&logs);
+    let covers = work.0.join("cover");
     let serial = AtomicUsize::new(0);
     let (tx, rx) = mpsc::channel::<Done>();
     let mut failed_tests = 0;
@@ -550,15 +600,16 @@ fn run(o: &Opts) -> Result<i32, String> {
         for _ in 0..o.workers.min(processes) {
             let tx = tx.clone();
             let queue = Arc::clone(&queue);
-            let (specs, logs, serial) = (&specs, &logs, &serial);
+            let (specs, logs, covers, serial) = (&specs, &logs, &covers, &serial);
             s.spawn(move || {
                 loop {
                     let Some(unit) = queue.lock().expect("queue").pop() else {
                         break;
                     };
                     let Spec { bin, dir, env } = &specs[unit.pkg];
-                    let testlog =
-                        logs.join(format!("{}.log", serial.fetch_add(1, Ordering::Relaxed)));
+                    let n = serial.fetch_add(1, Ordering::Relaxed);
+                    let testlog = logs.join(format!("{n}.log"));
+                    let cover = o.cover.then(|| covers.join(n.to_string()));
                     let outcome = exec::run(&exec::Job {
                         bin: bin.as_deref().expect("a unit has a binary"),
                         dir,
@@ -568,11 +619,13 @@ fn run(o: &Opts) -> Result<i32, String> {
                         kill_after,
                         short: o.short,
                         testlog: Some(testlog.clone()),
+                        cover: cover.as_deref(),
                     });
                     let done = Done {
                         unit,
                         outcome,
                         testlog: Some(testlog),
+                        cover,
                     };
                     if tx.send(done).is_err() {
                         break;
@@ -602,9 +655,12 @@ fn run(o: &Opts) -> Result<i32, String> {
                         p.reports
                             .extend(out.parsed.report(t).into_iter().map(str::to_string));
                     }
-                    Some((_, secs)) => {
+                    Some((status, secs)) => {
                         times.record(&p.pkg.import, t, *secs);
                         passed.push(t.clone());
+                        if *status == Status::Skip {
+                            p.skipped += 1;
+                        }
                     }
                     None if t.starts_with("Example") && out.code == Some(0) => {
                         passed.push(t.clone())
@@ -655,6 +711,17 @@ fn run(o: &Opts) -> Result<i32, String> {
             if let Some(log) = &d.testlog {
                 let _ = fs::remove_file(log);
             }
+            if let Some(dir) = &d.cover {
+                let blocks = fs::read_to_string(exec::profile(dir))
+                    .ok()
+                    .and_then(|t| cover::Blocks::parse(&t));
+                match (blocks, &mut p.blocks) {
+                    (Some(b), None) => p.blocks = Some(b),
+                    (Some(b), Some(all)) => p.unmerged |= !all.merge(&b),
+                    (None, _) => p.unmerged = true,
+                }
+                let _ = fs::remove_dir_all(dir);
+            }
             p.done += 1;
             if p.done == p.units {
                 finish(p, &mut failed_packages);
@@ -665,6 +732,9 @@ fn run(o: &Opts) -> Result<i32, String> {
 
     times.save(&times_path);
     results.prune();
+    if let Some(path) = &o.coverout {
+        write_coverout(path, &packages);
+    }
     let actual = t0.elapsed().as_secs_f64();
     let passed_all = failed_packages == 0 && !failed_build;
     let line = format!(
@@ -723,6 +793,22 @@ fn run(o: &Opts) -> Result<i32, String> {
             count(o.workers, "worker")
         );
         Ok(1)
+    }
+}
+
+/// Writes each package's coverage for --coverout, one line a package:
+/// `import statements covered skipped`, or `import -` when this run could
+/// not tell it, as when a package did not build.
+fn write_coverout(path: &Path, packages: &[Package]) {
+    let mut s = String::from("# testrunner coverage v1: package statements covered skipped\n");
+    for p in packages {
+        match &p.coverage {
+            Some(c) => s.push_str(&format!("{} {}\n", p.pkg.import, c.line())),
+            None => s.push_str(&format!("{} -\n", p.pkg.import)),
+        }
+    }
+    if let Err(e) = fs::write(path, s) {
+        println!("testrunner: {}: {e}", path.display());
     }
 }
 

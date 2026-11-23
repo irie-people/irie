@@ -17,6 +17,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use crate::cover::Summary;
 use crate::fnv::Fnv;
 
 const MAGIC: &str = "# test log\n";
@@ -156,10 +157,12 @@ pub fn fingerprint(inputs: &Inputs, cx: &Context) -> Option<String> {
 }
 
 /// The tests that passed with one binary: units of tests that ran in one
-/// process, each with the inputs it read and their key then.
+/// process, each with the inputs it read and their key then; and, when
+/// every test of the binary ran in one run, the package's coverage then.
 #[derive(Debug, Default)]
 pub struct Entry {
     units: Vec<(String, Inputs, Vec<String>)>,
+    cover: Option<Summary>,
 }
 
 impl Entry {
@@ -170,7 +173,9 @@ impl Entry {
             return e;
         }
         for line in lines {
-            if let Some(fp) = line.strip_prefix("unit ") {
+            if let Some(c) = line.strip_prefix("cover ") {
+                e.cover = Summary::parse(c);
+            } else if let Some(fp) = line.strip_prefix("unit ") {
                 e.units
                     .push((fp.to_string(), Inputs(Vec::new()), Vec::new()));
             } else if let (Some(i), Some(u)) = (line.strip_prefix("in "), e.units.last_mut()) {
@@ -184,6 +189,9 @@ impl Entry {
 
     fn render(&self) -> String {
         let mut s = format!("{HEADER}\n");
+        if let Some(c) = &self.cover {
+            s.push_str(&format!("cover {}\n", c.line()));
+        }
         for (fp, inputs, tests) in &self.units {
             if tests.is_empty() {
                 continue;
@@ -258,6 +266,22 @@ impl Cache {
         {
             e.units.push((fp, inputs, passed));
         }
+        write_atomic(&path, &e.render());
+    }
+
+    /// The package's coverage, kept when every test of this binary ran.
+    pub fn cover(&self, key: &str) -> Option<Summary> {
+        let s = fs::read_to_string(self.path(key)).ok()?;
+        Entry::parse(&s).cover
+    }
+
+    /// Keeps the package's coverage with the binary's tests.
+    pub fn set_cover(&self, key: &str, c: Summary) {
+        let path = self.path(key);
+        let mut e = fs::read_to_string(&path)
+            .map(|s| Entry::parse(&s))
+            .unwrap_or_default();
+        e.cover = Some(c);
         write_atomic(&path, &e.render());
     }
 
@@ -395,6 +419,40 @@ mod tests {
         // TestB runs again and fails: only TestA stays.
         c.record("k", &["TestB".into()], vec![], Inputs(vec![]), &cx);
         assert_eq!(c.passed("k", &all, &cx), HashSet::from(["TestA".into()]));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn coverage_stays_with_the_binary_s_tests() {
+        let d = scratch("cover");
+        let c = Cache::new(&d);
+        let env = HashMap::new();
+        let cx = Context {
+            env: &env,
+            helpers: None,
+        };
+        let all: Vec<String> = vec!["TestA".into(), "TestB".into()];
+        assert_eq!(c.cover("k"), None);
+        c.record("k", &all, all.clone(), Inputs(vec![]), &cx);
+        let s = Summary {
+            statements: 10,
+            covered: 7,
+            skipped: 1,
+        };
+        c.set_cover("k", s);
+        assert_eq!(c.cover("k"), Some(s));
+        assert_eq!(c.passed("k", &all, &cx).len(), 2);
+        // A test that runs again keeps the coverage with the rest.
+        c.record(
+            "k",
+            &["TestB".into()],
+            vec!["TestB".into()],
+            Inputs(vec![]),
+            &cx,
+        );
+        assert_eq!(c.cover("k"), Some(s));
+        assert_eq!(c.passed("k", &all, &cx).len(), 2);
+        assert_eq!(c.cover("other"), None);
         fs::remove_dir_all(&d).unwrap();
     }
 

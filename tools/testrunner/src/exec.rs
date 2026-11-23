@@ -2,7 +2,10 @@
 //! test runs a test binary (cmd/go/internal/test): in the package's folder,
 //! with GOROOT's bin first on PATH and PWD set, stdout and stderr as one
 //! stream, -test.paniconexit0 and the timeout, and a last-ditch kill a
-//! minute after the timeout.
+//! minute after the timeout. A binary built with -cover gets a folder for
+//! its coverage data both as -test.gocoverdir and as GOCOVERDIR, as go
+//! test gives it, so that a program the tests start from the binary
+//! itself adds what it ran rather than a warning that it can't.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -23,6 +26,14 @@ pub struct Job<'a> {
     pub kill_after: Duration,
     pub short: bool,
     pub testlog: Option<PathBuf>,
+    /// The unit's coverage folder, for a binary built with -cover: its
+    /// data goes in data/ and its profile in profile.txt (profile).
+    pub cover: Option<&'a Path>,
+}
+
+/// Where a unit's text profile is, in its coverage folder.
+pub fn profile(cover: &Path) -> PathBuf {
+    cover.join("profile.txt")
 }
 
 pub struct Outcome {
@@ -61,6 +72,16 @@ pub fn run(job: &Job) -> Outcome {
         error: Some(why),
         secs: t0.elapsed().as_secs_f64(),
     };
+    let mut env: Vec<(String, String)> = job.env.to_vec();
+    if let Some(dir) = job.cover {
+        let data = dir.join("data");
+        if let Err(e) = std::fs::create_dir_all(&data) {
+            return failed(format!("{}: {e}", data.display()));
+        }
+        args.push(format!("-test.gocoverdir={}", data.display()));
+        args.push(format!("-test.coverprofile={}", profile(dir).display()));
+        env.push(("GOCOVERDIR".into(), data.display().to_string()));
+    }
     let (mut reader, writer) = match std::io::pipe() {
         Ok(p) => p,
         Err(e) => return failed(format!("pipe: {e}")),
@@ -72,7 +93,7 @@ pub fn run(job: &Job) -> Outcome {
     let mut cmd = Command::new(job.bin);
     cmd.args(&args)
         .current_dir(job.dir)
-        .envs(job.env.iter().map(|(k, v)| (k, v)))
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::null())
         .stdout(writer)
         .stderr(writer2);
@@ -168,12 +189,17 @@ mod tests {
             kill_after: Duration::from_secs(60),
             short: true,
             testlog: None,
+            cover: Some(&d),
         });
         assert_eq!(out.code, Some(1));
         assert_eq!(out.parsed.results["TestA"].0, crate::frame::Status::Fail);
         let report = out.parsed.report("TestA");
         assert!(report[0].contains("-test.run=^(?:TestA)$"), "{report:?}");
         assert!(report[0].contains("-test.short"), "{report:?}");
+        let gcd = format!("-test.gocoverdir={}", d.join("data").display());
+        assert!(report[0].contains(&gcd), "{report:?}");
+        assert!(report[0].contains("-test.coverprofile="), "{report:?}");
+        assert!(d.join("data").is_dir());
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

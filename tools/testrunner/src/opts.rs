@@ -29,6 +29,11 @@ pub struct Opts {
     pub helpers_env: Option<String>,
     /// --plan: print the plan and its predicted time, and run nothing.
     pub plan: bool,
+    /// -cover: build the test binaries with -cover and say each package's
+    /// coverage, as go test -cover does, its processes' merged.
+    pub cover: bool,
+    /// --coverout: also write each package's coverage to this file.
+    pub coverout: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -89,6 +94,8 @@ pub fn parse(args: &[String], goflags: &str, cpus: usize) -> Result<Parsed, Stri
         helpers_if: None,
         helpers_env: None,
         plan: false,
+        cover: false,
+        coverout: None,
     };
     // GOFLAGS holds -flag=value words for every go command. The runner
     // reads the ones about running tests; the build flags among them reach
@@ -175,7 +182,10 @@ fn apply(o: &mut Opts, name: &str, value: Option<&str>, goflags: bool) -> Result
         "short" => o.short = boolean(name, value)?,
         "race" => o.race = boolean(name, value)?,
         "plan" if !goflags => o.plan = boolean(name, value)?,
+        // GOFLAGS' -cover would reach the helpers' build too: go test runs.
+        "cover" if !goflags => o.cover = boolean(name, value)?,
         "count" | "timeout" | "tags" | "p" | "state" | "helpers" | "helpers-if" | "helpers-env"
+        | "coverout"
             if value.is_none() =>
         {
             return Ok(Applied::NeedsValue);
@@ -206,6 +216,10 @@ fn apply(o: &mut Opts, name: &str, value: Option<&str>, goflags: bool) -> Result
         }
         "helpers-if" if !goflags => o.helpers_if = need(value),
         "helpers-env" if !goflags => o.helpers_env = need(value),
+        "coverout" if !goflags => {
+            o.coverout = value.map(PathBuf::from);
+            o.cover = true;
+        }
         n if GO_TEST_ONLY.contains(&n) => return Ok(Applied::Unsupported),
         _ => return Ok(Applied::NotOurs),
     }
@@ -283,6 +297,21 @@ mod tests {
         assert_eq!(unsupported(&["-json"], ""), "flag -json");
         assert_eq!(unsupported(&["-frobnicate"], ""), "flag -frobnicate");
         assert_eq!(unsupported(&[], "-cover"), "GOFLAGS has -cover");
+        assert_eq!(
+            unsupported(&["-coverprofile=c.out"], ""),
+            "flag -coverprofile"
+        );
+        assert_eq!(unsupported(&["-covermode=count"], ""), "flag -covermode");
+    }
+
+    #[test]
+    fn coverage_is_the_runner_s() {
+        let o = run(&["-cover", "./x"], "");
+        assert!(o.cover && o.coverout.is_none());
+        let o = run(&["--coverout", "/home/alice/cover.txt"], "");
+        assert!(o.cover);
+        assert_eq!(o.coverout, Some(PathBuf::from("/home/alice/cover.txt")));
+        assert!(!run(&[], "").cover);
     }
 
     #[test]
