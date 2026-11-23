@@ -150,12 +150,14 @@ func (c *Core) memoryPressed() bool {
 // easeModels lets go of what Irie's own model servers hold for nobody,
 // after each memory sample, in the background and one pass at a time.
 // While local models are off here, its Ollama and its llama-server stop
-// once no live session has run on them for easeGrace. Under memory
-// pressure, the models of its Ollama that no session at work runs on go
-// (keep_alive 0), Ollama loading one again at its session's next request,
-// and its llama-server stops once no live session has run on it for
-// easeGrace, since nothing would start it again for a session's next
-// turn. A model is never taken from under a session at work.
+// once no session at work has run on them for easeGrace: an idle session's
+// next turn finds no server, as it may not run on this computer anyway.
+// Under memory pressure, the models of its Ollama that no session at work
+// runs on go (keep_alive 0), Ollama loading one again at its session's
+// next request, and its llama-server stops once no live session has run on
+// it for easeGrace, since nothing would start it again for an idle
+// session's next turn. A model is never taken from under a session at
+// work.
 func (c *Core) easeModels() {
 	cfg := c.cfg()
 	c.mu.Lock()
@@ -171,7 +173,8 @@ func (c *Core) easeModels() {
 		llamaPane = &p
 	}
 	working := map[string]bool{} // the models sessions at work run on
-	onOllama, onLlama := false, false
+	ollamaAtWork := false        // a session at work runs on its Ollama
+	onLlama, llamaAtWork := false, false
 	for _, x := range c.sessions {
 		if !x.local || x.dead || x.model == "" {
 			continue
@@ -180,14 +183,14 @@ func (c *Core) easeModels() {
 		if !ok || p.Local == nil {
 			continue
 		}
+		atWork := x.track.state(x.dead) == ipc.StateWorking
 		switch {
 		case !isLlama(p):
-			onOllama = true
-			if x.track.state(x.dead) == ipc.StateWorking {
-				working[x.model] = true
+			if atWork {
+				working[x.model], ollamaAtWork = true, true
 			}
 		case p.Local.Peer == "" && x.model == llamaModel:
-			onLlama = true
+			onLlama, llamaAtWork = true, llamaAtWork || atWork
 		}
 	}
 	c.mu.Unlock()
@@ -205,13 +208,17 @@ func (c *Core) easeModels() {
 		now := time.Now()
 		if ollamaPane != nil {
 			switch {
-			case off && c.idleFor(ollamaPane.ID, onOllama, now):
+			case off && c.idleFor(ollamaPane.ID, ollamaAtWork, now):
 				c.stopServer(*ollamaPane, "local models are off on this computer (local.here = false)")
 			case pressed:
 				c.unloadIdle(working)
 			}
 		}
-		if llamaPane != nil && (off || pressed) && c.idleFor(llamaPane.ID, onLlama, now) {
+		used := onLlama // any live session keeps it under pressure
+		if off {
+			used = llamaAtWork
+		}
+		if llamaPane != nil && (off || pressed) && c.idleFor(llamaPane.ID, used, now) {
 			why := "memory runs short"
 			if off {
 				why = "local models are off on this computer (local.here = false)"
