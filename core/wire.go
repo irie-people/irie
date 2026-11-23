@@ -150,6 +150,8 @@ type (
 	ArchItem          = ipc.ArchItem
 	ArchSetting       = ipc.ArchSetting
 	RaphaelArgs       = ipc.RaphaelArgs
+	Tell              = ipc.Tell
+	RaphaelCleared    = ipc.RaphaelCleared
 	RaphaelResult     = ipc.RaphaelResult
 	RaphaelFinding    = ipc.RaphaelFinding
 	RaphaelFix        = ipc.RaphaelFix

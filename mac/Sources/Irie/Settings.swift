@@ -1483,6 +1483,8 @@ struct RaphaelArgs: Encodable {
     var check: Bool?
     var fix: String?
     var ok: Bool?
+    /// A tell the app showed (Tell), which no header then carries.
+    var told: String?
 }
 
 /// macOS's own notices about the app's work (DESIGN §4.11): the style

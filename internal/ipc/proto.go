@@ -553,13 +553,43 @@ const (
 // at the computer again first; with Fix and OK he runs that finding's fix,
 // which the person has read and said OK to; with Mine he no longer flags
 // that startup item, which the person knows. Wait answers once the look or
-// the fix is done, rather than as it starts.
+// the fix is done, rather than as it starts. Told says the person was shown
+// that tell (Header.Tells), so that no header carries it again.
 type RaphaelArgs struct {
 	Check bool   `json:"check,omitempty"`
 	Fix   string `json:"fix,omitempty"` // a finding's id
 	OK    bool   `json:"ok,omitempty"`  // the person said OK to the fix, having read what it runs
 	Mine  string `json:"mine,omitempty"`
 	Wait  bool   `json:"wait,omitempty"`
+	Told  string `json:"told,omitempty"` // a tell's id
+}
+
+// Tell is news an arch agent tells the person once, such as Raffi's after
+// a kernel panic, or when the disk falls short of the room he keeps for
+// swap (DESIGN §4.11). Every header carries it until a client the person
+// reads says it showed it (RaphaelArgs.Told), for a day at most: the Mac
+// app shows it as a notice, which its Notices tab keeps, and a sidebar says
+// it in its status line.
+type Tell struct {
+	ID    string    `json:"id"`              // the same for the same news, such as panic:<report>
+	From  string    `json:"from"`            // the arch agent, such as raphael
+	At    time.Time `json:"at"`              // when he told it
+	Level string    `json:"level"`           // note, or warn for what needs care
+	Text  string    `json:"text"`            // the point, in one plain sentence
+	Lines []string  `json:"lines,omitempty"` // up to three short lines after it
+}
+
+// RaphaelCleared is a cache Raphael cleared by himself, to keep the room
+// the swap needs free (DESIGN §4.11).
+type RaphaelCleared struct {
+	At    time.Time `json:"at"`
+	ID    string    `json:"id"`              // which cache, such as go-build
+	What  string    `json:"what"`            // what he cleared, in words
+	Path  string    `json:"path"`            // where, with ~ for the home folder
+	Size  int64     `json:"size"`            // what it took on the disk, in bytes
+	Freed int64     `json:"freed"`           // what the disk's free space gained, which other programs move too
+	Free  int64     `json:"free"`            // the free disk after it
+	Error string    `json:"error,omitempty"` // why it stopped short, when it did
 }
 
 // RaphaelResult is Raphael's report (OpRaphael).
@@ -575,6 +605,12 @@ type RaphaelResult struct {
 	Did      string           `json:"did,omitempty"`     // what the fix asked for did, with Wait
 	Fixes    []RaphaelDone    `json:"fixes,omitempty"`   // the fixes he ran lately, newest first
 	Restarts []RaphaelRestart `json:"restarts,omitempty"`
+	// Room is the free disk against the room he keeps for swap, in words.
+	Room string `json:"room,omitempty"`
+	// Cleared are the caches he cleared by himself lately, newest first.
+	Cleared []RaphaelCleared `json:"cleared,omitempty"`
+	// Told is what he told the person lately, newest first.
+	Told []Tell `json:"told,omitempty"`
 }
 
 // RaphaelFinding is one thing Raphael found.
@@ -889,6 +925,9 @@ type Header struct {
 	// Zen is your zen, whether an app shows it, and what it offers now
 	// (docs/proposals/zen.md), so every client draws zen's calm alike.
 	Zen *Zen `json:"zen,omitempty"`
+	// Tells is the news the arch agents tell the person once, which no
+	// client has shown yet, oldest first (Tell).
+	Tells []Tell `json:"tells,omitempty"`
 }
 
 // Boost is Gabriel's boost as the header gives it: the user's focus gets

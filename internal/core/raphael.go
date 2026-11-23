@@ -87,6 +87,7 @@ type raphState struct {
 	coreSaid  atomic.Bool               // he said he leaves a stuck core be
 	exit      func(code int)            // how the core leaves for its supervisor to start it again; os.Exit unless a test sets it
 	runner    raphael.Runner            // what runs his tools; raphael.Exec unless a test sets it
+	keep      keepState                 // the room he keeps for swap, and what he tells (raphkeep.go)
 }
 
 // run is what runs Raphael's tools.
@@ -278,6 +279,11 @@ func (c *Core) raphaelLook(done chan struct{}, thorough bool) {
 func (c *Core) raphaelOp(peer int, a ipc.RaphaelArgs) (ipc.RaphaelResult, error) {
 	r := &c.raph
 	switch {
+	case a.Told != "":
+		if c.fromAgent(peer) {
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say your user saw what "+brand.Raffi+" told them.")
+		}
+		c.markTold(a.Told)
 	case a.Fix != "":
 		f, ok := c.raphaelFinding(a.Fix)
 		switch {
@@ -345,7 +351,7 @@ func (c *Core) raphaelFinding(id string) (raphael.Finding, bool) {
 	r := &c.raph
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, f := range append(slices.Clone(r.quick), r.slow...) {
+	for _, f := range append(append(slices.Clone(r.quick), r.slow...), c.keepFindings(time.Now())...) {
 		if f.ID == id {
 			return f, true
 		}
@@ -378,6 +384,7 @@ func (c *Core) raphaelFix(f raphael.Finding) {
 		gone := func(x raphael.Finding) bool { return x.ID == f.ID }
 		r.slow = slices.DeleteFunc(r.slow, gone)
 		r.quick = slices.DeleteFunc(r.quick, gone)
+		c.keepForget(f.ID)
 	}
 	r.fixing = nil
 	done := r.fixed
@@ -391,7 +398,7 @@ func (c *Core) raphaelReport() ipc.RaphaelResult {
 	cfg := c.cfg().Arch.Raphael
 	r := &c.raph
 	r.mu.Lock()
-	rep := raphael.Merge(r.checked, r.took, r.quick, r.slow, r.quickFine, r.slowFine)
+	rep := raphael.Merge(r.checked, r.took, append(slices.Clone(r.quick), c.keepFindings(time.Now())...), r.slow, r.quickFine, r.slowFine)
 	res := ipc.RaphaelResult{On: cfg.On && !raphaelOff(), Checking: r.checking, Findings: []ipc.RaphaelFinding{}, Fine: rep.Fine, Fixes: slices.Clone(r.fixes)}
 	if r.fixing != nil {
 		res.Fixing = r.fixing.ID
@@ -419,6 +426,7 @@ func (c *Core) raphaelReport() ipc.RaphaelResult {
 		res.Findings = append(res.Findings, w)
 	}
 	res.Restarts = recentRestarts(c.paths.Freezes(), time.Now())
+	c.keepReport(&res)
 	return res
 }
 
@@ -508,6 +516,9 @@ func (c *Core) raphaelNow() archNow {
 	}
 	if len(rep.Fixes) > 0 && time.Since(rep.Fixes[0].At) < time.Hour {
 		n.status += " " + rep.Fixes[0].Said
+	}
+	if line := clearedLine(rep.Cleared, time.Now()); line != "" {
+		n.status += " " + line
 	}
 	if !rep.Checking {
 		n.actions = []ipc.ArchAction{{Label: "Look over my Mac now", Op: ipc.OpRaphael, Args: json.RawMessage(`{"check":true}`), Done: brand.Raffi + " is looking over your Mac: what " + brand.He + " finds shows here in a minute or two."}}

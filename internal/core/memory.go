@@ -247,6 +247,7 @@ func (c *Core) headerNow() ipc.Header {
 	h.Boost = c.boostHeader(time.Now())
 	h.Theme = c.appColors
 	h.Zen = c.zenHeader()
+	h.Tells = c.tellsNow(time.Now())
 	return h
 }
 

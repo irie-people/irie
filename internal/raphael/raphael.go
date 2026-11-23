@@ -48,10 +48,11 @@ const (
 	AreaStartup    = "startup"
 	AreaProtection = "protection"
 	AreaAlerts     = "alerts" // macOS's own alerts, and the access it asks for in Irie's name (alerts.go)
+	AreaPanic      = "panic"  // a kernel panic that restarted the computer (panic.go)
 )
 
 // areaOrder is the order areas are reported in.
-var areaOrder = []string{AreaDisk, AreaMemory, AreaProcesses, AreaProtection, AreaAlerts, AreaStartup, AreaCaches}
+var areaOrder = []string{AreaPanic, AreaDisk, AreaMemory, AreaProcesses, AreaProtection, AreaAlerts, AreaStartup, AreaCaches}
 
 // Finding is one thing Raphael found.
 type Finding struct {
@@ -84,6 +85,7 @@ type Fix struct {
 	ident string    // the launch agent's label, or the bundle id of the app whose cache it is
 	tool  string    // the tool that clears its own cache, by its full path
 	busy  []string
+	names []string // the entries of path it acts on, such as old downloads (own.go)
 }
 
 // fixJSON is a Fix as the core keeps it between its runs (raphael.json),
@@ -101,6 +103,7 @@ type fixJSON struct {
 	Tool  string    `json:"tool,omitempty"`
 	Busy  []string  `json:"busy,omitempty"`
 	Tree  []procRef `json:"tree,omitempty"`
+	Names []string  `json:"names,omitempty"`
 }
 
 // procRef is a process by its pid and when it started, which tell it from
@@ -112,7 +115,7 @@ type procRef struct {
 
 // MarshalJSON writes the fix with what it acts on.
 func (f Fix) MarshalJSON() ([]byte, error) {
-	return json.Marshal(fixJSON{Label: f.Label, Run: f.Run, About: f.About, Undo: f.Undo, Kind: f.kind, Path: f.path, PID: f.pid, Start: f.start, Ident: f.ident, Tool: f.tool, Busy: f.busy, Tree: f.tree})
+	return json.Marshal(fixJSON{Label: f.Label, Run: f.Run, About: f.About, Undo: f.Undo, Kind: f.kind, Path: f.path, PID: f.pid, Start: f.start, Ident: f.ident, Tool: f.tool, Busy: f.busy, Tree: f.tree, Names: f.names})
 }
 
 // UnmarshalJSON reads a fix MarshalJSON wrote.
@@ -121,7 +124,7 @@ func (f *Fix) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &j); err != nil {
 		return err
 	}
-	*f = Fix{Label: j.Label, Run: j.Run, About: j.About, Undo: j.Undo, kind: j.Kind, path: j.Path, pid: j.PID, start: j.Start, ident: j.Ident, tool: j.Tool, busy: j.Busy, tree: j.Tree}
+	*f = Fix{Label: j.Label, Run: j.Run, About: j.About, Undo: j.Undo, kind: j.Kind, path: j.Path, pid: j.PID, start: j.Start, ident: j.Ident, tool: j.Tool, busy: j.Busy, tree: j.Tree, names: j.Names}
 	return nil
 }
 

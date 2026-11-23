@@ -68,7 +68,7 @@ func Do(ctx context.Context, r Runner, f Fix, in DoInput) (string, error) {
 	case fixNCStyle:
 		return doNCStyle(ctx, r, f, in)
 	}
-	return "", errors.New(brand.Raffi + " has no such fix")
+	return doOwn(ctx, f, in)
 }
 
 // doNCStyle has one of macOS's own senders show its notices in the style

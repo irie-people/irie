@@ -154,6 +154,7 @@ type Model struct {
 	spawning  bool
 	status    string
 	statusErr bool
+	saidTells map[string]bool // the tells this sidebar has said (sayTells)
 }
 
 // New returns a sidebar that talks to b.
@@ -233,6 +234,22 @@ func before(a, b ipc.Session) bool {
 	return a.ID < b.ID
 }
 
+// sayTells says in the status line each tell the header carries that
+// this sidebar has not said yet (ipc.Tell), the newest last. It leaves it
+// standing for the Mac app, which shows it as a notice and says it did.
+func (m *Model) sayTells() {
+	for _, t := range m.head.Tells {
+		if m.saidTells[t.ID] {
+			continue
+		}
+		if m.saidTells == nil {
+			m.saidTells = map[string]bool{}
+		}
+		m.saidTells[t.ID] = true
+		m.setStatus(t.Text, t.Level == "warn")
+	}
+}
+
 func (m *Model) apply(f ipc.Frame) {
 	// The selection stays on what it is on. Entries that come and go above
 	// the screen leave it as it is: the first entry on screen stays first,
@@ -253,6 +270,7 @@ func (m *Model) apply(f ipc.Frame) {
 		if f.Header != nil {
 			m.head = *f.Header
 			m.takeTheme(m.head.Theme)
+			m.sayTells()
 		}
 		return
 	case ipc.FrameHistory:
@@ -263,6 +281,7 @@ func (m *Model) apply(f ipc.Frame) {
 		if f.Header != nil {
 			m.head = *f.Header
 			m.takeTheme(m.head.Theme)
+			m.sayTells()
 		}
 		if !m.gotSnapshot && len(m.sessions) > 0 && m.bar.Value() == "" {
 			m.setFocus(focusList)

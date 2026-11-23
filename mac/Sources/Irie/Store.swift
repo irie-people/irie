@@ -223,6 +223,9 @@ final class Store {
     var notices: [LoggedNotice] = LoggedNotice.saved()
     /// When the Notices tab last showed: the errors since count on its tab.
     var noticesSeen = Date()
+    /// The tells this app has shown (takeTells), so that each shows once
+    /// while the core hears that it did.
+    @ObservationIgnored private var toldTells: Set<String> = []
     /// Whether the pointer rests on the notice on show, which holds it.
     @ObservationIgnored var noticeHeld = false
     /// Whether a task is starting. The task bar takes the next one
@@ -798,6 +801,19 @@ final class Store {
             groups = h.groups ?? []
         }
         if let z = h.zen { takeZen(z) }
+        if let t = h.tells { takeTells(t) }
+    }
+
+    /// Shows each tell the header carries that this app has not shown, as a
+    /// notice the Notices tab keeps, and tells the core it did (op raphael,
+    /// told), so that no header carries it again.
+    private func takeTells(_ tells: [Tell]) {
+        for t in tells where !toldTells.contains(t.id) {
+            toldTells.insert(t.id)
+            say(t.words, error: t.level == "warn", seconds: 12)
+            guard !isFixture else { continue }
+            Task { _ = try? await client.call("raphael", RaphaelArgs(told: t.id), as: Empty.self) }
+        }
     }
 
     /// The picked session while it shows beside its teammates: the terminal
