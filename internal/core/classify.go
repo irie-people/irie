@@ -40,7 +40,7 @@ const (
 	minLabels  = 30              // fewer embedded labelled tasks than this, or a class with none, and the words decide
 	embedWait  = 3 * time.Second // the longest a spawn waits for its task's embedding
 	embedRest  = time.Minute     // after a failed call, how long the server is left alone
-	embedKeep  = "30m"           // how long the server keeps the model loaded after a call
+	embedKeep  = "5m"            // how long the server keeps the model loaded after a call; a small one loads again in a second
 	embedBatch = 32              // labelled tasks embedded in one call
 	fillWait   = time.Minute     // the longest one such call may take
 )
@@ -218,6 +218,9 @@ func (c *Core) embed(ctx context.Context, e config.RouteEmbed, texts []string, p
 	l.mu.Lock()
 	rest := l.rest
 	l.mu.Unlock()
+	if err := c.modelsOff(e.URL); err != nil {
+		return nil, err // the router's words decide, and find's
+	}
 	if time.Now().Before(rest) {
 		return nil, errEmbedRests
 	}

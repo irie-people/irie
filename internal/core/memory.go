@@ -98,6 +98,7 @@ func (c *Core) sample() {
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()
+	c.easeModels() // what Irie's own model servers hold for nobody goes (localhere.go)
 }
 
 // readRoom reads the swap's room on disk, or FakeRoomEnv's for a test
