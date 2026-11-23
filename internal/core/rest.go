@@ -135,6 +135,10 @@ func (c *Core) restable(x *session, auto bool, now time.Time) string {
 		return "it researches anonymously, in a compartment of its own"
 	case len(x.followUps) > 0 || x.sending:
 		return "jots wait to be typed to it"
+	case t.waiting > 0:
+		// Its last turn left work of its own in the background, or a
+		// wakeup, which its agent's end would end too.
+		return "its own work goes on in the background"
 	}
 	if _, waits := x.subsAtWork(); waits {
 		return "its helpers or teammates still work"

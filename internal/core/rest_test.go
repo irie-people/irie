@@ -205,6 +205,11 @@ func TestOnlyAnIdleSessionWithAConversationRests(t *testing.T) {
 	if _, err := c.rest(ipc.RestArgs{Session: asks.ID}); code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), "waits on you") {
 		t.Errorf("rest of a session that waits on you: %v", err)
 	}
+	// Work of its own in the background would end with its agent.
+	bg := c.idle("prompt,stop:bg")
+	if _, err := c.rest(ipc.RestArgs{Session: bg.ID}); code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), "background") {
+		t.Errorf("rest of a session with work in the background: %v", err)
+	}
 	// You may rest a finished turn you have not looked at; Raffi leaves it.
 	r, err := c.rest(ipc.RestArgs{Idle: true})
 	if err != nil || len(r.Sessions) != 0 {
