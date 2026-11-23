@@ -2,7 +2,8 @@
 // (DESIGN §2.2, §4.2). It starts the agent in its own process group, makes
 // that group the terminal's foreground, says who it is in host.json,
 // continues stops it did not cause unless the session is frozen, and
-// records the exit status in exit.json.
+// records the exit status in exit.json. Once an agent exits by itself, the
+// pane goes on as the user's shell, when the spec names one (runShell).
 package host
 
 import (
@@ -13,10 +14,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
@@ -43,6 +48,15 @@ type Spec struct {
 	Local    bool              `json:"local,omitempty"`  // a model of a local runtime
 	Tutor    string            `json:"tutor,omitempty"`  // its tutor mode, explain or teach (learn.tutor)
 	Anon     string            `json:"anon,omitempty"`   // the compartment it researches in, anonymously (DESIGN §4.16)
+
+	// Shell is what the pane runs once the agent has exited by itself, as
+	// a terminal's shell carries on when a program in it ends: the user's
+	// login shell, in Cwd, under the agent's last screen (runShell). It
+	// gets the pane's environment, without Unset and with ShellEnv, not
+	// the agent's Env. With none, or when a signal ended the agent, as a
+	// close or a rest does, the pane dies with the agent.
+	Shell    []string          `json:"shell,omitempty"`
+	ShellEnv map[string]string `json:"shell_env,omitempty"`
 }
 
 // Exit is exit.json, written when the agent exits.
@@ -50,6 +64,11 @@ type Exit struct {
 	Code   int       `json:"code"`             // exit code; 128+n for signal n
 	Signal int       `json:"signal,omitempty"` // the signal that ended the agent
 	At     time.Time `json:"at"`
+	// Host is the pid of the host that wrote it. While a pane whose first
+	// process has that pid lives on, its agent has ended and the user's
+	// shell runs in its place (Spec.Shell); a file from an earlier host
+	// names another pid.
+	Host int `json:"host,omitempty"`
 }
 
 // ExitFile is the name of the exit status file next to spec.json.
@@ -72,6 +91,10 @@ type Info struct {
 	// Freeze is 1 for a host that leaves its agent stopped while
 	// freeze.json exists, so the core can stop the agent itself.
 	Freeze int `json:"freeze,omitempty"`
+	// Shell is the pid of the user's shell, which runs in the pane once
+	// the agent has exited by itself (Spec.Shell), the leader of a process
+	// group of its own.
+	Shell int `json:"shell,omitempty"`
 }
 
 // ReadInfo reads a host.json.
@@ -136,7 +159,9 @@ func writeJSON(path string, v any) error {
 }
 
 // Run runs the agent described by the spec at specPath and returns the
-// host's own exit code, which is the agent's.
+// host's own exit code, which is the agent's. An agent that exits by
+// itself leaves the spec's shell in the pane, and Run returns once that
+// has exited too (runShell).
 func Run(specPath string) int {
 	dir := filepath.Dir(specPath)
 	exitPath := filepath.Join(dir, ExitFile)
@@ -146,7 +171,7 @@ func Run(specPath string) int {
 		return 126
 	}
 	finish := func(x Exit) int {
-		x.At = time.Now().UTC()
+		x.At, x.Host = time.Now().UTC(), os.Getpid()
 		if err := writeJSON(exitPath, x); err != nil {
 			fmt.Fprintf(os.Stderr, brand.Slug+" host: %v\n", err)
 		}
@@ -159,6 +184,11 @@ func Run(specPath string) int {
 		fmt.Fprintf(os.Stderr, brand.Slug+": %s: command not found\n", spec.Argv[0])
 		return finish(Exit{Code: 127})
 	}
+
+	// The terminal's settings before the agent, which go back once it has
+	// ended, as a shell puts them back after each program it runs: an
+	// agent that dies in raw mode would leave the shell after it no echo.
+	saved, _ := unix.IoctlGetTermios(0, getTermios)
 
 	// The agent gets its own process group and the terminal's foreground, so
 	// the host can signal its whole group and stays out of the way of its
@@ -185,23 +215,17 @@ func Run(specPath string) int {
 	// Ignoring these keeps it from being stopped when it touches the
 	// terminal, and it is set only now so the agent does not inherit it.
 	signal.Ignore(syscall.SIGTTOU, syscall.SIGTTIN)
+	f := &fate{group: pid}
 	sigs := make(chan os.Signal, 4)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		for s := range sigs {
-			syscall.Kill(-pid, s.(syscall.Signal))
-			// A stopped agent that catches the signal, as Claude Code does,
-			// keeps it pending until it runs again, so the group is continued:
-			// a frozen session closes too (DESIGN §4.3).
-			syscall.Kill(-pid, syscall.SIGCONT)
-		}
-	}()
+	go f.pass(sigs)
 
-	if err := writeJSON(filepath.Join(dir, InfoFile), Info{PID: os.Getpid(), Agent: pid, Freeze: 1}); err != nil {
+	info := Info{PID: os.Getpid(), Agent: pid, Freeze: 1}
+	if err := writeJSON(filepath.Join(dir, InfoFile), info); err != nil {
 		fmt.Fprintf(os.Stderr, brand.Slug+" host: %v\n", err)
 	}
 
-	ws, err := wait(pid, dir)
+	ws, err := wait(pid, func() bool { return Frozen(dir) })
 	if foreground {
 		setForeground(0, syscall.Getpgrp())
 	}
@@ -209,17 +233,169 @@ func Run(specPath string) int {
 		fmt.Fprintf(os.Stderr, brand.Slug+" host: wait: %v\n", err)
 		return finish(Exit{Code: 126})
 	}
+	x := Exit{Code: ws.ExitStatus()}
 	if ws.Signaled() {
-		return finish(Exit{Code: 128 + int(ws.Signal()), Signal: int(ws.Signal())})
+		x = Exit{Code: 128 + int(ws.Signal()), Signal: int(ws.Signal())}
 	}
-	return finish(Exit{Code: ws.ExitStatus()})
+	code := finish(x)
+	if foreground && len(spec.Shell) > 0 {
+		runShell(spec, dir, info, saved, x, f)
+	}
+	return code
+}
+
+// fate is where the host's signals go: the agent's process group, then the
+// shell's once one runs in its place. The first SIGHUP or SIGTERM ends the
+// pane, as a close, a rest or a respawn sends: no shell starts after it.
+type fate struct {
+	mu    sync.Mutex
+	group int  // the process group the signals go to
+	shell bool // it is the shell's
+	ended bool // a signal came to end the pane
+}
+
+// pass sends each signal the host gets on to the group. A stopped agent
+// that catches the signal, as Claude Code does, keeps it pending until it
+// runs again, so the group is continued: a frozen session closes too
+// (DESIGN §4.3). An interactive shell ignores SIGTERM, so a close's comes
+// to it as a SIGHUP, which ends it as a terminal's closing does, and which
+// it passes on to its jobs.
+func (f *fate) pass(sigs <-chan os.Signal) {
+	for s := range sigs {
+		sig := s.(syscall.Signal)
+		f.mu.Lock()
+		if sig == syscall.SIGHUP || sig == syscall.SIGTERM {
+			f.ended = true
+		}
+		if f.shell && sig == syscall.SIGTERM {
+			sig = syscall.SIGHUP
+		}
+		syscall.Kill(-f.group, sig)
+		syscall.Kill(-f.group, syscall.SIGCONT)
+		f.mu.Unlock()
+	}
+}
+
+// over reports whether a signal came to end the pane.
+func (f *fate) over() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ended
+}
+
+// errEnded says a signal came to end the pane before the shell started.
+var errEnded = errors.New("the pane is ending")
+
+// start runs fork unless a signal came to end the pane, and sends the
+// host's signals from then on to the process group of what it started, so
+// that no signal falls between the agent's end and the shell's start.
+func (f *fate) start(fork func() (int, error)) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ended {
+		return 0, errEnded
+	}
+	pid, err := fork()
+	if err == nil {
+		f.group, f.shell = pid, true
+	}
+	return pid, err
+}
+
+// resetModes turns off what a full-screen agent may leave on when it ends
+// without putting the terminal back, as one that is killed does (XTerm
+// Control Sequences): the mouse's reports (1000, 1002, 1003 and 1006), focus
+// reports (1004), bracketed paste (2004, which a shell turns on again for
+// its own line), the alternate screen (1049), the keys' extended reports
+// (XTMODKEYS 4, which tmux reads); and it shows the cursor (25) and resets
+// the colours (SGR 0). Each does nothing where it is off already.
+const resetModes = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1004l\x1b[?2004l\x1b[?1049l\x1b[>4m\x1b[?25h\x1b[0m"
+
+// ShellNoteEnd ends the dim line the host writes between the agent's last
+// screen and the shell (shellNote). The core cuts a screen's tail there,
+// so that the shell's prompt never reads as the agent's last words.
+const ShellNoteEnd = " · your shell from here ──"
+
+// shellNote is the line the host writes above the shell: which program
+// ended and how, dim, in the shell's place in the terminal.
+func shellNote(argv0 string, x Exit) string {
+	how := "exited"
+	switch {
+	case x.Signal != 0:
+		name := unix.SignalName(syscall.Signal(x.Signal))
+		if name == "" {
+			name = "signal " + strconv.Itoa(x.Signal)
+		}
+		how = "was ended by " + name
+	case x.Code != 0:
+		how = "exited with code " + strconv.Itoa(x.Code)
+	}
+	return "\x1b[2m── " + filepath.Base(argv0) + " " + how + ShellNoteEnd + "\x1b[0m"
+}
+
+// runShell runs spec's shell in the pane once its agent has exited by
+// itself, as a terminal's shell goes on when a program in it ends: the
+// terminal set back as it was before the agent, with what the agent may
+// have left on turned off, a line that says what ended, then the shell in
+// the agent's folder, or at home once that has gone, in a process group of
+// its own and the terminal's foreground, which host.json then names. It
+// returns once the shell has exited. A signal that came to end the pane,
+// as a close's or a rest's does, starts none.
+func runShell(spec Spec, dir string, info Info, saved *unix.Termios, x Exit, f *fate) {
+	if f.over() {
+		return
+	}
+	cwd := spec.Cwd
+	if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
+		if cwd, err = os.UserHomeDir(); err != nil {
+			cwd = "/"
+		}
+	}
+	env := environ(os.Environ(), spec.ShellEnv, spec.Unset, cwd)
+	path, err := LookPath(spec.Shell[0], env)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, brand.Slug+": %s: command not found\n", spec.Shell[0])
+		return
+	}
+	if saved != nil {
+		unix.IoctlSetTermios(0, setTermios, saved)
+	}
+	os.Stdout.WriteString(resetModes + "\r\n" + shellNote(spec.Argv[0], x) + "\r\n")
+	attr := &syscall.ProcAttr{
+		Dir:   cwd,
+		Env:   env,
+		Files: []uintptr{0, 1, 2},
+		Sys:   &syscall.SysProcAttr{Setpgid: true, Foreground: true, Ctty: 0},
+	}
+	pid, err := f.start(func() (int, error) {
+		// The shell starts with these signals' defaults, as the agent
+		// did: the host ignores them on its terminal, and a shell's jobs
+		// would inherit what it was given.
+		signal.Reset(syscall.SIGTTOU, syscall.SIGTTIN)
+		defer signal.Ignore(syscall.SIGTTOU, syscall.SIGTTIN)
+		return syscall.ForkExec(path, spec.Shell, attr)
+	})
+	if err != nil {
+		if !errors.Is(err, errEnded) {
+			fmt.Fprintf(os.Stderr, brand.Slug+": %s: %v\n", spec.Shell[0], err)
+		}
+		return
+	}
+	info.Shell = pid
+	if err := writeJSON(filepath.Join(dir, InfoFile), info); err != nil {
+		fmt.Fprintf(os.Stderr, brand.Slug+" host: %v\n", err)
+	}
+	// Irie never freezes a shell: any stop of it is someone else's.
+	wait(pid, func() bool { return false })
+	setForeground(0, syscall.Getpgrp())
 }
 
 // wait waits for the agent to exit. The host never stops the agent itself.
-// While the session in dir is frozen, the core stopped it, and the stop
-// stays. Any other stop is someone else's, such as the agent's own Ctrl+Z
-// handling, and the agent's group is continued at once so it never wedges.
-func wait(pid int, dir string) (syscall.WaitStatus, error) {
+// While frozen says the session is frozen, the core stopped it, and the
+// stop stays. Any other stop is someone else's, such as the agent's own
+// Ctrl+Z handling, and the agent's group is continued at once so it never
+// wedges.
+func wait(pid int, frozen func() bool) (syscall.WaitStatus, error) {
 	for {
 		var ws syscall.WaitStatus
 		_, err := syscall.Wait4(pid, &ws, syscall.WUNTRACED, nil)
@@ -230,7 +406,7 @@ func wait(pid int, dir string) (syscall.WaitStatus, error) {
 			return ws, err
 		}
 		if stopped(ws) {
-			if !Frozen(dir) {
+			if !frozen() {
 				syscall.Kill(-pid, syscall.SIGCONT)
 			}
 			continue

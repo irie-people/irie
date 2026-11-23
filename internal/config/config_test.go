@@ -27,7 +27,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar, TerminalLinks: "rolodex"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second, Preferences: Preferences()}); !reflect.DeepEqual(c.Spawn, want) {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, ShellAfterExit: true, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second, Preferences: Preferences()}); !reflect.DeepEqual(c.Spawn, want) {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -199,6 +199,7 @@ ready_timeout = "45s"
 close_when_done = true
 close_delay = "5s"
 hide_tmux = false
+shell_after_exit = false
 teammates = "panes"
 follow_up_window = "0s"
 follow_up_delay = "1s"
@@ -299,7 +300,7 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second, NewTabs: "next", Bar: "tips", TerminalLinks: "browser"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second, Preferences: []string{"Text me in one line."}}); !reflect.DeepEqual(c.Spawn, want) {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, ShellAfterExit: false, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second, Preferences: []string{"Text me in one line."}}); !reflect.DeepEqual(c.Spawn, want) {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{

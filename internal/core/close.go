@@ -35,6 +35,7 @@ import (
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/rebuild"
 	"github.com/irie-people/irie/internal/tmux"
 )
@@ -336,11 +337,15 @@ func (c *Core) closeTargets(a ipc.CloseArgs) []string {
 
 // doneWith reports whether Close All Finished closes x: its turn is over,
 // done, idle or exited, and nothing of its work goes on (finished), no
-// helper or teammate at work; and it is neither pinned nor parked, which
-// you keep on purpose. Another machine's sessions are never in c.sessions.
-// The caller holds c.mu.
+// helper or teammate at work, nor a program of yours in the shell its
+// terminal went on as; and it is neither pinned nor parked, which you keep
+// on purpose. Another machine's sessions are never in c.sessions. The
+// caller holds c.mu.
 func (c *Core) doneWith(x *session) bool {
 	if x.track.pinned || x.track.parked || x.track.frozen != nil || !finished(x) {
+		return false
+	}
+	if c.shellBusy(x) {
 		return false
 	}
 	if _, waits := x.subsAtWork(); waits {
@@ -351,6 +356,27 @@ func (c *Core) doneWith(x *session) bool {
 		return true
 	}
 	return false
+}
+
+// shellBusy says whether a program of yours runs in the shell x's terminal
+// went on as once its agent ended (host.Spec.Shell): the terminal's
+// foreground, by tmux's word now rather than the last tick's, is not the
+// shell that host.json names. The caller holds c.mu.
+func (c *Core) shellBusy(x *session) bool {
+	if !x.shell {
+		return false
+	}
+	i, err := host.ReadInfo(c.paths.HostFile(x.id))
+	if err != nil || i.Shell <= 1 {
+		return false
+	}
+	sh, err := proc.One(i.Shell)
+	if err != nil {
+		return false
+	}
+	out, err := c.tmux.Run("display-message", "-p", "-t", x.pane, "#{pane_current_command}")
+	fg := strings.TrimSpace(out)
+	return err == nil && fg != "" && fg != sh.Name
 }
 
 // closeLocked closes session id: at your word, or on its own (auto) when

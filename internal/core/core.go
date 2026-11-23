@@ -202,8 +202,10 @@ type session struct {
 	pane      string
 	command   string // the pane's foreground command
 	bracket   bool   // the agent asked for bracketed paste
-	dead      bool
+	dead      bool   // its agent has ended: its pane died, or the user's shell runs in the agent's place (shell)
 	exitCode  int
+	shell     bool       // its pane lives on as the user's shell, its agent ended (host.Spec.Shell)
+	lastExit  *host.Exit // the exit.json of the host that runs its pane now, once read (shellExit)
 	shown     bool
 	track     track
 	quiet     int        // counts the session's events and messages; a close-when-done timer fires only if it has not moved
@@ -269,6 +271,11 @@ func (x *session) wire() ipc.Session {
 		s.Class, s.Routed, s.Parent, s.Rated = o.class, o.routed, o.parent, o.rated
 	}
 	x.track.describe(&s, x.dead, x.exitCode)
+	// Its terminal goes on as the user's shell (host.Spec.Shell).
+	if x.shell && (s.State == ipc.StateExited || s.State == ipc.StateFailed) {
+		s.Shell = true
+		s.Detail += " · now a shell"
+	}
 	// Its own turn is over while its helpers or teammates still work: it
 	// waits on them, and its work is not over yet (DESIGN §5.3). Work in
 	// the background that its Stop named says so already (describe); else
@@ -644,6 +651,11 @@ func (c *Core) sync(s tmux.Snapshot) {
 			}
 		}
 		x.pane, x.dead, x.exitCode, x.command, x.bracket = p.ID, p.Dead, p.DeadStatus, p.Command, p.BracketPaste
+		// Its agent has ended, and the user's shell runs in its place.
+		x.shell = false
+		if ex := c.shellExit(x, p); ex != nil {
+			x.dead, x.exitCode, x.shell = true, ex.Code, true
+		}
 		// Shown: its pane is in the slot, or its conversation is, which
 		// the placeholder draws.
 		x.shown = slot != nil && (slot.ID == p.ID || slot.Role == tmux.RolePlaceholder && !c.rawView() && c.selected == x.id) ||
@@ -659,6 +671,25 @@ func (c *Core) sync(s tmux.Snapshot) {
 	for _, x := range old {
 		c.settle(x)
 	}
+}
+
+// shellExit is the exit of x's agent while its pane lives on with the
+// user's shell in the agent's place (host.Spec.Shell), and nil while the
+// agent runs or once the pane has died: the exit.json that the host running
+// the pane now wrote. It is read until it is there, and kept while that
+// host runs. The caller holds c.mu.
+func (c *Core) shellExit(x *session, p tmux.Pane) *host.Exit {
+	if p.Dead || p.PID <= 1 {
+		x.lastExit = nil
+		return nil
+	}
+	if x.lastExit == nil || x.lastExit.Host != p.PID {
+		x.lastExit = nil
+		if ex, err := host.ReadExit(c.paths.ExitFile(x.id)); err == nil && ex.Host == p.PID {
+			x.lastExit = &ex
+		}
+	}
+	return x.lastExit
 }
 
 // adopt rebuilds a registry entry from an agent pane, as a restarted core

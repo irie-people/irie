@@ -24,7 +24,11 @@ struct FileDrop: ViewModifier {
         guard let session else { return "Select a session first, then drop the file." }
         switch session.state {
         case "needs_you": return "\(session.name) is waiting for you in its terminal, so it can’t take a file now."
-        case "exited", "failed": return "\(session.name) has ended, so it can’t take a file."
+        case "exited", "failed":
+            // Its terminal may go on as your shell, which takes a dropped
+            // path as a terminal does, while it shows.
+            guard session.shell == true else { return "\(session.name) has ended, so it can’t take a file." }
+            return store.showTerminal ? nil : "\(session.name) has ended: show its terminal to drop the file into its shell."
         case "starting", "stalled": return "\(session.name) isn’t ready yet, so it can’t take a file."
         default: return nil
         }

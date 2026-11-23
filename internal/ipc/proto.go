@@ -273,6 +273,10 @@ type Session struct {
 	// Rest is set while it rests: its agent ended to free memory, and its
 	// card stays, with its conversation (DESIGN §4.3).
 	Rest *Rest `json:"rest,omitempty"`
+	// Shell is set while its agent has ended (exited or failed) and its
+	// terminal goes on as the user's shell, in its folder: what is typed
+	// there runs (spawn.shell_after_exit, DESIGN §2.3).
+	Shell bool `json:"shell,omitempty"`
 
 	// Hue is which of the agents' colours it takes while it works, from 1
 	// to ui.AgentColors, the same for as long as it lives (internal/core,

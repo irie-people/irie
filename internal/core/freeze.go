@@ -340,7 +340,9 @@ func (c *Core) keepFrozen() {
 			continue
 		}
 		p := c.snap.Pane(x.pane)
-		if p == nil || p.Dead || p.PID <= 1 {
+		// An agent that ended leaves nothing to keep stopped: its pane is
+		// dead, or the user's shell runs in it.
+		if p == nil || p.Dead || p.PID <= 1 || x.dead {
 			continue
 		}
 		file := c.paths.FreezeFile(x.id)

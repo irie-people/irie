@@ -139,7 +139,7 @@ flowchart LR
 | `irie attach` | any terminal | `exec tmux -L irie attach -t irie`. Inside another tmux it refuses unless given `--nested`. Inside Irie's own server it runs `switch-client` | tmux |
 | `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation, and runs the freeze dog, Raphael's watch, which restarts a frozen Irie.app or sidebar (§2.4, §4.11), keeps Irie's own processes running (§2.9) and has the core leave when its own loop stands still for `arch.raphael.core` (§4.11). The supervisor restarts it with backoff (0.1, 0.2, 0.4 … 5 s), continues it when something stops it and keeps it out of the background (§2.9) | socket (server), tmux, hosts (signals), transcripts |
 | `irie ui --supervise` | `irie:0.0` | The sidebar, a pure client of the socket. It never calls tmux | socket |
-| `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; continues stops it did not cause, but leaves a frozen agent stopped; says who it is in `host.json`; records the exit status | the agent (fork/exec), socket (best effort) |
+| `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; continues stops it did not cause, but leaves a frozen agent stopped; says who it is in `host.json`; records the exit status; then, when the agent exited by itself, runs the user's shell in its place (§2.3) | the agent and the shell (fork/exec), socket (best effort) |
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
 | `irie statusline` | started by Claude Code for each status line update (§6.3) | Forwards the session's cost, context and plan use, then runs the user's own status line | socket |
 | `irie team-tmux` | the `tmux` an agent with agent teams finds first on its PATH (§2.3) | Takes Claude Code's teammate panes to the team server, a tmux session each; sends every other tmux call where it would go without Irie | tmux (exec) |
@@ -171,7 +171,7 @@ Generated tmux.conf, essentials:
 | `bind -n C-] if -F '#{==:#{pane_index},0}' 'select-pane -t irie:0.1' 'select-pane -t irie:0.0'` | Focus toggle between sidebar and slot (`ui.focus_key`) |
 | `mouse on` | Click to focus, wheel to scroll |
 | `base-index 0`, `pane-base-index 0` | `irie:0.0` is always the sidebar and `irie:0.1` always the slot |
-| `remain-on-exit on`, `history-limit 50000` | A dead agent keeps its exit status and last screen |
+| `remain-on-exit on`, `history-limit 50000` | A dead agent keeps its exit status and last screen, and so does the shell an agent that exits by itself leaves (below) once that exits |
 | `allow-passthrough on`, `focus-events on`, `extended-keys on`, `terminal-features 'xterm*:extkeys'` | What Claude Code's terminal docs ask for (Shift+Enter, progress) |
 | `set-titles on`, `set-titles-string Irie` | Sets the Ghostty window title, which is used to find the window (§7.1) |
 | `escape-time 10` | Esc reaches agents promptly |
@@ -196,6 +196,10 @@ On every tick the core checks these invariants and repairs any it finds broken:
 - `irie:0` follows its latest client (`window-size latest`), except for a moment after a swap: while the app is open, a swap first gives `irie:0` the size of the window coming in, as the placeholder fills the slot, so that agent comes in at its own size, and `irie:0` holds that size (`window-size manual`) for 1.5 s, until the app's terminal has taken it too.
 
 The core never kills a pane while it is in the slot; it swaps the pane home first.
+
+**A shell after the agent.** An agent that exits by itself, as at `/exit`, two Ctrl+C or a crash, leaves its terminal as the user's shell, as a terminal does when a program in it ends, and as cmux's terminal does under Claude Code (`spawn.shell_after_exit`, on by default). The host writes `exit.json`, puts the terminal's settings back as they were before the agent (an agent killed in raw mode would leave the shell no echo), turns off what a full-screen agent may have left on (the mouse's and focus reports, bracketed paste, the alternate screen, the keys' extended reports; a hidden cursor shows), writes a dim line, `── claude exited with code 1 · your shell from here ──`, and starts the user's login shell (`$SHELL -l`) in the agent's folder, or at home once that has gone, in a process group of its own in the terminal's foreground. The agent's last screen stays above it. The shell gets the pane's environment, without what `spawn.hide_tmux` removes and with `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`, so that `irie ctl` there speaks for the session; never the agent's own variables, such as a local profile's model server. `host.json` then names the shell's pid. When the shell exits, the pane dies with the agent's code. A session no one watches (a bench's run, §6.6) leaves no shell, nor does a pane whose agent a signal ended: the first SIGHUP or SIGTERM through the host, as a close, a rest and a respawn send, means the pane is ending.
+
+The core tells such a pane by its host: while a pane lives on whose first process is the host that `exit.json` names (`host`), its agent has ended. The session is dead for every rule about agents (exited, or failed when it never became ready, with the agent's code, and so out of the trod bot's, the lid's and Gabriel's work), its row carries `shell` and its detail ends `· now a shell`. What acts on the terminal treats it as one: `keys` types into it, the session the user is on stays Gabriel's top (§4.11), a failed spawn's tail is the screen above the host's line, Close All Finished passes it over while a program of the user's has the terminal's foreground, and a close's SIGTERM reaches the shell as a hangup, which an interactive shell, ignoring SIGTERM, takes as its end, passing it on to its jobs.
 
 **Agent teams.** With `spawn.teammates = "panes"`, Claude Code sessions may start agent teams, whose teammates are Claude Code sessions of their own, each in a terminal pane (`teammateMode: "tmux"`). They run on the team server, `tmux -L irie-teams` with its own generated `tmux-teams.conf`, never on Irie's: a teammate's pane is not Irie's to place, and no agent of Irie's is resized for it.
 
@@ -659,7 +663,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | Name wider than the sidebar | Cut with an ellipsis; the status strip, or the details card's border, shows as much of it as fits |
 | Folding a group while one of its sessions is selected | The selection moves to the group's header |
 | Two clients of different sizes | `window-size latest`; the slot follows, and agent windows are resized to match |
-| The shown session exits | Its pane stays in the slot with its exit status; the row shows exited |
+| The shown session exits | Its pane stays in the slot: its agent's last screen, then the user's shell (§2.3), or with `spawn.shell_after_exit` off its exit status; the row shows exited |
 | The selected session disappears | The selection moves to the next row |
 | Collapsing Parked while a parked row is selected | The selection moves to the Parked header |
 
@@ -696,7 +700,7 @@ The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3),
 2. Resolve the working directory: a worktree (rules below), the main checkout (`@name!`), a plain path, the profile's `folder` in place, or with no token `spawn.default_cwd`. Empty means a new scratch dir under `$XDG_DATA_HOME/irie/scratch/`, so an untargeted task never runs in `$HOME`.
 3. Write `sessions/<id>/task.md` and `spec.json` (argv, env, cwd).
 4. In one command list, run `new-window -d -t irie-agents: -n <id> -P -F '#{pane_id}' '<irie> host --spec <path>'`, set the pane options and the window size, and name the window after the session.
-5. The host calls `setpgid`, makes the agent the foreground process group of its terminal, execs it, then waits with `WUNTRACED` and writes `exit.json`.
+5. The host calls `setpgid`, makes the agent the foreground process group of its terminal, execs it, then waits with `WUNTRACED` and writes `exit.json`. An agent that exited by itself leaves the user's shell in its place (§2.3).
 6. The agent receives the task as an argument (§3.3).
 7. Readiness (M2): if `SessionStart` and `UserPromptSubmit` arrive within `spawn.ready_timeout`, the session is working. If the pane dies first, it is failed, with the exit code and the last 5 screen lines. If neither happens, it is stalled (red), with the same tail; a first-run trust prompt or a login prompt is the usual cause. A resumed conversation (§4.6) waits for input, so `SessionStart` with source `resume` alone makes it ready, and idle.
 8. The journal records `spawn.requested`, then `session.started` or `spawn.failed`.
@@ -1712,7 +1716,7 @@ Each row shows the first state in this table that applies; the table is in prece
 |---|---|---|---|
 | failed | `✕` | red | `spawn.failed` |
 | resting | `◇` | dim | `rest.on` without a later `rest.off`: its agent ended to free memory, and its card stays (§4.3). Its dead pane would read as exited, which it comes before; a frozen one rests too, with frozen's flag |
-| exited | `·`, or `✕` if the code is not 0 | dim (red if the code is not 0) | `pane.exited`, `session.ended` |
+| exited | `·`, or `✕` if the code is not 0 | dim (red if the code is not 0) | `pane.exited`, `session.ended`. The row carries `shell` while its terminal goes on as the user's shell (§2.3) |
 | frozen | `◆` | cyan | `freeze.on` without a later `freeze.off` |
 | paused | `‖` | yellow | `gate.held` |
 | needs you | `●` | **red** | `input.needed`, `turn.failed`. Cleared by the next prompt or tool event |
@@ -1749,7 +1753,7 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_STATE_HOME/irie/chain/charters/objects/<hex>.json`, `charters/HEAD` | The charters' chain (§4.17): each version RFC 8785 canonical JSON named by its SHA-512, of the form `irie.charters/2`, holding every text whole with its SHA-512, date and kind, and the links between the texts, and naming the version before it; the first build kept it as `chain/founding`, in the form `irie.founding/1`, which the core moves in as it starts. Public texts, kept plain; nothing that leaves the computer | core |
 | `$XDG_STATE_HOME/irie/journal/YYYY-MM-DD.ndjson` | Event envelopes, kept `journal.keep_days` days. A line a crash or a full disk cut short is skipped by every read, and loudly: the core logs how many lines of the latest day it cannot read, and where the first is, as it starts. A write that fails drops the file, so the next one opens it again and ends a cut line first: the events after it stand alone, and the journal recovers once there is room | core |
 | `$XDG_STATE_HOME/irie/layout.json` | A copy of the list's layout options as tmux holds them, `@irie_order`, `@irie_spaces`, `@irie_groups` and `@irie_hues` (atomic rename), which a new tmux server starts from (§4.5) | core |
-| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json` (the host's pid, its agent's, and that it knows freeze), `freeze.json` (while the session is frozen), `note-<n>.md`, `status.json` (the last status line update, §6.3), `costs.json` (its ledger's totals by day, model and purpose, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
+| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json` (the agent's exit and the pid of the host that saw it), `host.json` (the host's pid, its agent's, that it knows freeze, and its shell's once the agent has ended, §2.3), `freeze.json` (while the session is frozen), `note-<n>.md`, `status.json` (the last status line update, §6.3), `costs.json` (its ledger's totals by day, model and purpose, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
 | `$XDG_STATE_HOME/irie/sessions/<id>/mcp.json`, `sessions/<id>/browser/` | The session's own MCP servers (§3.3); its browser's profile while the browser runs, with `irie-browser.pid`, removed when it closes (§4.15) | core; `irie browser` |
 | `$XDG_STATE_HOME/irie/sessions/<id>/lock.json`, `lock-check.json` | The session's agent lock, written as its agent starts; what the checks found for each harness and package version, each kept 30 days after a check last asked (§4.21) | core |
 | `$XDG_STATE_HOME/irie/route-labels.jsonl`, `route-vectors.json`, `find-vectors.json` | The tasks given a class, and their embeddings (§6.4); the embeddings of the sessions' tasks and of what their agents said, which `irie ctl find` ranks them by (§4.5). An embedding can be turned back into much of its text, so these are as private as the tasks | core |
@@ -1808,6 +1812,7 @@ ready_timeout = "30s"
 hide_tmux = true              # remove TMUX/TMUX_PANE from agent env
 close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it; status, report and question sessions are left open)
 close_delay = "30s"           # how long a finished session waits; a new prompt, or anything it needs from you, cancels the close
+shell_after_exit = true       # an agent that exits by itself leaves its terminal as your login shell in its folder, under its last screen, as a terminal does (§2.3); false: its pane dies with it
 teammates = "off"             # panes | off: Claude Code sessions may start agent teams, each teammate in a terminal beside its session (§2.3)
 follow_up_window = "2m"       # a jot that reads as more for the jot sent within this long before goes to its agent instead of a new one (§4.2); "0s" = never
 follow_up_delay = "8s"        # how long such a jot waits before it is typed to the agent, so that New task can take it back
