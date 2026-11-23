@@ -92,7 +92,7 @@ func TestSideTasksDoWithoutAModelWhileLocalHereIsOff(t *testing.T) {
 	if _, err := c.embed(context.Background(), cfg.Route.Embed, []string{"fix the typo"}, ledger.Route); !errors.Is(err, localmodel.ErrOffHere) {
 		t.Errorf("embed: %v; want it not asked, as local models are off here", err)
 	}
-	if cos, _, note := c.findMeaning("typo", []findDoc{{parts: []string{"fix the typo in the README"}}}); cos != nil || !strings.Contains(note, "words only") {
+	if cos, _, note := c.findMeaning("typo", []findDoc{{parts: []string{"fix the typo in the README"}}}); cos != nil || note != localmodel.ErrOffHere.Error() {
 		t.Errorf("find: %v, %q; want words only", cos, note)
 	}
 	r, err := c.materializeOp(ipc.MaterializeArgs{ID: "x", Prompt: "Anything?", Wait: 10 * time.Second})
