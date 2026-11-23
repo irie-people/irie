@@ -12,7 +12,7 @@ core 89 0
 internal/ab 87 0
 internal/anon 73 0
 internal/arch 87 0
-internal/brand 96 0
+internal/brand 97 0
 internal/bridge 74 0
 internal/browser 40 1
 internal/chain 85 0
@@ -32,11 +32,11 @@ internal/focus 69 0
 internal/founding 86 0
 internal/genui 85 0
 internal/habits 86 0
-internal/harness 39 0
+internal/harness 59 0
 internal/harness/claude 91 0
 internal/harness/generic 92 0
 internal/hook 90 0
-internal/host 29 0
+internal/host 42 0
 internal/htmltext 93 0
 internal/ipc 48 0
 internal/jammin 80 1
@@ -44,7 +44,7 @@ internal/jot 96 0
 internal/journal 90 0
 internal/keyring 80 0
 internal/learn 89 0
-internal/ledger 85 0
+internal/ledger 86 0
 internal/lessons 80 0
 internal/lid 68 0
 internal/localmodel 75 0
