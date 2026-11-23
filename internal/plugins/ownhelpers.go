@@ -44,7 +44,11 @@ type Helper struct {
 	// Problem says why it can't run, in a sentence: a table that doesn't
 	// read. "" = it reads.
 	Problem string
-	On      bool // its plugin is on, as the config has it (Helpers)
+	On      bool // its plugin is on, as the config has it, and it isn't held (Helpers)
+	// Held says why it doesn't run though its plugin is on: what it runs
+	// changed since you turned it on, or it was turned on without your
+	// word (pins.go). "" = it may run.
+	Held string
 }
 
 // maxHelperArgs is the most words a helper's run may have.
@@ -196,6 +200,7 @@ const errNoProgram = helperError("The helper has no program to run.")
 // plugin is on. A manifest that doesn't read brings none.
 func Helpers(e Env) []Helper {
 	mine, _ := Mine(e.Paths.Plugins())
+	held := holds(e, mine)
 	var out []Helper
 	for _, p := range mine {
 		if p.problem != "" {
@@ -207,7 +212,7 @@ func Helpers(e Env) []Helper {
 				continue
 			}
 			h := *x.Helper
-			h.On = on
+			h.On, h.Held = on && held[p.Name] == "", held[p.Name]
 			h.Run = slices.Clone(h.Run)
 			out = append(out, h)
 		}

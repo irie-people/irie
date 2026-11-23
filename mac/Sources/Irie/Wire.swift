@@ -806,6 +806,19 @@ struct LearnResult: Decodable {
     /// What the session's project's own docs teach, doc by doc, each in its
     /// order, for the Teach tile; nil from a core from before them.
     var topics: [LearnTopic]?
+    /// The explanations the library keeps for the session's project, the
+    /// newest first.
+    var saved: [SavedExplanation]?
+}
+
+/// An explanation the library keeps (internal/explained).
+struct SavedExplanation: Decodable, Hashable {
+    var question: String
+    var topic: String?
+    var file: String
+    var versions: Int
+    var kept: Bool?
+    var made: Date?
 }
 
 /// One thing a project's docs teach: an item of a list that leads with its
@@ -1053,6 +1066,12 @@ struct MaterializeArgs: Encodable {
     var explain: String? = nil
     /// Drops the kept card, so the next ask makes it again.
     var forget: Bool? = nil
+    /// A turn of the Teach tile's chat: the newest card made again with
+    /// this done; the topic of the project's docs it explains; and keep,
+    /// which marks the explanation as one that helped (internal/explained).
+    var refine: String? = nil
+    var topic: String? = nil
+    var keep: Bool? = nil
 }
 
 /// A materialized card as it stands. `state` is cold, fresh, stale or
@@ -1066,8 +1085,13 @@ struct MaterializeResult: Decodable, Equatable {
     var by: String?
     var err: String?
     var began: Bool?
+    /// For an explanation the library keeps: its Markdown file, its
+    /// versions, and whether it was kept.
+    var saved: String?
+    var versions: Int?
+    var kept: Bool?
 
-    private enum CodingKeys: String, CodingKey { case id, state, spec, made, by, err, began }
+    private enum CodingKeys: String, CodingKey { case id, state, spec, made, by, err, began, saved, versions, kept }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1079,6 +1103,9 @@ struct MaterializeResult: Decodable, Equatable {
         by = try c.decodeIfPresent(String.self, forKey: .by)
         err = try c.decodeIfPresent(String.self, forKey: .err)
         began = try c.decodeIfPresent(Bool.self, forKey: .began)
+        saved = try c.decodeIfPresent(String.self, forKey: .saved)
+        versions = try c.decodeIfPresent(Int.self, forKey: .versions)
+        kept = try c.decodeIfPresent(Bool.self, forKey: .kept)
     }
 }
 

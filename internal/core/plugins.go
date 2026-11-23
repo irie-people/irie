@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/irie-people/irie/internal/config"
@@ -39,6 +40,20 @@ func (c *Core) pluginsOp(a ipc.PluginsArgs) (ipc.PluginsResult, error) {
 		}
 		if err := c.configure(c.paths.ConfigFile(), sets); err != nil {
 			return ipc.PluginsResult{}, err
+		}
+		if *a.On {
+			// Your word: what each plugin of yours turned on runs now is
+			// what it may run, until it changes (DESIGN §4.17). An agent
+			// can't get here: CallFrom refuses its "on".
+			names := []string{a.Plugin}
+			for _, e := range edits {
+				if name, ok := strings.CutPrefix(e.Key, "plugins.manifests."); ok && e.Value == true {
+					names = append(names, name)
+				}
+			}
+			c.mu.Lock()
+			c.pinPlugins(names)
+			c.mu.Unlock()
 		}
 	}
 	c.mu.Lock()

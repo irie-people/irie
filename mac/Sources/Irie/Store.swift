@@ -1403,9 +1403,19 @@ final class Store {
     /// wait, waits that many seconds while a local model makes it. Forget
     /// drops the kept card instead, so the next ask makes it anew. Throws
     /// what the core said when it refused.
-    func explainCard(_ topic: String, session: String?, wait: TimeInterval? = nil, forget: Bool = false) async throws -> MaterializeResult {
-        let args = MaterializeArgs(session: session, wait: wait.map { Int64($0 * 1_000_000_000) }, explain: topic, forget: forget ? true : nil)
+    func explainCard(_ topic: String, session: String?, wait: TimeInterval? = nil, forget: Bool = false,
+                     refine: String? = nil, about: String? = nil, keep: Bool? = nil) async throws -> MaterializeResult {
+        let args = MaterializeArgs(session: session, wait: wait.map { Int64($0 * 1_000_000_000) }, explain: topic, forget: forget ? true : nil,
+                                   refine: refine, topic: about, keep: keep)
         return try await client.call("materialize", args, timeout: (wait ?? 0) + 15, as: MaterializeResult.self)
+    }
+
+    /// What the selected session's project's docs teach, and what the
+    /// library keeps for it, for the Teach tile.
+    func learnProject(_ session: String?) async -> (topics: [LearnTopic], saved: [SavedExplanation]) {
+        guard canLearn, !isFixture, let session,
+              let r = try? await client.call("learn", LearnArgs(session: session), timeout: 5, as: LearnResult.self) else { return ([], []) }
+        return (r.topics ?? [], r.saved ?? [])
     }
 
     /// Takes a task added to the one before back and starts it as a task

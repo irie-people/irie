@@ -31,8 +31,11 @@ type cardState struct {
 	store *materialize.Store
 	turn  chan struct{} // one remake at a time, so local models load one by one
 
-	mu   sync.Mutex
-	runs map[string]chan struct{} // each card's newest remake, closed when it is done
+	mu    sync.Mutex
+	runs  map[string]chan struct{} // each card's newest remake, closed when it is done
+	about map[string]explainAbout  // what a card that explains, being made, is about, for the library
+	fresh map[string]bool          // the cards that explain the person asked to have made again
+	lib   sync.Mutex               // the library's files, one change at a time (explainlib.go)
 }
 
 // cardStore is the store, read from cards.json the first time a card is
@@ -42,6 +45,8 @@ func (c *Core) cardStore() *materialize.Store {
 	c.cards.once.Do(func() {
 		c.cards.turn = make(chan struct{}, 1)
 		c.cards.runs = map[string]chan struct{}{}
+		c.cards.about = map[string]explainAbout{}
+		c.cards.fresh = map[string]bool{}
 		s, err := materialize.Open(c.paths.Cards())
 		if err != nil {
 			c.log.Warn("materialize: the cards' file does not read; its cards will be made again", "err", err)
@@ -55,14 +60,26 @@ func (c *Core) cardStore() *materialize.Store {
 // kept, with a remake begun when one is due, and waited for when asked.
 func (c *Core) materializeOp(a ipc.MaterializeArgs) (ipc.MaterializeResult, error) {
 	var err error
+	var about *explainAbout
 	switch {
 	case a.Explain != "":
-		a, err = c.explainCardArgs(a)
+		var ab explainAbout
+		a, ab, err = c.explainCardArgs(a)
+		about = &ab
 	case a.Session != "":
 		a, err = c.sessionCardArgs(a)
 	}
 	if err != nil {
 		return ipc.MaterializeResult{}, err
+	}
+	if about != nil && a.Keep != nil {
+		return c.keepExplained(*about, a.ID, *a.Keep)
+	}
+	if about != nil && a.Forget {
+		// Made again on the next ask, by a model, not from the library.
+		c.cards.mu.Lock()
+		c.cards.fresh[a.ID] = true
+		c.cards.mu.Unlock()
 	}
 	switch {
 	case a.ID == "" || len(a.ID) > ipc.MaxMaterializeID:
@@ -85,6 +102,22 @@ func (c *Core) materializeOp(a ipc.MaterializeArgs) (ipc.MaterializeResult, erro
 	if err != nil {
 		c.log.Warn("materialize: the cards' file", "err", err)
 	}
+	if rm != nil && about != nil {
+		if e := c.savedFor(*about, a.ID); e != nil {
+			// A question the library has answered: its newest version, at
+			// once, with no model.
+			v := e.Latest()
+			card, _, err = s.Finish(*rm, v.Card, v.By, nil, time.Now())
+			if err != nil {
+				c.log.Warn("materialize: the cards' file", "err", err)
+			}
+			st, rm = materialize.Fresh, nil
+		} else {
+			c.cards.mu.Lock()
+			c.cards.about[a.ID] = *about
+			c.cards.mu.Unlock()
+		}
+	}
 	if rm != nil {
 		c.remakeCard(s, *rm)
 	}
@@ -100,7 +133,11 @@ func (c *Core) materializeOp(a ipc.MaterializeArgs) (ipc.MaterializeResult, erro
 			card, st = s.Peek(r, time.Now())
 		}
 	}
-	return ipc.MaterializeResult{ID: card.ID, State: string(st), Spec: card.Spec, Made: card.Made, By: card.By, Err: card.Err, Began: rm != nil}, nil
+	res := ipc.MaterializeResult{ID: card.ID, State: string(st), Spec: card.Spec, Made: card.Made, By: card.By, Err: card.Err, Began: rm != nil}
+	if about != nil {
+		c.describeSaved(&res, *about)
+	}
+	return res, nil
 }
 
 // recipeOf is the recipe an ask names. Its inputs are the context's digest
@@ -149,6 +186,15 @@ func (c *Core) remakeCard(s *materialize.Store, rm materialize.Remake) {
 		card, newest, ferr := s.Finish(rm, spec, by, err, time.Now())
 		if ferr == nil && rm.Recipe.Kind == genui.KindExplain {
 			ferr = s.Trim(explainIDs, explainKept)
+		}
+		// A card that explains is kept in the library too, as the newest
+		// version of its question.
+		c.cards.mu.Lock()
+		ab, explains := c.cards.about[rm.Recipe.ID]
+		delete(c.cards.about, rm.Recipe.ID)
+		c.cards.mu.Unlock()
+		if explains && newest && err == nil {
+			c.saveExplained(ab, spec, by)
 		}
 		if ferr != nil {
 			c.log.Warn("materialize: the cards' file", "err", ferr)

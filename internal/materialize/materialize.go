@@ -234,6 +234,17 @@ func (s *Store) Finish(rm Remake, spec json.RawMessage, by string, failed error,
 	return copyOf(c, rm.Recipe.ID, ""), true, s.save()
 }
 
+// Kept is the card kept under id as it was made, whatever state it is in;
+// nil when none is made.
+func (s *Store) Kept(id string) json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c := s.cards[id]; c != nil {
+		return slices.Clone(c.Spec)
+	}
+	return nil
+}
+
 // Forget drops the card kept under id, as when what it showed is gone. A
 // remake of it that is still running finishes outdated.
 func (s *Store) Forget(id string) error {

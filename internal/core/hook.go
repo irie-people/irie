@@ -211,6 +211,10 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 		if n := c.takeNote(x, evs); n != "" {
 			reply.Context = joinNotes(reply.Context, n)
 		}
+		// An edit of what a plugin of yours runs holds it (ownhelpers.go).
+		if n := c.pinnedNote(call.Tool, call.Input, evs); n != "" {
+			reply.Context = joinNotes(reply.Context, n)
+		}
 	}
 	c.followConversation(x)
 	if turnEnded && c.cfg().Spawn.CloseWhenDone {

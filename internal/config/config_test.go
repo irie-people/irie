@@ -157,7 +157,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
-	if want := (Learn{Tutor: "off", Visual: true, Pictures: "agent", AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
+	if want := (Learn{Tutor: "off", Visual: true, Pictures: "agent", Library: "~/Documents/Irie/Explained", AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
 		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
 	if err := c.Validate(); err != nil {
@@ -289,6 +289,7 @@ guidelines = []
 tutor = "teach"
 visual = false
 pictures = "tile"
+library = "off"
 agent_tips = false
 links = { "Team handbook" = "https://example.com/handbook" }
 `))
@@ -370,7 +371,7 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	}); !reflect.DeepEqual(c.Trod, want) {
 		t.Errorf("night = %+v, want %+v", c.Trod, want)
 	}
-	if want := (Learn{Tutor: "teach", Visual: false, Pictures: "tile", AgentTips: false, Links: map[string]string{"Team handbook": "https://example.com/handbook"}}); !reflect.DeepEqual(c.Learn, want) {
+	if want := (Learn{Tutor: "teach", Visual: false, Pictures: "tile", Library: "off", AgentTips: false, Links: map[string]string{"Team handbook": "https://example.com/handbook"}}); !reflect.DeepEqual(c.Learn, want) {
 		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
 	// The defaults themselves are untouched.
@@ -625,6 +626,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[alerts]\nprivacy = \"none\"\n", "alerts.privacy"},
 		{"[learn]\ntutor = \"socratic\"\n", "learn.tutor"},
 		{"[learn]\npictures = \"slides\"\n", `learn.pictures = "slides": must be agent or tile`},
+		{"[learn]\nlibrary = \"notes\"\n", `learn.library = "notes": must be a folder`},
 		{"[profiles.teach]\nmodel = \"opus\"\n", "profiles.teach"},
 		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},
 		{"[learn]\nlinks = { wiki = \"ftp://example.com\" }\n", "learn.links"},
