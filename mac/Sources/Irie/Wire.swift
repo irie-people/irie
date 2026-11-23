@@ -16,6 +16,9 @@ struct Session: Codable, Identifiable, Equatable {
     var tail: [String]?
     var warnings: [String]?
     var exitCode: Int?
+    /// Its agent has ended and its terminal goes on as your shell, in its
+    /// folder (DESIGN §2.3): what you type there runs.
+    var shell: Bool?
     var created: Date
     var cwd: String?
     var repo: String?

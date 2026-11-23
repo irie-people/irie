@@ -182,10 +182,11 @@ func (c *Core) withDelegates(set map[string]bool) map[string]bool {
 
 // onTop is the tab the user is on: the session on show while Irie, or a
 // terminal it may be in, is in front, with the subtasks it delegated. It
-// comes first of all, and never steps back. The caller holds c.mu.
+// comes first of all, and never steps back, nor does the shell its
+// terminal went on as once its agent ended. The caller holds c.mu.
 func (c *Core) onTop(irieFront bool) map[string]bool {
 	x := c.sessions[c.selected]
-	if !irieFront || x == nil || x.dead {
+	if !irieFront || x == nil || x.dead && !x.shell {
 		return nil
 	}
 	return c.withDelegates(map[string]bool{x.id: true})

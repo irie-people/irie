@@ -310,6 +310,10 @@ func NewEnv(t *testing.T) *Env {
 	// Nor does it rest its sessions when the machine it runs on is short of
 	// memory (DESIGN §4.3): the tests would find their agents gone.
 	t.Setenv(brand.Env("REST"), "off")
+	// Nor does it leave a shell in an agent's pane once the agent exits
+	// (spawn.shell_after_exit, DESIGN §2.3): the tests wait for the pane to
+	// die, and the shell would be the user's own, reading their profile.
+	t.Setenv(brand.Env("SHELL_AFTER_EXIT"), "off")
 	// Nor does it keep mail passwords in the user's Keychain: they go to
 	// files in its own state folder (docs/proposals/mail.md).
 	t.Setenv(brand.Env("KEYCHAIN"), "off")

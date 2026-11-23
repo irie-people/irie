@@ -746,7 +746,8 @@ struct Composer: View {
             if waits {
                 banner("\(session.name) is waiting for you in its terminal.", button: "Open the terminal")
             } else if ended {
-                banner("\(session.name) has ended.", button: "Show its terminal")
+                banner(session.shell == true ? "\(session.name) has ended. Its terminal is your shell now." : "\(session.name) has ended.",
+                       button: "Show its terminal")
             } else {
                 field
             }

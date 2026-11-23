@@ -202,6 +202,9 @@ func (c *Core) keys(a ipc.KeysArgs) error {
 		return ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
 	switch {
+	case x.shell:
+		// Its agent has ended, and its terminal is the user's shell,
+		// which takes keys as any terminal does.
 	case x.dead:
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended", x.name)
 	case x.wire().State == ipc.StateFrozen:

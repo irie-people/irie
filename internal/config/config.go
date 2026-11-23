@@ -614,6 +614,11 @@ type Spawn struct {
 	HideTmux       bool          `toml:"hide_tmux"`
 	CloseWhenDone  bool          `toml:"close_when_done"` // close a session once its turn ends and it stays quiet for close_delay
 	CloseDelay     time.Duration `toml:"close_delay"`     // how long a finished session waits before it closes
+	// ShellAfterExit leaves the user's login shell in an agent's terminal
+	// once the agent exits by itself, in its folder, under its last
+	// screen, as a terminal's shell goes on after a program in it ends
+	// (DESIGN §2.3); off, the pane dies with the agent.
+	ShellAfterExit bool `toml:"shell_after_exit"`
 	// Teammates is what Claude Code sessions do with agent teams: run each
 	// teammate in a terminal pane of its own, which the Mac app shows beside
 	// its session (panes), or start no teams (off).
@@ -1034,6 +1039,7 @@ func Default() Config {
 			ReadyTimeout:   30 * time.Second,
 			HideTmux:       true,
 			CloseDelay:     30 * time.Second,
+			ShellAfterExit: true,
 			Teammates:      "off",
 			FollowUpWindow: 2 * time.Minute,
 			FollowUpDelay:  8 * time.Second,

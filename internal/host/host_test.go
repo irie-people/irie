@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -162,8 +163,10 @@ func TestExitCodeIsRecorded(t *testing.T) {
 	if got := h.format("#{pane_dead_status}"); got != "3" {
 		t.Errorf("pane_dead_status = %s, want 3", got)
 	}
-	if x := readExit(t, h.dir); x.Code != 3 || x.Signal != 0 {
-		t.Errorf("exit.json = %+v, want code 3", x)
+	// It names its host, which a pane that lives on would still have.
+	pid, _ := strconv.Atoi(h.format("#{pane_pid}"))
+	if x := readExit(t, h.dir); x.Code != 3 || x.Signal != 0 || x.Host != pid {
+		t.Errorf("exit.json = %+v, want code 3 from host %d", x, pid)
 	}
 }
 
@@ -330,4 +333,185 @@ func TestSIGTERMEndsAStoppedAgent(t *testing.T) {
 		s := state()
 		return s == "gone" || strings.HasPrefix(s, "Z")
 	})
+}
+
+// startShellHost runs script as the agent of a spec that names a shell: a
+// plain /bin/sh standing in for the user's login shell, which would read
+// their own profile. The spec's Env is the agent's alone, and ShellEnv the
+// shell's.
+func startShellHost(t *testing.T, script string) *hostEnv {
+	t.Helper()
+	return startHostSpec(t, Spec{
+		Argv: []string{"/bin/sh", "-c", script}, Unset: []string{"TMUX", "TMUX_PANE"},
+		Shell: []string{"/bin/sh"}, ShellEnv: map[string]string{"IRIE_TEST_SHELL": "yes"},
+	})
+}
+
+// screen is what the pane shows, without colours.
+func (h *hostEnv) screen() string {
+	h.t.Helper()
+	return h.Tmux(h.t, "capture-pane", "-p", "-J", "-t", "h:0.0")
+}
+
+// shellUp waits for the agent's exit and for the shell's prompt under the
+// line the host writes, and returns the exit.
+func (h *hostEnv) shellUp() Exit {
+	h.t.Helper()
+	testutil.Eventually(h.t, bound(h.t, 5*time.Second), "the agent's exit was not recorded", func() bool {
+		_, err := os.Stat(filepath.Join(h.dir, ExitFile))
+		return err == nil
+	})
+	testutil.Eventually(h.t, bound(h.t, 5*time.Second), "no prompt under the host's line", func() bool {
+		_, after, ok := strings.Cut(h.screen(), ShellNoteEnd)
+		return ok && strings.TrimSpace(after) != ""
+	})
+	return readExit(h.t, h.dir)
+}
+
+// typed runs line in the pane's shell and returns what it wrote to file,
+// in the shell's folder.
+func (h *hostEnv) typed(line, file string) string {
+	h.t.Helper()
+	h.Tmux(h.t, "send-keys", "-t", "h:0.0", line, "Enter")
+	var b []byte
+	testutil.Eventually(h.t, bound(h.t, 5*time.Second), "the shell did not run "+line, func() bool {
+		var err error
+		b, err = os.ReadFile(file)
+		return err == nil && strings.HasSuffix(string(b), "\n")
+	})
+	return strings.TrimSpace(string(b))
+}
+
+func TestAnAgentThatExitsByItselfLeavesTheShellInItsPane(t *testing.T) {
+	h := startShellHost(t, "printf 'the agent says goodbye\\n'; exit 3")
+	x := h.shellUp()
+	pid, _ := strconv.Atoi(h.format("#{pane_pid}"))
+	if x.Code != 3 || x.Host != pid {
+		t.Fatalf("exit.json = %+v, want code 3 from the host, pid %d", x, pid)
+	}
+	if h.format("#{pane_dead}") != "0" {
+		t.Fatal("the pane died with its agent")
+	}
+	// host.json names the shell, a child of the host leading its own group.
+	var info Info
+	testutil.Eventually(t, bound(t, 5*time.Second), "host.json names no shell", func() bool {
+		var err error
+		info, err = ReadInfo(filepath.Join(h.dir, InfoFile))
+		return err == nil && info.Shell > 0
+	})
+	if !slices.ContainsFunc(processes(t), func(p proc) bool { return p.pid == info.Shell && p.ppid == pid && p.pgid == p.pid }) {
+		t.Errorf("host.json's shell %d is not the host's child leading its own group", info.Shell)
+	}
+	// The agent's last screen stays, and the host's line comes under it.
+	screen := h.screen()
+	bye, note := strings.Index(screen, "the agent says goodbye"), strings.Index(screen, "── sh exited with code 3"+ShellNoteEnd)
+	if bye < 0 || note < bye {
+		t.Fatalf("want the agent's words, then the host's line, on the screen:\n%s", screen)
+	}
+
+	// It is a shell in the agent's folder, with the pane's environment and
+	// ShellEnv, but not the agent's own variables or the unset ones.
+	var spec Spec
+	b, _ := os.ReadFile(filepath.Join(h.dir, "spec.json"))
+	if err := json.Unmarshal(b, &spec); err != nil {
+		t.Fatal(err)
+	}
+	got := h.typed(`printf '%s|%s|%s|%s\n' "$PWD" "${IRIE_TEST_SHELL-unset}" "${IRIE_TEST_MARK-unset}" "${TMUX-unset}" > seen.txt`, filepath.Join(spec.Cwd, "seen.txt"))
+	where, rest, _ := strings.Cut(got, "|")
+	want, _ := filepath.EvalSymlinks(spec.Cwd)
+	if w, _ := filepath.EvalSymlinks(where); w != want || rest != "yes|unset|unset" {
+		t.Fatalf("the shell saw %q, want %s|yes|unset|unset", got, want)
+	}
+
+	// Once the shell exits, the pane dies with the agent's code.
+	h.Tmux(t, "send-keys", "-t", "h:0.0", "exit 7", "Enter")
+	testutil.Eventually(t, bound(t, 5*time.Second), "the pane did not die with its shell", func() bool {
+		return h.format("#{pane_dead}") == "1"
+	})
+	if got := h.format("#{pane_dead_status}"); got != "3" {
+		t.Errorf("pane_dead_status = %s, want the agent's 3", got)
+	}
+}
+
+func TestASignalThatEndsTheAgentStartsNoShell(t *testing.T) {
+	// A close, a rest and a respawn end the agent through its host.
+	h := startHostSpec(t, Spec{Argv: []string{"sleep", "600"}, Shell: []string{"/bin/sh"}})
+	host, _ := h.child("sleep 600")
+	if err := syscall.Kill(host, syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, bound(t, 5*time.Second), "the pane did not die", func() bool {
+		return h.format("#{pane_dead}") == "1"
+	})
+	if x := readExit(t, h.dir); x.Code != 128+int(syscall.SIGTERM) || x.Host != host {
+		t.Errorf("exit.json = %+v, want SIGTERM's code from host %d", x, host)
+	}
+	if strings.Contains(h.screen(), ShellNoteEnd) {
+		t.Errorf("a shell was started:\n%s", h.screen())
+	}
+}
+
+func TestSIGTERMToTheHostEndsItsShell(t *testing.T) {
+	// An interactive shell ignores SIGTERM, which a close sends the host:
+	// the host hangs it up instead, as a closing terminal does.
+	h := startShellHost(t, "exit 0")
+	h.shellUp()
+	host, _ := strconv.Atoi(h.format("#{pane_pid}"))
+	if err := syscall.Kill(host, syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, bound(t, 3*time.Second), "the shell outlived SIGTERM to its host", func() bool {
+		return h.format("#{pane_dead}") == "1"
+	})
+	if got := h.format("#{pane_dead_status}"); got != "0" {
+		t.Errorf("pane_dead_status = %s, want the agent's 0", got)
+	}
+}
+
+func TestTheShellGetsTheTerminalAsItWasBeforeTheAgent(t *testing.T) {
+	// An agent killed mid-screen leaves its terminal raw, the mouse on and
+	// the alternate screen up, with the cursor hidden.
+	h := startShellHost(t, `stty -echo -icanon; printf '\033[?1000h\033[?1049h\033[?25l'; exit 0`)
+	h.shellUp()
+	if got := h.format("#{mouse_any_flag} #{alternate_on} #{cursor_flag}"); got != "0 0 1" {
+		t.Errorf("mouse, alternate screen and cursor = %q, want 0 0 1", got)
+	}
+	var spec Spec
+	b, _ := os.ReadFile(filepath.Join(h.dir, "spec.json"))
+	if err := json.Unmarshal(b, &spec); err != nil {
+		t.Fatal(err)
+	}
+	modes := strings.Fields(h.typed("stty -a > modes.txt", filepath.Join(spec.Cwd, "modes.txt")))
+	for _, m := range []string{"echo", "icanon"} {
+		if !slices.Contains(modes, m) || slices.Contains(modes, "-"+m) {
+			t.Errorf("the shell runs its programs without %s: %v", m, modes)
+		}
+	}
+}
+
+func TestAShellWhoseFolderHasGoneStartsAtHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	h := startShellHost(t, `gone=$PWD; cd / && rmdir "$gone" && exit 0`)
+	h.shellUp()
+	got := h.typed("pwd > where.txt", filepath.Join(home, "where.txt"))
+	want, _ := filepath.EvalSymlinks(home)
+	if g, _ := filepath.EvalSymlinks(got); g != want {
+		t.Fatalf("the shell started in %q, want home, %q", got, want)
+	}
+}
+
+func TestTheHostsLineSaysWhatEnded(t *testing.T) {
+	for _, c := range []struct {
+		x    Exit
+		want string
+	}{
+		{Exit{Code: 0}, "claude exited"},
+		{Exit{Code: 3}, "claude exited with code 3"},
+		{Exit{Code: 137, Signal: 9}, "claude was ended by SIGKILL"},
+	} {
+		if got := shellNote("/home/alice/.local/bin/claude", c.x); got != "\x1b[2m── "+c.want+ShellNoteEnd+"\x1b[0m" {
+			t.Errorf("shellNote(%+v) = %q, want %q", c.x, got, c.want)
+		}
+	}
 }

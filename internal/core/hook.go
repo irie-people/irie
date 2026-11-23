@@ -350,14 +350,28 @@ func (c *Core) deliver(x *session) {
 
 // tail returns the last lines a pane shows, up to tailLines, leaving out
 // blank lines and tmux's note that the pane is dead. A dead pane's note
-// scrolls its screen, so some history is read too.
+// scrolls its screen, so some history is read too. In a pane that went on
+// as the user's shell, the agent's screen ends at the host's line above
+// the shell (host.ShellNoteEnd).
 func (c *Core) tail(pane string) []string {
 	out, err := c.tmux.Run("capture-pane", "-p", "-J", "-S", "-50", "-t", pane)
 	if err != nil {
 		return nil
 	}
+	return screenTail(out)
+}
+
+// screenTail is tail's reading of a captured screen.
+func screenTail(screen string) []string {
+	all := strings.Split(screen, "\n")
+	for i := len(all) - 1; i >= 0; i-- {
+		if strings.HasSuffix(strings.TrimRight(all[i], " \t"), host.ShellNoteEnd) {
+			all = all[:i]
+			break
+		}
+	}
 	var lines []string
-	for _, l := range strings.Split(out, "\n") {
+	for _, l := range all {
 		if l = strings.TrimRight(l, " \t"); l != "" && !strings.HasPrefix(l, "Pane is dead") {
 			lines = append(lines, l)
 		}

@@ -664,13 +664,38 @@ func (c *Core) prepareRun(j job, x *session, profile config.Profile, h harness.H
 		}
 		path = []string{bin}
 	}
+	// Once its agent exits by itself, its terminal goes on as the user's
+	// shell, as a terminal's does, with Irie's own variables, so that
+	// `irie ctl` there speaks for the session, and none of the agent's.
+	var shell []string
+	var shellEnv map[string]string
+	if c.shellAfterExit(j) {
+		shell = []string{loginShell(), "-l"}
+		shellEnv = map[string]string{}
+		for _, k := range []string{brand.Env("SESSION"), brand.Env("SOCKET"), brand.Env("BIN")} {
+			shellEnv[k] = env[k]
+		}
+	}
 	spec = c.paths.SpecFile(id)
 	if err := host.WriteSpec(spec, host.Spec{
 		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
-		Model: x.model, Local: x.local, Tutor: x.tutor, Anon: x.anon,
+		Model: x.model, Local: x.local, Tutor: x.tutor, Anon: x.anon, Shell: shell, ShellEnv: shellEnv,
 	}); err != nil {
 		return harness.Spawn{}, nil, nil, "", err
 	}
 	return s, argv, files, spec, nil
+}
+
+// shellAfterExitEnv turns spawn.shell_after_exit off for a core when it is
+// "off", as a test core's is (internal/testutil): its tests wait for an
+// agent's pane to die, and the shell would be the user's own, reading their
+// profile.
+const shellAfterExitEnv = "SHELL_AFTER_EXIT"
+
+// shellAfterExit says whether job j's terminal goes on as the user's shell
+// once its agent exits by itself (spawn.shell_after_exit): never for a
+// session no one watches, such as a bench's run.
+func (c *Core) shellAfterExit(j job) bool {
+	return c.cfg().Spawn.ShellAfterExit && !j.unattended && os.Getenv(brand.Env(shellAfterExitEnv)) != "off"
 }
