@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 
@@ -64,12 +65,15 @@ const (
 
 var tipID = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
-var set, setErr = parse(brand.Text(data))
+// parsed is learn.toml, read on its first use rather than as any irie
+// starts, which took 394 KB and a millisecond in every process.
+var parsed = sync.OnceValues(func() (Set, error) { return parse(brand.Text(data)) })
 
 // Get returns learn.toml, which the tests check.
 func Get() Set {
-	if setErr != nil {
-		panic(setErr)
+	set, err := parsed()
+	if err != nil {
+		panic(err)
 	}
 	return set
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/irie-people/irie/internal/search"
 	"math"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -601,11 +600,11 @@ func updated(body string) string {
 
 var (
 	// defined is a company naming itself: Example, Inc. ("Example", "we").
-	defined = regexp.MustCompile(`([A-Z][A-Za-z0-9&'-]*(?:[ ,]+(?:[A-Z][A-Za-z0-9&.'-]*|of|and|&)){0,5})\s*\([^)]{0,120}?["']\s*(?:we|We|us|Us|our|Our|Company|the Company|Service Provider|Provider|Operator)\s*[,"']`)
+	defined = lazy(`([A-Z][A-Za-z0-9&'-]*(?:[ ,]+(?:[A-Z][A-Za-z0-9&.'-]*|of|and|&)){0,5})\s*\([^)]{0,120}?["']\s*(?:we|We|us|Us|our|Our|Company|the Company|Service Provider|Provider|Operator)\s*[,"']`)
 	// between is "an agreement between you and Example".
-	between = regexp.MustCompile(`(?:between you and|agreement with|contract with|provided by|operated by)\s+([A-Z][A-Za-z0-9&'-]*(?:[ ,]+(?:[A-Z][A-Za-z0-9&.'-]*|of|and|&)){0,5})`)
+	between = lazy(`(?:between you and|agreement with|contract with|provided by|operated by)\s+([A-Z][A-Za-z0-9&'-]*(?:[ ,]+(?:[A-Z][A-Za-z0-9&.'-]*|of|and|&)){0,5})`)
 	// entity is the end of a company's legal name.
-	entity = regexp.MustCompile(`(?:,?\s+(?:Inc|Incorporated|LLC|L\.L\.C|Ltd|Limited|GmbH|Corp|Corporation|Company|Co|S\.A|SAS|B\.V|N\.V|AG|AB|plc|PLC|Pty|ULC|LLP|LP)\.?)$`)
+	entity = lazy(`(?:,?\s+(?:Inc|Incorporated|LLC|L\.L\.C|Ltd|Limited|GmbH|Corp|Corporation|Company|Co|S\.A|SAS|B\.V|N\.V|AG|AB|plc|PLC|Pty|ULC|LLP|LP)\.?)$`)
 )
 
 // company is who the terms are with, when they say so plainly: a company
