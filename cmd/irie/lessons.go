@@ -109,7 +109,11 @@ func ctlLessons(args []string) error {
 	}
 	switch verb {
 	case ipc.LessonsEvidence:
-		lessons.PrintEvidence(os.Stdout, *r.Evidence)
+		var ev lessons.Evidence
+		if err := json.Unmarshal(r.Evidence, &ev); err != nil {
+			return fmt.Errorf("the core's evidence: %w", err)
+		}
+		lessons.PrintEvidence(os.Stdout, ev)
 	case ipc.LessonsKeep:
 		fmt.Println("Kept: every session hears it from its next start.")
 	case ipc.LessonsNo:
@@ -117,7 +121,11 @@ func ctlLessons(args []string) error {
 	case ipc.LessonsDrop:
 		fmt.Println("Dropped: sessions stop hearing it from their next start.")
 	default:
-		lessons.Print(os.Stdout, r.Book, r.Drafting)
+		var b lessons.Book
+		if err := json.Unmarshal(r.Book, &b); err != nil {
+			return fmt.Errorf("the core's lessons: %w", err)
+		}
+		lessons.Print(os.Stdout, b, r.Drafting)
 	}
 	return nil
 }

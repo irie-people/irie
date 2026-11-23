@@ -69,15 +69,15 @@ func TestOnlyTheUsersWordPicksALesson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Book.Kept) != 1 || r.Book.Drafts[1].Said != lessons.No || !strings.Contains(r.Note, "Read a file with Read") {
-		t.Errorf("after the user's word: kept %+v, drafts %+v, note %q", r.Book.Kept, r.Book.Drafts, r.Note)
+	if b := bookOf(t, r); len(b.Kept) != 1 || b.Drafts[1].Said != lessons.No || !strings.Contains(r.Note, "Read a file with Read") {
+		t.Errorf("after the user's word: kept %+v, drafts %+v, note %q", b.Kept, b.Drafts, r.Note)
 	}
 	// Kept across a restart.
 	c2 := testCore(t)
 	c2.paths = c.paths
 	c2.loadLessons()
-	if got := c2.lessonsReport(); len(got.Book.Kept) != 1 || got.Book.Asked != "s1" {
-		t.Errorf("after a restart: %+v", got.Book)
+	if got := bookOf(t, c2.lessonsReport()); len(got.Kept) != 1 || got.Asked != "s1" {
+		t.Errorf("after a restart: %+v", got)
 	}
 	// Not from a socket, the lessons are only shown.
 	raw, _ := json.Marshal(keep)
@@ -216,7 +216,7 @@ func TestADraftComesFromALocalModelAndWaitsForTheUsersWord(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 		r = c.lessonsReport()
 	}
-	b := r.Book
+	b := bookOf(t, r)
 	if r.Drafting || len(b.Drafts) != 1 || b.By != "qwen3:4b" || b.Asked != "" || b.Problem != "" || b.Evidence == nil || b.Evidence.Failed != 2 {
 		t.Fatalf("after the draft: drafting %v, %+v", r.Drafting, b)
 	}
@@ -238,8 +238,8 @@ func TestADraftComesFromALocalModelAndWaitsForTheUsersWord(t *testing.T) {
 	for r = c.lessonsReport(); r.Drafting && time.Now().Before(deadline); r = c.lessonsReport() {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !strings.Contains(r.Book.Problem, "Too little memory is free") || len(r.Book.Waiting()) != 1 || f.count() != chats {
-		t.Errorf("a draft with no room: %+v after %d chats", r.Book, f.count()-chats)
+	if got := bookOf(t, r); !strings.Contains(got.Problem, "Too little memory is free") || len(got.Waiting()) != 1 || f.count() != chats {
+		t.Errorf("a draft with no room: %+v after %d chats", got, f.count()-chats)
 	}
 	// With nothing two sessions share, a draft says so and keeps what waits.
 	c2 := bareCore(t, cfg)
@@ -250,7 +250,17 @@ func TestADraftComesFromALocalModelAndWaitsForTheUsersWord(t *testing.T) {
 	for r = c2.lessonsReport(); r.Drafting && time.Now().Before(deadline); r = c2.lessonsReport() {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !strings.Contains(r.Book.Problem, "nothing to learn from yet") || len(r.Book.Waiting()) != 1 {
-		t.Errorf("a draft with nothing to learn: %+v", r.Book)
+	if got := bookOf(t, r); !strings.Contains(got.Problem, "nothing to learn from yet") || len(got.Waiting()) != 1 {
+		t.Errorf("a draft with nothing to learn: %+v", got)
 	}
+}
+
+// bookOf is the lessons a result carries, as JSON on the wire.
+func bookOf(t *testing.T, r ipc.LessonsResult) lessons.Book {
+	t.Helper()
+	var b lessons.Book
+	if err := json.Unmarshal(r.Book, &b); err != nil {
+		t.Fatalf("the result's book %s: %v", r.Book, err)
+	}
+	return b
 }

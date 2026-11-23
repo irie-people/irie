@@ -113,15 +113,23 @@ func (c *Core) withLessons(reply string) string {
 	return reply
 }
 
-// lessonsReport is the lessons as they stand.
-func (c *Core) lessonsReport() ipc.LessonsResult {
+// lessonsState is a copy of the lessons as they stand, and whether a draft
+// is under way.
+func (c *Core) lessonsState() (lessons.Book, bool) {
 	c.lessons.mu.Lock()
 	defer c.lessons.mu.Unlock()
 	var book lessons.Book
 	if b, err := json.Marshal(c.lessons.book); err == nil {
 		json.Unmarshal(b, &book)
 	}
-	return ipc.LessonsResult{Book: book, Drafting: c.lessons.drafting, Note: lessons.Note(book.Kept)}
+	return book, c.lessons.drafting
+}
+
+// lessonsReport is the lessons as they stand, as the lessons op answers.
+func (c *Core) lessonsReport() ipc.LessonsResult {
+	book, drafting := c.lessonsState()
+	b, _ := json.Marshal(book)
+	return ipc.LessonsResult{Book: b, Drafting: drafting, Note: lessons.Note(book.Kept)}
 }
 
 // lessonsOp is the lessons op (OpLessons) from the process peer.
@@ -153,7 +161,9 @@ func (c *Core) lessonsOp(peer int, a ipc.LessonsArgs) (ipc.LessonsResult, error)
 			return ipc.LessonsResult{}, err
 		}
 		res := c.lessonsReport()
-		res.Evidence = &ev
+		if res.Evidence, err = json.Marshal(ev); err != nil {
+			return ipc.LessonsResult{}, err
+		}
 		return res, nil
 	case ipc.LessonsKeep, ipc.LessonsNo, ipc.LessonsDrop:
 		if err := c.lessonsWord(peer); err != nil {
@@ -372,17 +382,16 @@ func init() {
 // lessons, an item for each draft waiting for the user's word, with Keep
 // and No, and one for each kept lesson, with what came of it and Drop.
 func (c *Core) lessonsNow(n *archNow) {
-	r := c.lessonsReport()
-	b := r.Book
+	b, drafting := c.lessonsState()
 	waiting := b.Waiting()
-	if r.Drafting {
+	if drafting {
 		n.items = append(n.items, ipc.ArchItem{Text: "Drafting lessons from what your agents failed at…", Level: ipc.ArchNote})
 	} else {
 		draft, _ := json.Marshal(ipc.LessonsArgs{Do: ipc.LessonsDraft})
 		n.actions = append(n.actions, ipc.ArchAction{Label: "Draft lessons", Op: ipc.OpLessons, Args: draft, Ask: draftAsk(lessonsDays),
 			Done: brand.Raffi + " is drafting lessons: they show here when they are done."})
 	}
-	if b.Problem != "" && !r.Drafting {
+	if b.Problem != "" && !drafting {
 		n.items = append(n.items, ipc.ArchItem{Text: "The last draft of lessons brought none", Detail: b.Problem, Level: ipc.ArchWarn})
 	}
 	for _, l := range waiting {

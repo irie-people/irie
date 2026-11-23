@@ -1,9 +1,8 @@
 package ipc
 
 import (
+	"encoding/json"
 	"time"
-
-	"github.com/irie-people/irie/internal/lessons"
 )
 
 // Lessons from what agents fail at most (DESIGN §4.11, Raphael): evidence
@@ -47,10 +46,14 @@ type LessonsArgs struct {
 	OK bool      `json:"ok,omitempty"` // draft, keep: the person said OK, having read what it does
 }
 
-// LessonsResult is the user's lessons (OpLessons), with what Do did.
+// LessonsResult is the user's lessons (OpLessons), with what Do did. Book
+// and Evidence are internal/lessons' Book and Evidence as JSON, so the wire
+// types never link the code that reads failures and drafts lessons: it
+// brings the harness and the host, which build on Linux and macOS alone,
+// and every client links this package, Irie for Windows too.
 type LessonsResult struct {
-	Book     lessons.Book      `json:"book"`
-	Drafting bool              `json:"drafting"`           // a draft is under way
-	Evidence *lessons.Evidence `json:"evidence,omitempty"` // evidence: what it read
-	Note     string            `json:"note,omitempty"`     // what every session hears of the kept lessons as it starts
+	Book     json.RawMessage `json:"book"`               // a lessons.Book
+	Drafting bool            `json:"drafting"`           // a draft is under way
+	Evidence json.RawMessage `json:"evidence,omitempty"` // evidence: what it read, a lessons.Evidence
+	Note     string          `json:"note,omitempty"`     // what every session hears of the kept lessons as it starts
 }
