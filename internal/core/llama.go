@@ -317,6 +317,9 @@ func (c *Core) llamaSigOf(pane string) string {
 // llamaArgv's command line, which its pane keeps a hash of. A server that
 // exits first is an error with the last lines it printed.
 func (c *Core) startLlama(bin string, m llamaModel) error {
+	if err := c.modelsOff(""); err != nil {
+		return err
+	}
 	o := localmodel.Llama{URL: c.llamaURL(), HTTP: c.http}
 	answers := func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -479,6 +482,9 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 				problem("%s; close something first, pick a smaller model, or spawn with --force", msg)
 			}
 		}
+		if why := c.loadWaits(); why != "" {
+			problem("%s, so %s was not loaded", why, m.name)
+		}
 		if len(users) > 0 && !restart {
 			msg := fmt.Sprintf(brand.Name+"'s llama-server runs %s for %s, and runs one model at a time", running, strings.Join(users, ", "))
 			if force {
@@ -531,6 +537,9 @@ func (c *Core) prepareLlama(name string, p *config.Profile, force bool) ([]strin
 	if p.Local.Peer != "" {
 		return c.preparePeerLlama(name, p, force)
 	}
+	if err := c.modelsOff(""); err != nil {
+		return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s: %v", name, err)
+	}
 	bin, b, m, err := c.llamaTarget(name, *p)
 	if err != nil {
 		return nil, err
@@ -566,6 +575,9 @@ func (c *Core) llamaStatus() *ipc.LlamaStatus {
 	r := &ipc.LlamaStatus{URL: c.llamaURL(), Dir: c.modelsDir(), Models: []ipc.LocalModel{}}
 	bin, b, err := c.llamaBuild()
 	r.Bin = bin
+	if off := c.modelsOff(""); off != nil {
+		err = off
+	}
 	if err != nil {
 		r.Error = err.Error()
 	} else {
@@ -588,6 +600,9 @@ func (c *Core) llamaReady(name string, p config.Profile) (need, budget int64, no
 	if p.Local.Peer != "" {
 		note, ok := c.peerLlamaReady(name, p)
 		return 0, 0, note, ok
+	}
+	if err := c.modelsOff(""); err != nil {
+		return 0, 0, err.Error(), false
 	}
 	_, b, err := c.llamaBuild()
 	if err != nil {
@@ -627,6 +642,9 @@ func (c *Core) llamaNote(name string, p config.Profile) string {
 	if p.Local.Peer != "" {
 		note, _ := c.peerLlamaReady(name, p)
 		return strings.Join([]string{cmp.Or(p.Model, "its model"), cost, note}, " · ")
+	}
+	if err := c.modelsOff(""); err != nil {
+		return cost + " · " + err.Error()
 	}
 	_, b, err := c.llamaBuild()
 	if err != nil {

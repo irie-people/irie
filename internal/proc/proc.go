@@ -50,7 +50,10 @@ func Read() (Table, error) {
 
 // Args returns the arguments one of the user's own processes was started
 // with, and the environment it started with, as ps -E shows them. Another
-// user's the system shows to root alone.
+// user's the system shows to root alone. macOS 14 also hides the
+// environment of its own programs, such as /bin/sh, /bin/zsh and
+// /bin/sleep, from their user, and shows other programs', Homebrew's tmux
+// and Go's builds among them (measured).
 func Args(pid int) (argv, env []string, err error) { return readArgs(pid) }
 
 // Started returns when p started by the clock, when the system says.

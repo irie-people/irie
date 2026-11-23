@@ -269,7 +269,7 @@ func (c *Core) draftLessons(days int, model string, journalOnly bool, asked stri
 	st.drafting = true
 	kept := st.book.Texts()
 	st.mu.Unlock()
-	cfg := c.cfg()
+	servers := c.chatServers() // none while local models are off here (localhere.go)
 	go func() {
 		now := time.Now()
 		ev, err := lessons.Gather(c.paths.Journal(), now.Add(-time.Duration(days)*24*time.Hour), now, !journalOnly)
@@ -282,7 +282,7 @@ func (c *Core) draftLessons(days int, model string, journalOnly bool, asked stri
 		if err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), lessonsTimeout)
 			var m localmodel.ChatModel
-			if m, err = localmodel.FindChatModel(ctx, localmodel.ChatServers(cfg.Local.URL, cfg.Local.Port), model); err == nil {
+			if m, err = localmodel.FindChatModel(ctx, servers, model); err == nil {
 				by = m.Name
 				room := st.room
 				if room == nil {

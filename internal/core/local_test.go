@@ -94,6 +94,9 @@ func TestALocalSpawnRunsOnIriesOwnServer(t *testing.T) {
 	for k, want := range map[string]string{
 		"OLLAMA_HOST": fmt.Sprintf("127.0.0.1:%d", port), "OLLAMA_CONTEXT_LENGTH": "65536", "OLLAMA_KV_CACHE_TYPE": "q8_0",
 		"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1",
+		// It keeps a model three minutes after a request, whatever keep-alive
+		// the user gave their own Ollama.
+		"OLLAMA_KEEP_ALIVE": "3m",
 		// Its runners, llama-servers, keep at most 512 MiB of earlier
 		// prompts and 8 checkpoints a slot.
 		"LLAMA_ARG_CACHE_RAM": "512", "LLAMA_ARG_CTX_CHECKPOINTS": "8",

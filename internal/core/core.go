@@ -73,6 +73,7 @@ type Core struct {
 	sampling    atomic.Bool  // a memory sample is running
 	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	ease        easeState    // what Irie's own model servers let go of (localhere.go)
 	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 	ragu        raguelState  // Raguel's councils (raguel.go); it has a lock of its own, taken after mu

@@ -118,7 +118,9 @@ func Make(ctx context.Context, m localmodel.ChatModel, kind, prompt, text string
 			ask = "The context, for background:\n" + text + "\n\nThe card to make: " + prompt
 		}
 	}
-	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "10m", JSON: true, Schema: schema(kind)}
+	// Cards come in bursts a minute apart, so the model stays two minutes,
+	// not the ten it once did, holding 4 to 7 GB for nothing (DESIGN §6.3).
+	opt := localmodel.ChatOptions{Temperature: 0.2, Context: 8192, Keep: "2m", JSON: true, Schema: schema(kind)}
 	if m.Thinks() {
 		off := false
 		opt.Think = &off
