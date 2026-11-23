@@ -21,7 +21,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -43,13 +42,13 @@ func Lock(path string, wait time.Duration) (*os.File, error) {
 	}
 	deadline := time.Now().Add(wait)
 	for pause := time.Millisecond; ; pause = min(2*pause, 50*time.Millisecond) {
-		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err := tryLock(f)
 		if err == nil {
 			return f, nil
 		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) || time.Now().After(deadline) {
+		if !held(err) || time.Now().After(deadline) {
 			f.Close()
-			if errors.Is(err, syscall.EWOULDBLOCK) {
+			if held(err) {
 				return nil, ErrBusy
 			}
 			return nil, err
@@ -154,7 +153,7 @@ func replace(path string, data []byte, perm fs.FileMode) error {
 		err = f.Chmod(mode)
 	}
 	if err == nil {
-		err = syscall.Fsync(int(f.Fd()))
+		err = fsync(f)
 	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
@@ -188,7 +187,7 @@ func Create(path string, data []byte, perm fs.FileMode) error {
 		err = f.Chmod(perm)
 	}
 	if err == nil {
-		err = syscall.Fsync(int(f.Fd()))
+		err = fsync(f)
 	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
