@@ -344,6 +344,32 @@ func (o Ollama) Load(ctx context.Context, model string) error {
 	}, nil)
 }
 
+// Use is one answered call to a model, as a meter sees it (WithMeter).
+type Use struct {
+	Model  string
+	URL    string        // the server it went to
+	Prompt int64         // the tokens it read (prompt_eval_count)
+	Output int64         // the tokens it wrote (eval_count)
+	Took   time.Duration // from the request to the answer's end
+}
+
+type meterKey struct{}
+
+// WithMeter returns a copy of ctx under which each call to a model, Embed
+// or Chat, reports to meter once it is answered, as net/http/httptrace's
+// hooks ride a request's context. Irie's ledger counts its own calls this
+// way (DESIGN §6.3). A call that fails reports nothing.
+func WithMeter(ctx context.Context, meter func(Use)) context.Context {
+	return context.WithValue(ctx, meterKey{}, meter)
+}
+
+// report tells ctx's meter, if it has one, of a call.
+func (o Ollama) report(ctx context.Context, model string, start time.Time, prompt, output int64) {
+	if m, ok := ctx.Value(meterKey{}).(func(Use)); ok && m != nil {
+		m(Use{Model: model, URL: o.URL, Prompt: prompt, Output: output, Took: time.Since(start)})
+	}
+}
+
 // Embed is POST /api/embed: an embedding of each input, in order, by an
 // embedding model. keep is how long the server keeps the model loaded
 // afterwards (keep_alive, such as "30m"); "" is the server's default.
@@ -354,13 +380,16 @@ func (o Ollama) Embed(ctx context.Context, model string, inputs []string, keep s
 	}
 	var v struct {
 		Embeddings [][]float64 `json:"embeddings"`
+		Prompt     int64       `json:"prompt_eval_count"`
 	}
+	start := time.Now()
 	if err := o.call(ctx, http.MethodPost, "/api/embed", body, &v); err != nil {
 		return nil, err
 	}
 	if len(v.Embeddings) != len(inputs) {
 		return nil, fmt.Errorf("ollama: %d embeddings for %d inputs", len(v.Embeddings), len(inputs))
 	}
+	o.report(ctx, model, start, v.Prompt, 0)
 	return v.Embeddings, nil
 }
 
@@ -411,6 +440,7 @@ func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt 
 	case opt.JSON:
 		body["format"] = "json"
 	}
+	start := time.Now()
 	resp, err := o.do(ctx, http.MethodPost, "/api/chat", body)
 	if err != nil {
 		return "", err
@@ -424,8 +454,10 @@ func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt 
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
-			Done  bool   `json:"done"`
-			Error string `json:"error"`
+			Done   bool   `json:"done"`
+			Error  string `json:"error"`
+			Prompt int64  `json:"prompt_eval_count"`
+			Output int64  `json:"eval_count"`
 		}
 		if err := json.Unmarshal(sc.Bytes(), &v); err != nil {
 			continue
@@ -440,6 +472,7 @@ func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt 
 			}
 		}
 		if v.Done {
+			o.report(ctx, model, start, v.Prompt, v.Output)
 			return out.String(), nil
 		}
 	}

@@ -32,7 +32,7 @@ const apart = 100
 
 // loadHues reads the colours a previous core gave.
 func (c *Core) loadHues() {
-	out, err := c.tmux.Run("show-options", "-qv", "-t", agentsTarget, optHues)
+	out, err := c.layoutOption(optHues)
 	if err != nil {
 		c.log.Warn("hues", "err", err)
 		return
@@ -152,7 +152,7 @@ func (c *Core) saveHues() {
 		pairs = append(pairs, id+":"+strconv.Itoa(n))
 	}
 	slices.Sort(pairs)
-	if _, err := c.tmux.Run("set-option", "-t", agentsTarget, optHues, strings.Join(pairs, " ")); err != nil {
+	if err := c.setLayoutOption(optHues, strings.Join(pairs, " ")); err != nil {
 		c.log.Warn("hues", "err", err)
 	}
 }

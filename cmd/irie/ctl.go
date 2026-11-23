@@ -16,6 +16,7 @@ import (
 	irie "github.com/irie-people/irie/core"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/rebuild"
@@ -70,7 +71,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          own in the last day. A jot you close is
                                          done, listed only for a week after, when
                                          you closed it with commits not landed
-` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + costsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -97,7 +98,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          it on your OK; mine N tells him a startup
                                          item is yours; on and off turn him on or
                                          off (arch.raphael.on)
-` + councilUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
+` + councilUsage + lessonsUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
                                          agent it sends on, and what it did
@@ -193,7 +194,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
                                          reports one window of them
-` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
+` + controlUsage + spacesUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -223,6 +224,8 @@ func ctl(args []string) error {
 		return ctlDog(args[1:])
 	case "rebuilds":
 		return ctlRebuilds(args[1:])
+	case "costs":
+		return ctlCosts(args[1:])
 	case "materialize":
 		return ctlMaterialize(args[1:])
 	case "zen":
@@ -237,6 +240,8 @@ func ctl(args []string) error {
 		return ctlRaphael(args[1:])
 	case "council", "ragu", "raguel":
 		return ctlCouncil(args[1:])
+	case "lessons", "lesson":
+		return ctlLessons(args[1:])
 	case "arch":
 		return ctlArch(args[1:])
 	case "show":
@@ -285,6 +290,10 @@ func ctl(args []string) error {
 		return ctlUngroup(args[1:])
 	case "nest":
 		return ctlNest(args[1:])
+	case "spaces":
+		return ctlSpaces(args[1:])
+	case "space":
+		return ctlSpace(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -970,6 +979,9 @@ func reopenLost(sock string) error {
 	}
 	failed := 0
 	for i, c := range batch {
+		if !roomForOne(os.Stderr) {
+			return fmt.Errorf("%d of %d lost sessions wait for memory: run `%s ctl reopen --lost` again once there is more", len(batch)-i, len(batch), brand.Slug)
+		}
 		var r ipc.ReopenResult
 		if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: c.ID}, &r); err != nil {
 			fmt.Fprintf(os.Stderr, brand.Slug+": %s did not come back: %v\n", c.Name, err)
@@ -986,6 +998,44 @@ func reopenLost(sock string) error {
 		return fmt.Errorf("%d of %d lost sessions did not come back", failed, len(batch))
 	}
 	return nil
+}
+
+// lostFreeFloor is the share of the machine's memory, in percent, that
+// must be free before reopenLost brings back another session: each agent
+// takes some, and a machine short of it swaps, which slows every agent and
+// the person's own work. lostMemoryWait is the longest it waits for that
+// memory, looking every lostMemoryPoll, before it stops.
+const lostFreeFloor = 25
+
+var (
+	lostMemoryWait = 10 * time.Minute
+	lostMemoryPoll = 5 * time.Second
+	readMemory     = localmodel.ReadMachine
+)
+
+// roomForOne waits while less than lostFreeFloor percent of the machine's
+// memory is free, saying so to w once, and says whether there is room now.
+// A machine whose memory can't be read has room.
+func roomForOne(w io.Writer) bool {
+	said := false
+	for end := time.Now().Add(lostMemoryWait); ; {
+		m, err := readMemory()
+		if err != nil || m.Total <= 0 {
+			return true
+		}
+		free := int(m.Available * 100 / m.Total)
+		if free >= lostFreeFloor {
+			return true
+		}
+		if !time.Now().Before(end) {
+			return false
+		}
+		if !said {
+			fmt.Fprintf(w, "%s: waiting for memory: %d%% is free, and the next session comes back at %d%%\n", brand.Slug, free, lostFreeFloor)
+			said = true
+		}
+		time.Sleep(lostMemoryPoll)
+	}
 }
 
 // lastLost are the closed sessions the last restart lost, the one that
