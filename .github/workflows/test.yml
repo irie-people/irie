@@ -62,8 +62,8 @@ jobs:
   # Irie for Windows (cmd/windows-app) and the wrapper (cmd/windows, docs/WINDOWS.md) on Windows
   # itself: their checks, then site/install.ps1 from a local mirror of the downloads, irie.exe's
   # own look at the machine, and the app's window drawn into PNGs against a stand-in for Irie in
-  # Linux (tools/winpreview -bridge), which the run keeps. GitHub's Windows has no WSL 2 to run
-  # Irie in, so the look says what is missing and changes nothing.
+  # Linux (tools/winpreview -bridge), which the run keeps. Its windows-latest has no WSL 2 to run
+  # Irie in, so the look says what is missing and changes nothing; windows-wsl runs it in WSL 2.
   windows:
     runs-on: windows-latest
     timeout-minutes: 25
@@ -149,4 +149,153 @@ jobs:
         with:
           name: irie-for-windows-snapshots
           path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+  # Irie for Windows on a real WSL 2, as on a person's computer: Ubuntu from wsl --install with a
+  # user of its own, Irie put in it by site/install.sh from this checkout's build, then
+  # Irie.exe --snapshot with nothing standing in, from a cold start of Linux. It must start the
+  # core through irie bridge and draw the window. windows-2025's runners run WSL 2. The run keeps
+  # the pictures; the steps print app.log and the core's log, and post what they found as notices,
+  # which the checks API serves when a run's logs can't be downloaded.
+  windows-wsl:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # This checkout's irie inside Linux, and 1.5.0's, the first with irie bridge: the
+        # Windows installer updates the app but not Irie inside Linux, which can be older.
+        # And Linux run as root, as when Ubuntu's first start is closed before it makes a user.
+        include:
+          - { linux: this, user: alice }
+          - { linux: '1.5.0', user: alice }
+          - { linux: this, user: root }
+    env:
+      WSL_UTF8: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Ubuntu in WSL 2, with a user of its own
+        env:
+          AS: ${{ matrix.user }}
+        run: |
+          # Linux runs a script in Ubuntu, sent as base64 so that no quoting goes through wsl.exe,
+          # and gives what it wrote; Note posts text as the run's notice.
+          @'
+          function Linux([string]$script, [string]$user = '') {
+            $b = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($script -replace "`r", '')))
+            $as = @(); if ($user) { $as = '-u', $user }
+            wsl.exe -d Ubuntu @as --cd ~ -e sh -c "echo $b | base64 -d | sh -l 2>&1"
+          }
+          function Note([string]$title, [string]$text) {
+            if ($text.Length -gt 6000) { $text = '…' + $text.Substring($text.Length - 6000) }
+            $t = $text.Replace('%', '%25').Replace("`r", '').Replace("`n", '%0A')
+            Write-Output "::notice title=$($title.Replace(':', ' ').Replace(',', ' '))::$t"
+          }
+          '@ | Set-Content "$env:RUNNER_TEMP\linux.ps1"
+          . "$env:RUNNER_TEMP\linux.ps1"
+          wsl.exe --version
+          wsl.exe --install -d Ubuntu --no-launch --web-download
+          if ($LASTEXITCODE -ne 0) { throw "wsl --install exited $LASTEXITCODE" }
+          # As Ubuntu's first start makes one: uid 1000 with sudo, here with no password to type;
+          # or none, and Linux runs as root.
+          $out = Linux -user root (@'
+          set -eu
+          if [ '@AS@' = root ]; then
+            printf '\n[user]\ndefault=root\n' >> /etc/wsl.conf
+          else
+            name=$(getent passwd 1000 | cut -d: -f1)
+            if [ -z "$name" ]; then name=alice; useradd -m -s /bin/bash -u 1000 -G sudo "$name"; fi
+            echo "$name ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-"$name"
+            printf '\n[user]\ndefault=%s\n' "$name" >> /etc/wsl.conf
+          fi
+          head -2 /etc/os-release
+          if command -v tmux >/dev/null; then tmux -V; else echo 'no tmux'; fi
+          for c in curl wget git; do command -v $c >/dev/null || echo "no $c"; done
+          '@).Replace('@AS@', $env:AS) | Out-String
+          $code = $LASTEXITCODE
+          $out
+          if ($code -ne 0) { Note 'Ubuntu user' $out; throw "making Ubuntu's user failed" }
+          wsl.exe --terminate Ubuntu
+          wsl.exe -l -v
+          $out += Linux 'id; echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"; ls -ld "${XDG_RUNTIME_DIR:-/nonexistent}"; echo "pid 1: $(ps -p 1 -o comm=)"; loginctl list-sessions --no-pager 2>&1 | head -5' | Out-String
+          $out
+          Note 'Ubuntu' $out
+      - name: Irie in Ubuntu, from site/install.sh
+        env:
+          LINUX: ${{ matrix.linux }}
+        run: |
+          . "$env:RUNNER_TEMP\linux.ps1"
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          New-Item -ItemType Directory -Force $dist | Out-Null
+          $env:CGO_ENABLED = '0'; $env:GOOS = 'linux'; $env:GOARCH = 'amd64'
+          $out = go build -trimpath -o "$dist\irie" ./cmd/irie 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { $out; Note 'go build' $out; throw 'go build of irie for Linux failed' }
+          Remove-Item Env:GOOS, Env:GOARCH
+          Copy-Item LICENSE "$dist\LICENSE"
+          $d = (wsl.exe -d Ubuntu -e wslpath -a $dist | Out-String).Trim()
+          $sh = (wsl.exe -d Ubuntu -e wslpath -a (Resolve-Path site\install.sh).Path | Out-String).Trim()
+          "dist: $d; install.sh: $sh"
+          # The tarball is made in Linux, where irie keeps its executable bit, as tools/release.sh makes it.
+          $script = @'
+          set -e
+          t=$(mktemp -d); cp 'DIST/irie' 'DIST/LICENSE' "$t"; chmod +x "$t/irie"
+          tar -czf 'DIST/irie-linux-amd64.tar.gz' -C "$t" irie LICENSE
+          cd 'DIST' && sha256sum irie-linux-amd64.tar.gz > SHA256SUMS && cd
+          # Git on Windows checks site/install.sh out with CRLFs; the site serves it with LFs.
+          tr -d '\r' < 'SITE' > "$t/install.sh"
+          IRIE_DOWNLOADS='file://DIST' IRIE_NO_SETUP=1 sh "$t/install.sh" </dev/null
+          ~/.local/bin/irie version </dev/null
+          ~/.local/bin/irie setup --check </dev/null || true
+          '@
+          if ($env:LINUX -ne 'this') {
+            # A release's irie, as install.sh fetches it from GitHub.
+            $script = @'
+          set -e
+          t=$(mktemp -d); tr -d '\r' < 'SITE' > "$t/install.sh"
+          IRIE_VERSION='@RELEASE@' IRIE_NO_SETUP=1 sh "$t/install.sh" </dev/null
+          ~/.local/bin/irie version </dev/null
+          '@
+            $script = $script.Replace('@RELEASE@', $env:LINUX)
+          }
+          $out = Linux $script.Replace('DIST', $d).Replace('SITE', $sh) | Out-String
+          $code = $LASTEXITCODE
+          $out
+          Note "install.sh ($env:LINUX) exited $code" $out
+          if ($code -ne 0) { throw 'install.sh failed' }
+      - name: Irie.exe, from a cold start of Linux
+        run: |
+          . "$env:RUNNER_TEMP\linux.ps1"
+          # A console build, so a panic as it starts shows here.
+          $out = go build -o "$env:RUNNER_TEMP\Irie.exe" ./cmd/windows-app 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { $out; Note 'go build' $out; throw 'go build of the app failed' }
+          wsl.exe --shutdown
+          $shots = Join-Path $env:RUNNER_TEMP 'wsl-shots'
+          $start = Get-Date
+          $said = & "$env:RUNNER_TEMP\Irie.exe" --snapshot $shots 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $took = [int]((Get-Date) - $start).TotalSeconds
+          $said
+          $log = Get-Content (Join-Path $env:LOCALAPPDATA 'irie\app.log') -Raw -ErrorAction SilentlyContinue
+          $log
+          Note "Irie.exe --snapshot exited $code after $took s" ($said + $log)
+          $linux = Linux @'
+          for f in ~/.local/state/irie/*.log; do echo "--- $f"; tail -n 60 "$f"; done
+          echo '--- tmux'; tmux -L irie list-panes -a -F '#{session_name}:#{window_name} #{pane_dead} #{pane_current_command}'
+          echo '--- processes'; ps -eo pid,etime,args | grep -v ' \[' | head -40
+          '@ | Out-String
+          $linux
+          Note 'Linux after the app' $linux
+          if ($code -ne 0) { throw "Irie.exe --snapshot exited $code" }
+          $png = Join-Path $shots 'window.png'
+          if (-not (Test-Path $png) -or (Get-Item $png).Length -lt 20000) { throw 'window.png is missing or blank' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: irie-for-windows-on-wsl-${{ matrix.linux }}-${{ matrix.user }}
+          path: ${{ runner.temp }}/wsl-shots
           if-no-files-found: ignore

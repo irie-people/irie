@@ -5,6 +5,7 @@
 //	go run ./tools/winpreview                 serve it at http://127.0.0.1:PORT/
 //	go run ./tools/winpreview -scene setup    as on a Windows without WSL
 //	go run ./tools/winpreview -scene old      with an Irie inside Linux too old for the app
+//	go run ./tools/winpreview -scene down     with an Irie inside Linux that isn't answering
 //	go run ./tools/winpreview -bridge         be the bridge on standard input and output,
 //	                                          for the app's IRIE_APP_BRIDGE (docs/WINDOWS.md §7)
 //
@@ -38,7 +39,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:0", "where to serve the page")
-	scene := flag.String("scene", "ready", "ready, setup or old")
+	scene := flag.String("scene", "ready", "ready, setup, old or down")
 	bridge := flag.Bool("bridge", false, "speak the bridge's side on standard input and output")
 	dir := flag.String("dir", "", "serve the page from this checkout's files, read afresh on each load, rather than the ones built in")
 	flag.Parse()
@@ -249,7 +250,7 @@ func (m *machine) Fix(st wsl.State, step wsl.Step) error {
 	time.Sleep(1500 * time.Millisecond)
 	m.mu.Lock()
 	m.fixed = append(m.fixed, step.ID)
-	if step.ID == "install" && m.scene == "old" {
+	if step.ID == "install" && (m.scene == "old" || m.scene == "down") {
 		m.scene = "ready"
 	}
 	m.mu.Unlock()
@@ -258,10 +259,13 @@ func (m *machine) Fix(st wsl.State, step wsl.Step) error {
 
 func (m *machine) Bridge(string) (winapp.Process, error) {
 	m.mu.Lock()
-	old := m.scene == "old"
+	scene := m.scene
 	m.mu.Unlock()
-	if old {
+	switch scene {
+	case "old":
 		return &proc{r: strings.NewReader(""), w: io.Discard, code: 2, stderr: "irie: unknown command \"bridge\"\n"}, nil
+	case "down":
+		return &proc{r: strings.NewReader(""), w: io.Discard, code: 1, stderr: downSaid}, nil
 	}
 	upR, upW := io.Pipe()
 	downR, downW := io.Pipe()
@@ -297,3 +301,8 @@ func (p *proc) Wait() (int, string) {
 	}
 	return p.code, p.stderr
 }
+
+// downSaid is what a bridge that gives no hello writes, for the down scene.
+const downSaid = `bridge: Irie did not start inside Linux: the core did not answer within 1m0s (dial unix /run/user/1000/irie/core.sock: connect: no such file or directory); see /home/alice/.local/state/irie/core.log
+irie: the core did not answer
+`

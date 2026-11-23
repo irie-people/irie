@@ -11,11 +11,15 @@ import (
 )
 
 // TestTheWindowsProgramsBuild: Irie for Windows and its wrapper build for
-// Windows, as a release builds them (tools/release.sh), from any computer.
-// Each links everything internal/ipc imports, so the wire types must keep
-// clear of code that builds on Linux and macOS alone: release 1.10.0's
-// downloads failed when ipc came to import internal/lessons, and with it
-// the harness, the host and their flock, kill and process groups.
+// Windows, as a release builds them (tools/release.sh), from any computer,
+// and so does tools/winpreview, whose stand-in for Irie in Linux the
+// test workflow's windows job runs. Each links everything internal/ipc
+// imports, so the wire types must keep clear of code that builds on Linux
+// and macOS alone: release 1.10.0's downloads failed when ipc came to
+// import internal/lessons, and with it the harness, the host and their
+// flock, kill and process groups. The stand-in shows zen, whose book's
+// chain locks its files with internal/filetx: from 21 November until
+// filetx locked files on Windows too, the windows job could not build it.
 func TestTheWindowsProgramsBuild(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the Windows programs")
@@ -30,10 +34,10 @@ func TestTheWindowsProgramsBuild(t *testing.T) {
 	if brand.Tags != "" {
 		args = append(args, "-tags", brand.Tags)
 	}
-	build := exec.Command(goBin, append(args, "./cmd/windows", "./cmd/windows-app")...)
+	build := exec.Command(goBin, append(args, "./cmd/windows", "./cmd/windows-app", "./tools/winpreview")...)
 	build.Dir = filepath.Join("..", "..")
 	build.Env = append(os.Environ(), "GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("GOOS=windows go build ./cmd/windows ./cmd/windows-app: %v\n%s", err, out)
+		t.Fatalf("GOOS=windows go build ./cmd/windows ./cmd/windows-app ./tools/winpreview: %v\n%s", err, out)
 	}
 }

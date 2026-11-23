@@ -163,9 +163,22 @@ function coverFor(st) {
         h('div', { class: 'cover-acts' }, h('button', { class: 'btn primary', text: `Update Irie in ${U.link.distro || 'Linux'}`, onclick: () => host.fix('install') }),
           h('button', { class: 'btn', text: 'Try again', onclick: () => host.retry() })),
         U.setup && U.setup.fixing === 'install' ? h('p', { class: 'cover-sub', text: 'Updating in a window of its own… It may ask for your Linux password.' }) : null);
-    default:
-      return card(h('div', { class: 'cover-title', text: 'Irie isn’t answering' }), h('p', { class: 'cover-sub', text: text || 'The connection to Irie inside Linux failed.' }),
-        h('div', { class: 'cover-acts' }, h('button', { class: 'btn primary', text: 'Try again', onclick: () => host.retry() })));
+    default: {
+      // What Irie wrote last, a repair (Irie's installer again, then its setup, in a window of
+      // its own) and the words to send whoever helps.
+      const said = text || 'The connection to Irie inside Linux failed.';
+      const detail = U.link.detail || '';
+      const distro = U.link.distro || 'Linux';
+      const repairing = !!(U.setup && U.setup.fixing === 'install');
+      const report = [`Irie isn’t answering: ${said}`, detail, `Irie for Windows ${U.link.app || ''}; Irie in ${distro} ${U.link.version || '(version unknown)'}`].filter(Boolean).join('\n');
+      return card(h('div', { class: 'cover-title', text: 'Irie isn’t answering' }), h('p', { class: 'cover-sub', text: said }),
+        detail ? h('pre', { class: 'cover-detail', text: detail }) : null,
+        h('div', { class: 'cover-acts' },
+          h('button', { class: 'btn primary', text: 'Try again', onclick: () => host.retry() }),
+          h('button', { class: 'btn', disabled: repairing, text: repairing ? 'Repairing…' : `Repair Irie in ${distro}`, onclick: () => host.fix('install') }),
+          h('button', { class: 'btn', text: 'Copy details', onclick: () => { host.copy(report); notice('Copied: paste it to whoever helps you.'); } })),
+        repairing ? h('p', { class: 'cover-sub', text: 'Repairing in a window of its own: it installs Irie in Linux again, then checks what Irie needs there. It may ask for your Linux password.' }) : null);
+    }
   }
 }
 

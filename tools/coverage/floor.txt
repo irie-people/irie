@@ -80,7 +80,7 @@ internal/tmux 81 0
 internal/ui 85 0
 internal/variorum 85 0
 internal/vpn 79 0
-internal/winapp 75 0
+internal/winapp 77 0
 internal/winapp/fixture 27 0
 internal/winapp/web 80 0
 internal/worktree 81 0

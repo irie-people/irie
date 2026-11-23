@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -95,9 +96,13 @@ const (
 
 // Link is the link message: the state, in words, and what came with it.
 type Link struct {
-	T       string `json:"t"` // "link"
-	State   string `json:"state"`
-	Text    string `json:"text,omitempty"`
+	T     string `json:"t"` // "link"
+	State string `json:"state"`
+	Text  string `json:"text,omitempty"`
+	// Detail is what the bridge wrote last before it ended, when it gave
+	// no hello: the window shows it under the words, to copy for whoever
+	// helps.
+	Detail  string `json:"detail,omitempty"`
 	Distro  string `json:"distro,omitempty"`
 	Version string `json:"version,omitempty"` // Irie's version inside Linux
 	App     string `json:"app"`               // the app's own version
@@ -160,11 +165,16 @@ func (b *Backend) post(v any) {
 	b.host.Post(msg)
 }
 
-func (b *Backend) setLink(state, text string) {
+// setLink posts the link's state and words, and logs them, so app.log says
+// what the window's cover said.
+func (b *Backend) setLink(state, text string) { b.setLinkDetail(state, text, "") }
+
+func (b *Backend) setLinkDetail(state, text, detail string) {
 	b.mu.Lock()
-	b.link.State, b.link.Text = state, text
+	b.link.State, b.link.Text, b.link.Detail = state, text, detail
 	l := b.link
 	b.mu.Unlock()
+	log.Printf("link: %s: %s", state, text)
 	b.post(l)
 }
 
@@ -206,11 +216,11 @@ func (b *Backend) run() {
 			continue
 		}
 		b.postSetup()
-		state, text, steady := b.connect(st.Distro.Name)
+		state, text, detail, steady := b.connect(st.Distro.Name)
 		if steady {
 			delay = time.Second
 		}
-		b.setLink(state, text)
+		b.setLinkDetail(state, text, detail)
 		b.wait(delay)
 		if !steady {
 			delay = min(delay*2, 30*time.Second)
@@ -219,13 +229,13 @@ func (b *Backend) run() {
 }
 
 // connect starts the bridge and serves it until it ends. It gives the link
-// state and words to show then, and whether it ran for a while, which
-// starts the next try sooner.
-func (b *Backend) connect(distro string) (state, text string, steady bool) {
+// state, words and detail to show then, and whether it ran for a while,
+// which starts the next try sooner.
+func (b *Backend) connect(distro string) (state, text, detail string, steady bool) {
 	b.setLink(LinkConnecting, "Starting "+brand.Name+" in "+distro+"…")
 	p, err := b.mach.Bridge(distro)
 	if err != nil {
-		return LinkDown, "wsl.exe did not start: " + err.Error(), false
+		return LinkDown, "wsl.exe did not start: " + err.Error(), "", false
 	}
 	// wsl.exe may take a while to start Linux the first time; a bridge
 	// that says nothing for long is stuck.
@@ -248,7 +258,7 @@ func (b *Backend) connect(distro string) (state, text string, steady bool) {
 		// The core may yet come up, as after a slow start.
 		if !b.awaitCore(m) {
 			b.unlink()
-			return LinkConnecting, "The connection to " + brand.Name + " in Linux ended. Starting it again…", false
+			return LinkConnecting, "The connection to " + brand.Name + " in Linux ended. Starting it again…", "", false
 		}
 	}
 	b.setLink(LinkReady, "")
@@ -257,7 +267,7 @@ func (b *Backend) connect(distro string) (state, text string, steady bool) {
 	b.mu.Unlock()
 	<-m.Done()
 	b.unlink()
-	return LinkConnecting, "The connection to " + brand.Name + " in Linux ended. Starting it again…", time.Since(start) > 10*time.Second
+	return LinkConnecting, "The connection to " + brand.Name + " in Linux ended. Starting it again…", "", time.Since(start) > 10*time.Second
 }
 
 // unlink forgets the bridge that ended.
@@ -292,23 +302,39 @@ func (b *Backend) awaitCore(m *mux.Mux) bool {
 	}
 }
 
-// whyNoBridge says, in the link's words, why a bridge gave no hello.
-func whyNoBridge(code int, stderr string, err error) (state, text string, steady bool) {
+// whyNoBridge says, in the link's words, why a bridge gave no hello, and
+// what it wrote last, as the detail.
+func whyNoBridge(code int, stderr string, err error) (state, text, detail string, steady bool) {
 	msg := strings.TrimSpace(stderr)
+	detail = lastLines(msg, 20)
 	switch {
 	case strings.Contains(msg, `unknown command "bridge"`):
-		return LinkOld, brand.Name + " inside Linux is older than this app, and can't talk to it. Update it to go on.", false
+		return LinkOld, brand.Name + " inside Linux is older than this app, and can't talk to it. Update it to go on.", "", false
 	case code == 127 || strings.Contains(msg, "not found"):
-		return LinkSetup, brand.Name + " is not installed inside Linux.", false
+		return LinkSetup, brand.Name + " is not installed inside Linux.", detail, false
 	case msg != "":
-		return LinkDown, lastLine(msg), false
+		return LinkDown, lastLine(msg), detail, false
 	}
-	return LinkDown, brand.Name + " inside Linux did not answer: " + err.Error(), false
+	return LinkDown, brand.Name + " inside Linux did not answer: " + err.Error(), fmt.Sprintf("wsl.exe exited with %d, and wrote nothing to its errors.", code), false
 }
 
-func lastLine(s string) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
-	return strings.TrimSpace(lines[len(lines)-1])
+func lastLine(s string) string { return lastLines(s, 1) }
+
+// lastLines is the last n lines of s, trimmed, each no longer than a
+// window is wide.
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(s), "\r", ""), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	for i, l := range lines {
+		l = strings.TrimSpace(l)
+		if r := []rune(l); len(r) > 300 {
+			l = string(r[:300]) + "…"
+		}
+		lines[i] = l
+	}
+	return strings.Join(lines, "\n")
 }
 
 func firstNeed(st wsl.State) string {
