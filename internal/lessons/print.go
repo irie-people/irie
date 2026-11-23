@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // byShort says who stopped a kind's calls, in a word or two.
 var byShort = map[string]string{
 	ByCommand:    "its command",
 	ByTool:       "the tool",
-	ByIrie:       "Irie's guard",
+	ByHarness:    brand.Name + "'s guard",
 	ByPermission: "a permission check",
 	ByUser:       "the user",
 	ByHook:       "a hook of yours",

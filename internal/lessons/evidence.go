@@ -24,7 +24,7 @@ import (
 const (
 	ByCommand    = "command"    // a shell command ended in an error
 	ByTool       = "tool"       // the tool itself, such as an edit of a file not read first
-	ByIrie       = "irie"       // one of Irie's own hooks: an arch agent or the trod bot
+	ByHarness    = "harness"    // a hook of Irie's own: an arch agent or the trod bot
 	ByPermission = "permission" // Claude Code's permission checks, its auto mode's among them
 	ByUser       = "user"       // the user turned the call down
 	ByHook       = "hook"       // a hook of the user's own, whose refusals are theirs to weigh
@@ -41,7 +41,7 @@ func By(tool, err string) string {
 	case strings.Contains(err, " hook error: "):
 		_, msg, _ := strings.Cut(err, " hook error: ")
 		if strings.HasPrefix(msg, "["+brand.Name+"]") || strings.HasPrefix(msg, "[You are ") && strings.Contains(msg[:min(len(msg), 80)], "arch agent") {
-			return ByIrie
+			return ByHarness
 		}
 		return ByHook
 	case strings.HasPrefix(err, "The server-side auto mode classifier gave no verdict"):

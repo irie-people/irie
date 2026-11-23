@@ -49,8 +49,8 @@ func TestByNamesWhoStoppedACall(t *testing.T) {
 	for err, want := range map[string]string{
 		"exit 1: FAIL": ByCommand,
 		"File has not been read yet. Read it first before writing to it.":                                                 ByTool,
-		"PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: it would bring a window to the front.":         ByIrie,
-		"PreToolUse:Bash hook error: [You are Mikael, the arch agent who stands with the user against evil. An agent":     ByIrie,
+		"PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: it would bring a window to the front.":         ByHarness,
+		"PreToolUse:Bash hook error: [You are Mikael, the arch agent who stands with the user against evil. An agent":     ByHarness,
 		`PreToolUse:Read hook error: [/home/alice/bin/guard "$CLAUDE_PROJECT_DIR/x"]: off-limits in this repo.`:           ByHook,
 		"PreToolUse:Edit hook error: Skills are not edited in place.":                                                     ByHook,
 		"Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Undermining Oversight].": ByPermission,
@@ -159,7 +159,7 @@ func TestEvidenceRanksWhatSessionsShareWithWhatWorkedNext(t *testing.T) {
 	}
 	want := []string{
 		"1 tool 3/3 Edit: File has not been read yet. Read it first before writing to it. then Read",
-		"2 irie 2/2 open: PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: use irie away. then irie away",
+		"2 harness 2/2 open: PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: use irie away. then irie away",
 		"3 user 1/1 git push: The user doesn't want to proceed with this tool use. then ",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

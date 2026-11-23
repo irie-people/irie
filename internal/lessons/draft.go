@@ -41,7 +41,7 @@ var schema = json.RawMessage(`{"type":"object","properties":{"lessons":{"type":"
 var byWords = map[string]string{
 	ByCommand:    "the command's own error",
 	ByTool:       "the tool itself",
-	ByIrie:       "a guard of the agents' harness, which said how to do it instead",
+	ByHarness:    "a guard of the agents' harness, which said how to do it instead",
 	ByPermission: "Claude Code's permission check",
 	ByUser:       "the user, who said no",
 }
