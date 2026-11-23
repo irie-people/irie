@@ -7,6 +7,7 @@ import (
 
 	"github.com/irie-people/irie/internal/genui"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 )
 
 // A session's own card, where it stands, in its details
@@ -27,6 +28,10 @@ const (
 func (c *Core) sessionCardArgs(a ipc.MaterializeArgs) (ipc.MaterializeArgs, error) {
 	if !c.cfg().Materialize.Sessions {
 		return a, ipc.Errorf(ipc.CodeBadArgs, "materialize: session cards are off; materialize.sessions turns them on")
+	}
+	if len(c.chatServers()) == 0 {
+		// None is asked for, so the card stays away (localhere.go).
+		return a, ipc.Errorf(ipc.CodeBadArgs, "materialize: session cards are off: %v", localmodel.ErrOffHere)
 	}
 	conv, err := c.conversation(ipc.ConversationArgs{Session: a.Session, Limit: sessionCardItems})
 	if err != nil {

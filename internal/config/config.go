@@ -701,6 +701,9 @@ var Runtimes = []string{"ollama", "llama-server"}
 // own, which it runs in its tmux server with the settings below, or one the
 // user runs at url.
 type Local struct {
+	// Here is whether Irie loads models on this computer. False keeps its
+	// own servers stopped and every model off it (here.go, DESIGN §6.3).
+	Here      bool              `toml:"here"`
 	Ollama    string            `toml:"ollama"`     // the ollama binary; "" = PATH, then the usual install places
 	URL       string            `toml:"url"`        // a server you run instead, such as "http://127.0.0.1:11434"; "" = Irie runs its own
 	Port      int               `toml:"port"`       // Irie's own server listens on 127.0.0.1 at this port
@@ -1112,7 +1115,7 @@ func Default() Config {
 				Skill:          "chaos",
 			},
 		},
-		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
+		Local: Local{Here: true, Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
 		Bench: Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30, Close: true},
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
