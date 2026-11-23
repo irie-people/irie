@@ -455,7 +455,7 @@ final class Store {
         guard !started else { return }
         started = true
         if let seconds = FreezeDog.restartedAfter {
-            say("\(Brand.name) stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
+            say("\(Brand.name) stopped answering for \(seconds) s, so ❤️‍🩹 \(Brand.raffi) restarted it. Every agent kept running.",
                 error: false, seconds: 10)
         }
         // Behind another app, the window takes in the core's news less
@@ -927,21 +927,21 @@ final class Store {
         founding.loadFixture()
         #endif
         archAgents = [
-            ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
-                      about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
+            ArchAgent(name: "mikael", called: Brand.mikael, icon: "⚔️🛡️", title: "a helper against evil",
+                      about: "\(Brand.mikael), the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
                       on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
-                      actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
-                      settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
+                      actions: [ArchAction(label: "Talk with \(Brand.mikael)", op: "spawn")],
+                      settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "\(Brand.mikael) goes with every session", value: .bool(true)),
                                  ArchSetting(key: "arch.mikael.good", kind: "lines", label: "The good you want to see in the world",
                                              value: .array([.string("Give credit where it’s due.")]))]),
-            ArchAgent(name: "gabriel", icon: "🪽", title: "carries your focus to the machine",
-                      about: "Gabriel carries the user's focus to the machine.",
+            ArchAgent(name: "gabriel", called: Brand.gabriel, icon: "🪽", title: "carries your focus to the machine",
+                      about: "\(Brand.gabriel) carries the user's focus to the machine.",
                       on: true, status: "Holding back 3 sessions and 1 app for Safari.",
                       actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
-                      settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
+                      settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "\(Brand.gabriel) gives your focus the machine first", value: .bool(true)),
                                  ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
-            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals \(Brand.name) and your Mac",
-                      about: "Raphael keeps \(Brand.name) and the computer it runs on well.",
+            ArchAgent(name: "raphael", called: Brand.raphael, nickname: Brand.raffi, icon: "❤️‍🩹", title: "heals \(Brand.name) and your Mac",
+                      about: "\(Brand.raphael) keeps \(Brand.name) and the computer it runs on well.",
                       on: true, status: "Looked at 14:05: 2 things need care, and 1 is worth a look.",
                       actions: [ArchAction(label: "Look over my Mac now", op: "raphael")],
                       items: [ArchItem(text: "Your disk is nearly full: 9.9 GB free of 995 GB (1%).",
@@ -949,11 +949,11 @@ final class Store {
                               ArchItem(text: "Go’s build cache takes 13.8 GB (~/Library/Caches/go-build).",
                                        detail: "It is safe to clear: Go builds what it needs again, so the next builds and tests take longer.", level: "warn",
                                        actions: [ArchAction(label: "Clear Go’s build cache", op: "raphael",
-                                                            ask: "Raffi will run:\n    go clean -cache\n\nFrees about 13.8 GB. Raffi waits until no Go build or test runs, so none of them breaks.")]),
+                                                            ask: "\(Brand.raffi) will run:\n    go clean -cache\n\nFrees about 13.8 GB. \(Brand.raffi) waits until no Go build or test runs, so none of them breaks.")]),
                               ArchItem(text: "com.example.helper is worth a look: it starts ~/.local/bin/helper as you log in.",
-                                       detail: "If you know it, mark it as yours and Raffi no longer flags it.\nIts program is signed by no one in particular (an ad-hoc signature).\nNot sure: many good programs show these signs too.", level: "note",
+                                       detail: "If you know it, mark it as yours and \(Brand.raffi) no longer flags it.\nIts program is signed by no one in particular (an ad-hoc signature).\nNot sure: many good programs show these signs too.", level: "note",
                                        actions: [ArchAction(label: "It’s mine", op: "raphael")])],
-                      settings: [ArchSetting(key: "arch.raphael.on", kind: "bool", label: "Raffi restarts what stops answering, and looks over your Mac", value: .bool(true)),
+                      settings: [ArchSetting(key: "arch.raphael.on", kind: "bool", label: "\(Brand.raffi) restarts what stops answering, and looks over your Mac", value: .bool(true)),
                                  ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
@@ -1694,7 +1694,7 @@ final class Store {
         Task {
             do {
                 _ = try await client.call("config", ConfigArgs(set: [ConfigSet(key: "arch.gabriel.always", value: on ? .bool(true) : .null)]), timeout: 10, as: ConfigResult.self)
-                say(on ? "Boosting your focus whenever you’re at the computer: the rest runs on the efficiency cores, so it finishes later." : "No longer boosting always: Gabriel holds back only while the Mac is busy.", error: false, seconds: 6)
+                say(on ? "Boosting your focus whenever you’re at the computer: the rest runs on the efficiency cores, so it finishes later." : "No longer boosting always: \(Brand.gabriel) holds back only while the Mac is busy.", error: false, seconds: 6)
             } catch {
                 boostAlways = !on
                 say("Couldn’t \(on ? "boost always" : "stop boosting always"): \(error.localizedDescription)", error: true)

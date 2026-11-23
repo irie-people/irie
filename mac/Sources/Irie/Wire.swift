@@ -570,7 +570,11 @@ struct ArchResult: Decodable {
 
 /// One arch agent, as a client draws him.
 struct ArchAgent: Decodable, Identifiable, Equatable {
+    /// Its key, such as gabriel, the same in every copy.
     var name: String
+    /// Its name as a person reads it, a copy's own (internal/brand); a core
+    /// from before it sends none.
+    var called: String?
     var nickname: String?
     var icon: String?
     var title: String
@@ -586,8 +590,8 @@ struct ArchAgent: Decodable, Identifiable, Equatable {
     /// How he is introduced: his icon, his name (with his nickname first)
     /// and his work.
     var heading: String {
-        var n = name.prefix(1).uppercased() + name.dropFirst()
-        if let nick = nickname, !nick.isEmpty { n = "\(nick) (\(n))" }
+        var n = called ?? (name.prefix(1).uppercased() + name.dropFirst())
+        if let nick = nickname, !nick.isEmpty, nick != n { n = "\(nick) (\(n))" }
         if let i = icon, !i.isEmpty { n = "\(i) \(n)" }
         return title.isEmpty ? n : "\(n) · \(title)"
     }

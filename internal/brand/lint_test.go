@@ -150,6 +150,10 @@ func TestSwiftNamesTheBrand(t *testing.T) {
 				line := 1 + strings.Count(string(src[:r[0]]), "\n")
 				t.Errorf("%s:%d: %q names the product; use \\(Brand.name) or \\(Brand.slug)", filepath.Base(path), line, text)
 			}
+			if archNamed(text) {
+				line := 1 + strings.Count(string(src[:r[0]]), "\n")
+				t.Errorf("%s:%d: %q names an arch agent; use \\(Brand.mikael), \\(Brand.gabriel), \\(Brand.raphael), \\(Brand.raffi), \\(Brand.raguel) or \\(Brand.ragu)", filepath.Base(path), line, text)
+			}
 		}
 	}
 }
