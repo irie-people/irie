@@ -33,7 +33,8 @@ import (
 //
 // His look (internal/raphael) says what slows the computer down, fills it
 // up or may have got in, with advice. Every minute he samples the
-// processes, the memory and the disk; every arch.raphael.every, when the
+// processes, with what agents left running (leftrunning.go), the memory
+// and the disk; every arch.raphael.every, when the
 // disk is nearly full, or when asked, he weighs the caches, what starts by
 // itself and macOS's protections too. A fix runs only on the person's OK,
 // one at a time, and never from inside an agent.
@@ -67,7 +68,8 @@ const (
 type raphState struct {
 	mu        sync.Mutex
 	sampler   raphael.Sampler
-	quick     []raphael.Finding // the last sample's: what runs hot, memory and disk
+	left      leftState         // what each process an agent may have left running showed (leftrunning.go)
+	quick     []raphael.Finding // the last sample's: what agents left running, what runs hot, memory and disk
 	quickFine []string
 	slow      []raphael.Finding // the last look's: caches, startup, protection
 	slowFine  []string
@@ -185,6 +187,7 @@ func (c *Core) raphaelSweep() {
 	hot := r.sampler.Hot(ps)
 	r.mu.Unlock()
 	in := c.raphaelInput(ps, hot, t, now)
+	in.Left = c.leftRunning(ctx, ps, t, now)
 	disk, _ := raphael.ReadDisk()
 	quick, fine := raphael.Quick(in, raphael.ReadMemory(), disk)
 	r.mu.Lock()

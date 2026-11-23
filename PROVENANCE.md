@@ -933,6 +933,8 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-22 | https://code.claude.com/docs/en/hooks.md (PreToolUse decision control) ; https://code.claude.com/docs/en/permission-modes.md (Protected paths) | permissionDecision ask: shown to the user in the permission prompt, auto mode's classifier does not decide it, a -p run denies it, deny wins; .git and .gitconfig as protected paths (DESIGN §3.3, §4.11) |
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_048_harness_learning.md HE-02, HE-60 | The idea, no code: the journal keeps what a failed call's error said, and tools/habits.sh ranks what failed most with what worked next, evidence with no model call (DESIGN §5.2) |
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_023_workers.md WK-05, WK-05a, WK-31 | The idea, no code: what a plugin of yours runs is pinned by hash when you turn it on, and a change holds its helpers and tools until you turn it on again (DESIGN §4.17) |
+| 2026-11-23 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_052_processes.md PR-20 and its Not in scope | The idea, no code: Raphael flags a process an agent left running, whose session is closed or has been quiet two hours, and stops it, with what it runs, only on the user's OK (DESIGN §4.11) |
+| 2026-11-23 | lsof(8) manual page (local `man lsof`), checked on macOS 14 | `-p` takes a comma-separated set of pids and `-d` one of descriptors, such as `cwd,1,2`, which `-a` joins: the folder and output files of the processes an agent may have left running, read for a few at once (`internal/raphael/left.go`) |
 
 ## Third-party code
 
