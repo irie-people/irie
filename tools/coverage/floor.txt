@@ -14,7 +14,7 @@ internal/anon 73 0
 internal/arch 87 0
 internal/brand 97 0
 internal/bridge 74 0
-internal/browser 40 1
+internal/browser 64 1
 internal/chain 85 0
 internal/chat 80 0
 internal/config 80 0
@@ -52,7 +52,7 @@ internal/lock 81 0
 internal/loginenv 88 0
 internal/mail 77 0
 internal/materialize 88 0
-internal/mcp 90 0
+internal/mcp 91 0
 internal/mux 82 0
 internal/obsidian 95 0
 internal/paths 34 0
@@ -73,7 +73,7 @@ internal/statusline 87 0
 internal/sysload 89 0
 internal/team 81 0
 internal/terms 83 0
-internal/testrun 80 0
+internal/testrun 81 0
 internal/testutil 53 1
 internal/testutil/fakeagent 9 0
 internal/tmux 81 0
@@ -92,3 +92,4 @@ tools/coverage 73 0
 tools/docpaths 75 0
 tools/mkicon 78 0
 tools/perf 41 0
+tools/prune 87 0
