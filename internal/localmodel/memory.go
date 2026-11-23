@@ -82,6 +82,22 @@ func Budget(memoryGiB int, m Machine) int64 {
 // 2 GiB, or a tenth of the machine's memory when that is more.
 func Reserve(m Machine) int64 { return max(2*GiB, m.Total/10) }
 
+// RoomToLoad says whether a model that takes need may be loaded now: the
+// memory free now must hold it with Reserve(m) beside, and the disk must
+// keep PullReserve free past it, for the system's swap. A model loaded
+// into a machine short of memory pushes the rest into swap, and with the
+// disk full too macOS can panic, which takes every session down with it.
+// The error says what is short, and by how much.
+func RoomToLoad(need Need, m Machine, freeDisk int64) error {
+	if m.Available < need.Total+Reserve(m) {
+		return fmt.Errorf("too little memory is free to load the model now: it takes about %s and %s must stay free besides, and %s is free", Bytes(need.Total), Bytes(Reserve(m)), Bytes(m.Available))
+	}
+	if freeDisk < need.Total+PullReserve {
+		return fmt.Errorf("the disk is too full to load the model now: with %s free, the system's swap could run out of room", Bytes(freeDisk))
+	}
+	return nil
+}
+
 // Bytes renders a size in decimal units, as Ollama shows a model's size:
 // 7.9 GB, 640 MB.
 func Bytes(n int64) string {
