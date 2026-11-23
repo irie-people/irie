@@ -49,6 +49,12 @@ const (
 	restUntil = 25
 )
 
+// restWarnFor is how long the kernel's warning of memory pressure must
+// last before Raffi rests a card for it: a build or a test run on a busy
+// machine raises it for a few seconds, and passes. Under restBelow, or at
+// critical, he rests at once.
+const restWarnFor = 30 * time.Second
+
 // restAtOnce is how many agents may be ending at once for Raffi's rests:
 // one while memory is short, a few while the kernel says it is critical
 // or the swap may not grow.
@@ -89,6 +95,9 @@ type restState struct {
 	// short says memory is short now, by restShort, and since when.
 	short      bool
 	shortSince time.Time
+	// warnSince is since when the kernel has warned of memory pressure,
+	// while it does.
+	warnSince time.Time
 	// stuck is when Raffi last said that memory is short and nothing may
 	// rest, so that core.log says it once while it lasts.
 	stuck time.Time
@@ -182,17 +191,19 @@ func lastActive(x *session) time.Time {
 }
 
 // restShort says whether memory is short enough for Raffi to rest cards,
-// m being the machine's memory, pressure the kernel's level and room the
-// swap's room on disk; was is what it said last time. It also says how
-// many agents may be ending at once.
-func restShort(m localmodel.Machine, pressure int, room sysload.Room, was bool) (short bool, atOnce int) {
+// m being the machine's memory, pressure the kernel's level, warned how
+// long it has warned of pressure, and room the swap's room on disk; was is
+// what it said last time. It also says how many agents may be ending at
+// once.
+func restShort(m localmodel.Machine, pressure int, warned time.Duration, room sysload.Room, was bool) (short bool, atOnce int) {
 	free := 100
 	if m.Total > 0 {
 		free = int(m.Available * 100 / m.Total)
 	}
 	swapStuck := room.Starved() && room.SwapUsed > 0
 	dire := pressure >= sysload.PressureCritical || swapStuck
-	short = dire || pressure >= sysload.PressureWarn || free < restBelow || was && free < restUntil
+	warn := pressure >= sysload.PressureWarn && (warned >= restWarnFor || was)
+	short = dire || warn || free < restBelow || was && free < restUntil
 	switch {
 	case !short:
 		return false, 0
@@ -211,7 +222,17 @@ func (c *Core) restUnderPressure(now time.Time) {
 		c.rest.short = false
 		return
 	}
-	short, atOnce := restShort(c.machine, c.load.Pressure, c.room, c.rest.short)
+	switch {
+	case c.load.Pressure < sysload.PressureWarn:
+		c.rest.warnSince = time.Time{}
+	case c.rest.warnSince.IsZero():
+		c.rest.warnSince = now
+	}
+	var warned time.Duration
+	if !c.rest.warnSince.IsZero() {
+		warned = now.Sub(c.rest.warnSince)
+	}
+	short, atOnce := restShort(c.machine, c.load.Pressure, warned, c.room, c.rest.short)
 	if short != c.rest.short {
 		c.rest.short, c.rest.shortSince = short, now
 		if short {

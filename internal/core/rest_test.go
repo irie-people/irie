@@ -259,21 +259,24 @@ func TestRestShortStartsAtTheWarningAndStopsWithRoomToSpare(t *testing.T) {
 		name     string
 		m        localmodel.Machine
 		pressure int
+		warned   time.Duration
 		room     sysload.Room
 		was      bool
 		short    bool
 		atOnce   int
 	}{
-		{"room to spare", m(9), sysload.PressureNormal, disk, false, false, 0},
-		{"under restBelow", m(2), sysload.PressureNormal, disk, false, true, restAtOnce},
-		{"the kernel's warning", m(9), sysload.PressureWarn, disk, false, true, restAtOnce},
-		{"critical", m(9), sysload.PressureCritical, disk, false, true, restAtOnceDire},
-		{"short until restUntil", m(4), sysload.PressureNormal, disk, true, true, restAtOnce},
-		{"not short past restUntil", m(5), sysload.PressureNormal, disk, true, false, 0},
-		{"swap with no room to grow", m(9), sysload.PressureNormal, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib, SwapUsed: gib}, false, true, restAtOnceDire},
-		{"a full disk without swap", m(9), sysload.PressureNormal, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib}, false, false, 0},
+		{"room to spare", m(9), sysload.PressureNormal, 0, disk, false, false, 0},
+		{"under restBelow", m(2), sysload.PressureNormal, 0, disk, false, true, restAtOnce},
+		{"a warning that passes, as a build raises", m(9), sysload.PressureWarn, 5 * time.Second, disk, false, false, 0},
+		{"the kernel's warning that lasts", m(9), sysload.PressureWarn, restWarnFor, disk, false, true, restAtOnce},
+		{"the warning while short", m(9), sysload.PressureWarn, 0, disk, true, true, restAtOnce},
+		{"critical", m(9), sysload.PressureCritical, 0, disk, false, true, restAtOnceDire},
+		{"short until restUntil", m(4), sysload.PressureNormal, 0, disk, true, true, restAtOnce},
+		{"not short past restUntil", m(5), sysload.PressureNormal, 0, disk, true, false, 0},
+		{"swap with no room to grow", m(9), sysload.PressureNormal, 0, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib, SwapUsed: gib}, false, true, restAtOnceDire},
+		{"a full disk without swap", m(9), sysload.PressureNormal, 0, sysload.Room{RAM: 18 * gib, DiskTotal: 926 * gib, DiskFree: 8 * gib}, false, false, 0},
 	} {
-		short, atOnce := restShort(c.m, c.pressure, c.room, c.was)
+		short, atOnce := restShort(c.m, c.pressure, c.warned, c.room, c.was)
 		if short != c.short || atOnce != c.atOnce {
 			t.Errorf("%s: short %v, %d at once; want %v, %d", c.name, short, atOnce, c.short, c.atOnce)
 		}
