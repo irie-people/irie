@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -217,6 +218,24 @@ func TestArgsRoundTrip(t *testing.T) {
 	}
 	if _, _, err := ParseArgs([]string{"--proxy", "http://x:1"}, os.Stderr); err == nil {
 		t.Fatal("a bad proxy was taken")
+	}
+}
+
+func TestServeArgsRoundTrip(t *testing.T) {
+	so := SharedOptions{
+		Options:  Options{Path: "/opt/mb/mullvadbrowser", Template: "/d/template", Headless: true, Idle: 3 * time.Minute, Search: DefaultSearch},
+		Sessions: "/home/alice/.local/state/irie/sessions", Dir: "/home/alice/.local/state/irie/browser", Port: 7441,
+	}
+	args := ServeArgs(so)
+	if args[0] != "browser" || args[1] != "serve" || slices.Contains(args, "--profile") {
+		t.Fatalf("ServeArgs = %q", args)
+	}
+	got, err := ParseServeArgs(args[2:], os.Stderr)
+	if err != nil || got != so {
+		t.Fatalf("ParseServeArgs(ServeArgs(so)) = %+v, %v", got, err)
+	}
+	if _, err := ParseServeArgs([]string{"--dir", "/x"}, io.Discard); err == nil {
+		t.Fatal("no --sessions was taken")
 	}
 }
 

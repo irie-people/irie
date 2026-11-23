@@ -20,6 +20,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
@@ -38,6 +40,10 @@ type Options struct {
 	Search   string        // the search tool's address, with %s for the query
 	Version  string        // Irie's version, for the server's name
 	Log      io.Writer     // diagnostics; nil = none
+
+	// group starts the browser in a process group of its own, which the
+	// shared server stops while the browser's session is frozen.
+	group bool
 }
 
 // DefaultSearch is DuckDuckGo's page for browsers without JavaScript,
@@ -70,6 +76,13 @@ type Browser struct {
 	last   time.Time // when the last call ended
 	gone   string    // why the browser closed since the last call; "" = it did not
 	tmpDir string    // the temporary profile folder, without Options.Profile
+
+	// What the shared server reads without waiting for a call to end: the
+	// running browser's pid and process group, 0 while none runs, and
+	// whether its session's freeze has it stopped.
+	pid, pgid atomic.Int64
+	held      atomic.Bool
+	changed   func() // the shared server's: a browser started or closed
 }
 
 type tab struct {
@@ -112,10 +125,46 @@ func (b *Browser) stop(why string) {
 	if b.run == nil {
 		return
 	}
+	b.hold(false) // a stopped browser would not hear browser.close
 	b.run.quit()
 	os.RemoveAll(b.run.profile)
 	b.run, b.tabs, b.cur = nil, nil, nil
 	b.gone = why
+	b.ran(nil)
+}
+
+// ran records the browser that runs now, or nil for none, for the shared
+// server, which reads it between calls.
+func (b *Browser) ran(r *running) {
+	pid, group := 0, 0
+	if r != nil {
+		pid, group = r.cmd.Process.Pid, r.group
+	}
+	b.pid.Store(int64(pid))
+	b.pgid.Store(int64(group))
+	if r == nil {
+		b.held.Store(false)
+	}
+	if b.changed != nil {
+		b.changed()
+	}
+}
+
+// hold stops the browser's process group while its session is frozen, and
+// continues it at the thaw (DESIGN §4.3), as a freeze stops a browser that
+// is the agent's own child. Only a browser in a group of its own is held.
+func (b *Browser) hold(stop bool) {
+	g := int(b.pgid.Load())
+	if g <= 1 || b.held.Load() == stop {
+		return
+	}
+	sig := syscall.SIGCONT
+	if stop {
+		sig = syscall.SIGSTOP
+	}
+	if syscall.Kill(-g, sig) == nil {
+		b.held.Store(stop)
+	}
 }
 
 // closeWhenIdle closes the browser once no call has come for o.Idle. The
@@ -131,23 +180,33 @@ func (b *Browser) closeWhenIdle(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			b.mu.Lock()
-			closed := false
-			if b.run != nil && time.Since(b.last) >= b.o.Idle {
-				b.stop(fmt.Sprintf("it closed after %s without a call", roundDur(b.o.Idle)))
-				closed = true
-			}
-			b.mu.Unlock()
-			// With nobody waiting, make the template for the next start
-			// when it is missing or a new build of the browser came.
-			if closed && b.o.Template != "" {
-				if exe, err := Find(b.o.Path); err == nil && !TemplateReady(b.o.Template, exe) {
-					if err := ensureTemplate(ctx, b.o, exe); err != nil {
-						logf(b.o, "making the template profile: %v", err)
-					}
+			b.idleTick(ctx)
+		}
+	}
+}
+
+// idleTick closes the browser when no call has come for o.Idle; a call
+// under way, which holds the browser, puts it off to the next tick. With
+// nobody waiting, it then makes the template for the next start, when it
+// is missing or a new build of the browser came.
+func (b *Browser) idleTick(ctx context.Context) {
+	if b.o.Idle <= 0 || !b.mu.TryLock() {
+		return
+	}
+	closed := false
+	if b.run != nil && time.Since(b.last) >= b.o.Idle {
+		b.stop(fmt.Sprintf("it closed after %s without a call", roundDur(b.o.Idle)))
+		closed = true
+	}
+	b.mu.Unlock()
+	if closed && b.o.Template != "" {
+		go func() {
+			if exe, err := Find(b.o.Path); err == nil && !TemplateReady(b.o.Template, exe) {
+				if err := ensureTemplate(ctx, b.o, exe); err != nil {
+					logf(b.o, "making the template profile: %v", err)
 				}
 			}
-		}
+		}()
 	}
 }
 
@@ -176,6 +235,7 @@ func (b *Browser) ensure(ctx context.Context) (string, error) {
 		b.run.kill()
 		os.RemoveAll(b.run.profile)
 		b.run, b.tabs, b.cur = nil, nil, nil
+		b.ran(nil)
 		note = "The browser had stopped, so it started again; its earlier tabs are gone. "
 	case b.gone != "":
 		note = "The browser started again (" + b.gone + "); its earlier tabs are gone. "
@@ -204,6 +264,7 @@ func (b *Browser) ensure(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("the browser did not start: %w", err)
 	}
 	b.run, b.tabs, b.cur, b.nextN = r, nil, nil, 0
+	b.ran(r)
 	var tree struct {
 		Contexts []struct {
 			Context string `json:"context"`
