@@ -63,7 +63,7 @@ func ctlRaphael(args []string) error {
 			return err
 		}
 	case "look":
-		fmt.Fprintln(os.Stderr, "Raffi is looking over your Mac: it takes a minute or two, longer on a busy Mac…")
+		fmt.Fprintln(os.Stderr, brand.Raffi+" is looking over your Mac: it takes a minute or two, longer on a busy Mac…")
 		if err := ipc.Call(sock, 25*time.Minute, ipc.OpRaphael, ipc.RaphaelArgs{Check: true, Wait: true}, &r); err != nil {
 			return err
 		}
@@ -82,13 +82,13 @@ func ctlRaphael(args []string) error {
 			if err := ipc.Call(sock, 10*time.Second, ipc.OpRaphael, ipc.RaphaelArgs{Mine: f.ID}, &r); err != nil {
 				return err
 			}
-			fmt.Println("Raffi no longer flags it: arch.raphael.known lists it now.")
+			fmt.Println(brand.Raffi + " no longer flags it: arch.raphael.known lists it now.")
 			return nil
 		}
 		if f.Fix == nil {
-			return fmt.Errorf("Raffi has no fix for that one; his advice: %s", f.Advice)
+			return fmt.Errorf(brand.Raffi+" has no fix for that one; "+brand.His+" advice: %s", f.Advice)
 		}
-		fmt.Printf("%s\n\nRaffi will run:\n", f.Text)
+		fmt.Printf("%s\n\n"+brand.Raffi+" will run:\n", f.Text)
 		for _, line := range f.Fix.Run {
 			fmt.Printf("    %s\n", line)
 		}
@@ -131,7 +131,7 @@ func ctlRaphael(args []string) error {
 func pickFinding(r ipc.RaphaelResult, arg string) (ipc.RaphaelFinding, error) {
 	if n, err := strconv.Atoi(arg); err == nil {
 		if n < 1 || n > len(r.Findings) {
-			return ipc.RaphaelFinding{}, fmt.Errorf("Raffi's report has %d findings: give one of their numbers, as `"+brand.Slug+" ctl raphael` prints them", len(r.Findings))
+			return ipc.RaphaelFinding{}, fmt.Errorf(brand.Raffi+"'s report has %d findings: give one of their numbers, as `"+brand.Slug+" ctl raphael` prints them", len(r.Findings))
 		}
 		return r.Findings[n-1], nil
 	}
@@ -140,7 +140,7 @@ func pickFinding(r ipc.RaphaelResult, arg string) (ipc.RaphaelFinding, error) {
 			return f, nil
 		}
 	}
-	return ipc.RaphaelFinding{}, fmt.Errorf("Raffi has no finding %q now: `"+brand.Slug+" ctl raphael` lists them", arg)
+	return ipc.RaphaelFinding{}, fmt.Errorf(brand.Raffi+" has no finding %q now: `"+brand.Slug+" ctl raphael` lists them", arg)
 }
 
 func findingNumber(r ipc.RaphaelResult, f ipc.RaphaelFinding) int {
@@ -157,7 +157,7 @@ func findingNumber(r ipc.RaphaelResult, f ipc.RaphaelFinding) int {
 func askOK(q string) (bool, error) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return false, errors.New("Raffi needs your OK: run this in your own terminal, or add --yes once you have read what it runs")
+		return false, errors.New(brand.Raffi + " needs your OK: run this in your own terminal, or add --yes once you have read what it runs")
 	}
 	defer tty.Close()
 	fmt.Fprint(tty, q)
@@ -168,10 +168,13 @@ func askOK(q string) (bool, error) {
 
 // printRaphael writes Raphael's report in plain words.
 func printRaphael(w io.Writer, r ipc.RaphaelResult) error {
-	head := "❤️‍🩹 Raffi (Raphael)"
+	head := "❤️\u200d🩹 " + brand.Raffi
+	if brand.Raffi != brand.Raphael {
+		head += " (" + brand.Raphael + ")"
+	}
 	switch {
 	case !r.On:
-		head += ": off, so nothing restarts a part of " + brand.Name + " that stops answering. `" + brand.Slug + " ctl raphael on` turns him on."
+		head += ": off, so nothing restarts a part of " + brand.Name + " that stops answering. `" + brand.Slug + " ctl raphael on` turns " + brand.Him + " on."
 	case r.Checking:
 		head += ": looking over your Mac now."
 	case r.Checked == nil:

@@ -415,6 +415,8 @@ A company may run its own copy of Irie under its own name. `internal/brand` keep
 | `Tags` | none | The go build tags `tools/live.sh` and `tools/release.sh` build with: `noprivacy,nowriting,nomarkets,nomail,noterms,noextension,noyoink,nofounding,nojammin` leaves those plugins' code out, `novpn` the VPN's and `nobitwarden` the Bitwarden plugin's (§4.17); by hand, `go build -tags "$(tools/brand.sh --tags)" ./cmd/irie` |
 | `VPNs` | none: all | The VPNs a copy drives (§4.18), comma-separated, the first `vpn.provider`'s default: a company names the VPN it approves, such as `cisco`, `globalprotect` or `forticlient`, and its people can choose no other. A copy that names any shows its VPN from the start (`vpn.on`) |
 | `VPNServer` | none | `vpn.server`'s default: the host, portal or VPN by name that the company's VPN connects to, so its people set nothing |
+| `Mikael`, `Gabriel`, `Raphael`, `Raguel`; `Raffi`, `Ragu` | Irie's; the short names of Raphael and Raguel | The arch agents' names as a person reads them: in their own texts (`brand.Arch`), every message that names one, the council's seats and the Mac app (`Brand.swift`). A company names them after their work: `tools/rebrand.sh` gives Guard, Priority, Medic and Planner. Their keys stay Irie's: `[arch.gabriel]`, `ctl raphael`, the mikael profile and subagent |
+| `He`, `Him`, `His` | `he`, `him`, `his` | How the arch agents' texts and messages speak of one: `she`, `her`, `her`, or `it`, `it`, `its` for a copy whose agents are tools, as `tools/rebrand.sh` makes them |
 
 Made from them: `App` (`Irie.app`) and `Exe`, the Mac app's executable and so its process's name, `Name`'s ASCII letters and digits, 15 at most, as macOS keeps only a process name's first bytes and `pgrep -x` matches only those.
 

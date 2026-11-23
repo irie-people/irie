@@ -1839,7 +1839,7 @@ func (c Config) Validate() error {
 	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
-	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session Mikael is with hears")
+	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session "+brand.Mikael+" is with hears")
 	g := c.Arch.Gabriel
 	if g.Away < 0 || g.Word < 0 {
 		bad("arch.gabriel.away and arch.gabriel.word must not be negative")
@@ -1850,7 +1850,7 @@ func (c Config) Validate() error {
 	if g.Boost < time.Minute || g.Boost > MaxBoost {
 		bad("arch.gabriel.boost = %v: must be from 1m to %v", g.Boost, MaxBoost)
 	}
-	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
+	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps "+brand.Gabriel+" never slows")
 	ra := c.Arch.Raphael
 	if ra.Core != 0 && ra.Core < MinRaphaelCore {
 		bad("arch.raphael.core = %v: must be 0s, for never, or at least %v", ra.Core, MinRaphaelCore)
@@ -1858,7 +1858,7 @@ func (c Config) Validate() error {
 	if ra.Every != 0 && ra.Every < 10*time.Minute {
 		bad("arch.raphael.every = %v: must be 0s, for only when asked, or at least 10m", ra.Every)
 	}
-	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items Raphael no longer flags")
+	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items "+brand.Raphael+" no longer flags")
 	rg := c.Arch.Raguel
 	if rg.Every < 0 {
 		bad("arch.raguel.every = %v: must not be negative; 0s for only when asked", rg.Every)

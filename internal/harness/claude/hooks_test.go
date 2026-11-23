@@ -254,8 +254,8 @@ func TestRespond(t *testing.T) {
 		{"PreToolUse", harness.HookReply{}, ``},
 		// Ask puts the call to the user, whose prompt shows the reason; a
 		// deny wins over it, as it does in Claude Code.
-		{"PreToolUse", harness.HookReply{Ask: "[Irie] Mikael asks you first: this writes ~/proj/.git/hooks/pre-commit."},
-			`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"[Irie] Mikael asks you first: this writes ~/proj/.git/hooks/pre-commit."}}`},
+		{"PreToolUse", harness.HookReply{Ask: "[Irie] " + brand.Mikael + " asks you first: this writes ~/proj/.git/hooks/pre-commit."},
+			`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"[Irie] ` + brand.Mikael + ` asks you first: this writes ~/proj/.git/hooks/pre-commit."}}`},
 		{"PreToolUse", harness.HookReply{Deny: "no", Ask: "yes?"},
 			`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no"}}`},
 		{"PostToolUse", harness.HookReply{Ask: "yes?"}, ``},

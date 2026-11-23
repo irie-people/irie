@@ -48,6 +48,8 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day, and R16, R21 
 | R19 | The icon comes from the brand: a copy draws its own mark without editing `tools/mkicon` | Later | |
 | R21 | Two copies side by side leave each other's agents alone: no part of one core slows, lists as its own, moves, stops or speaks for the other's sessions, and their servers keep apart | Next | §3, 6 |
 | R22 | The Mac app takes the strip's default, cheer or tips, from the brand until the core answers, and its snapshots draw a copy's own plugins and VPN | Later | |
+| R23 | A copy names its arch agents after their work: their names (Mikael, Gabriel, Raphael, Raguel and the short names Raffi and Ragu) and the pronoun their texts use come from the brand, in their texts, messages, the council and the Mac app; their keys stay Irie's. `tools/rebrand.sh` gives Guard, Priority, Medic and Planner, spoken of as it | Built | DESIGN §2.10 |
+| R24 | A published copy carries none of the plugins it leaves out: their Go packages and files, the skills they embed and the Mac app's views for them are gone from its source, not only left out of its builds | Next | `tools/prune` |
 
 ## 3. Next, in order
 
@@ -62,7 +64,7 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day, and R16, R21 
 
 ## 4. Open questions
 
-1. **The arch agents in a copy.** Mikael's text goes into every session, and his door weighs risky calls with Claude Code's small model: real protection a company may want to keep. Their names and charges are Irie's own. Should a copy rename and reword them through the brand, or turn them off by their switches?
+1. **The arch agents in a copy.** Settled on 2026-11-23: the owner asked for a copy's arch agents to be renamed through the brand, to be more work related (R23). Their charges keep Irie's words, with the copy's names and pronoun in them.
 2. **Irie's default preferences.** Empty, with the owner's in their own config (R18)?
 3. **The phone gateway in a company.** It is off by default and refuses clients outside private networks; should a copy be able to leave it out with a tag, as it does the plugins?
 4. **More than one person on a server.** One core serves one user, and a team runs one core each. Is that enough, or does a company need a shared core?

@@ -157,7 +157,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
-	if want := (Learn{Tutor: "off", Visual: true, Pictures: "agent", Library: "~/Documents/Irie/Explained", AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
+	if want := (Learn{Tutor: "off", Visual: true, Pictures: "agent", Library: "~/Documents/" + brand.Name + "/Explained", AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
 		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
 	if err := c.Validate(); err != nil {
@@ -906,7 +906,7 @@ func TestArchValidation(t *testing.T) {
 	}
 	c, err := Load(writeFile(t, "[profiles.mikael-sonnet]\nmodel = \"claude-sonnet-5-5\"\narch = \"mikael\"\n"))
 	if err != nil || c.Profiles["mikael-sonnet"].Arch != "mikael" {
-		t.Errorf("a profile of the user's own that runs as Mikael: %+v, %v", c.Profiles["mikael-sonnet"], err)
+		t.Errorf("a profile of the user's own that runs as "+brand.Mikael+": %+v, %v", c.Profiles["mikael-sonnet"], err)
 	}
 }
 

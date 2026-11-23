@@ -724,7 +724,7 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 
 // focusNote is what an agent is told when Gabriel turns away a call that
 // would put a window where the user works.
-var focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would put a window where your user works, in front of what they look at, or on the desktop they are on even behind it. Work without a window where you can: a browser headless (--headless=new keeps the profile and its logins), pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. A window you must open goes through \"$" + brand.Env("BIN") + "\" away -- COMMAND, with open -g inside it, which puts each window it opens on a desktop they are not looking at; never a tab in their own browser. The " + skills.Plugin + ":out-of-sight skill says more. If your user must see it, say so in a line and let them open it."
+var focusNote = "[" + brand.Name + "] " + brand.Gabriel + " turned this call away: it would put a window where your user works, in front of what they look at, or on the desktop they are on even behind it. Work without a window where you can: a browser headless (--headless=new keeps the profile and its logins), pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. A window you must open goes through \"$" + brand.Env("BIN") + "\" away -- COMMAND, with open -g inside it, which puts each window it opens on a desktop they are not looking at; never a tab in their own browser. The " + skills.Plugin + ":out-of-sight skill says more. If your user must see it, say so in a line and let them open it."
 
 var (
 	// appActivates is AppleScript that brings an app forward or types into
@@ -1067,7 +1067,7 @@ func openEffect(args []string, piped bool) windowEffect {
 
 // sweepNote is what an agent is told when Gabriel turns away a search of
 // the whole disk or the home folder.
-var sweepNote = "[" + brand.Name + "] Gabriel turned this call away: it searches the whole disk or your user's home folder, and macOS asks them about each private folder it reads (Documents, Desktop, Downloads, iCloud Drive, Mail…), a prompt in front of what they look at, while the search works the disk for minutes. Look where the thing should be: command -v NAME for a program, mdfind -name NAME for a file by name (Spotlight's index, which reads no folder), or a narrower folder, such as the repository, /opt/homebrew, /usr/local or ~/Library/Caches. find with -maxdepth 1 runs. If your user wants the whole search, say so in a line: it runs from the session they watch, with " + brand.Name + " in front."
+var sweepNote = "[" + brand.Name + "] " + brand.Gabriel + " turned this call away: it searches the whole disk or your user's home folder, and macOS asks them about each private folder it reads (Documents, Desktop, Downloads, iCloud Drive, Mail…), a prompt in front of what they look at, while the search works the disk for minutes. Look where the thing should be: command -v NAME for a program, mdfind -name NAME for a file by name (Spotlight's index, which reads no folder), or a narrower folder, such as the repository, /opt/homebrew, /usr/local or ~/Library/Caches. find with -maxdepth 1 runs. If your user wants the whole search, say so in a line: it runs from the session they watch, with " + brand.Name + " in front."
 
 // sweepRoots are the folders a search may not start from: the whole disk,
 // every user's home, the other volumes, and the home folder and its

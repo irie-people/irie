@@ -1300,7 +1300,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Fix != "" || a.Mine != "" {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, brand.Raffi+" takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
 		}
 		return c.raphaelOp(0, a)
 	case ipc.OpCouncil:
@@ -1311,7 +1311,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Do != ipc.CouncilReport && a.Do != ipc.CouncilTally {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Ragu takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, brand.Ragu+" takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
 		}
 		return c.councilOp(0, a)
 	case ipc.OpGabriel:
