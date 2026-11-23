@@ -59,7 +59,7 @@ func TestTheTallyPricesEachCallOnce(t *testing.T) {
 			`{"type":"message","input_tokens":23000,"output_tokens":1000}]}`, ""),
 		// A helper's part, written into the conversation's transcript.
 		usageLine("h1", "claude-haiku-5-5", began.Add(3*time.Minute), `{"input_tokens":2000,"output_tokens":100}`, `"isSidechain":true,"agentId":"a1"`),
-		// A reply Claude Code writes itself used nothing, and costs nothing.
+		// A reply Claude Code writes itself, as for an API error, is no call.
 		usageLine("s1", "<synthetic>", began.Add(4*time.Minute), `{"input_tokens":0,"output_tokens":0}`, ""),
 	)
 	tally := tokenTally{since: began}
@@ -69,8 +69,8 @@ func TestTheTallyPricesEachCallOnce(t *testing.T) {
 
 	turn := (1000*4 + 100_000*0.20 + 3000*8 + 500*20 + 23000*2 + 1000*10) / 1e6
 	turn += 2 * 0.01 // the searches
-	if got := by[ledger.Turn]; got.Calls != 3 || !nearUSD(got.USD, turn) || got.Usage.Searches != 2 {
-		t.Errorf("turns %+v, want 3 calls at $%v", got, turn)
+	if got := by[ledger.Turn]; got.Calls != 2 || !nearUSD(got.USD, turn) || got.Usage.Searches != 2 {
+		t.Errorf("turns %+v, want 2 calls at $%v", got, turn)
 	}
 	if got := by[ledger.Compaction]; got.Calls != 1 || !nearUSD(got.USD, (180_000*2+3500*10)/1e6) {
 		t.Errorf("compaction %+v", got)
@@ -81,7 +81,7 @@ func TestTheTallyPricesEachCallOnce(t *testing.T) {
 	if got := by[ledger.Helper]; got.Calls != 1 || !nearUSD(got.USD, (2000*0.10+100*0.50)/1e6) {
 		t.Errorf("helper %+v", got)
 	}
-	if total := s.Total(""); total.Calls != 6 || !total.Known() {
+	if total := s.Total(""); total.Calls != 5 || !total.Known() {
 		t.Errorf("total %+v", total)
 	}
 
@@ -101,7 +101,7 @@ func TestTheTallyPricesEachCallOnce(t *testing.T) {
 	if got := x.costUSD(); got == nil || *got != 0 {
 		t.Errorf("a local profile's cost %v, want free", got)
 	}
-	if free := x.spent().Total(""); free.Free != 7 || free.Words() != "free" {
+	if free := x.spent().Total(""); free.Free != 6 || free.Words() != "free" {
 		t.Errorf("a local profile's calls %+v", free)
 	}
 }
@@ -254,5 +254,47 @@ func TestTheCostsReport(t *testing.T) {
 	var back ipc.CostsResult
 	if err := json.Unmarshal(b, &back); err != nil || len(back.Sessions) != 2 {
 		t.Errorf("round trip %v", err)
+	}
+}
+
+func TestFallbacksAndRefusalsArePricedAsBilled(t *testing.T) {
+	at := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	fallback := func(id, category string, declinedOut int) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":%q,"message":{"id":%q,"model":"claude-opus-4-8","stop_reason":"end_turn",`+
+			`"content":[{"type":"fallback","from":{"model":"claude-fable-5"},"to":{"model":"claude-opus-4-8"},"trigger":{"type":"refusal","category":%q}}],`+
+			`"usage":{"input_tokens":412,"output_tokens":264,"iterations":[{"type":"message","model":"claude-fable-5","input_tokens":535,"output_tokens":%d},`+
+			`{"type":"fallback_message","model":"claude-opus-4-8","input_tokens":412,"output_tokens":264}]}}}`+"\n", at.Format(time.RFC3339Nano), id, category, declinedOut)
+	}
+	refusal := func(id, category string) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":%q,"message":{"id":%q,"model":"claude-opus-5-5","stop_reason":"refusal","stop_details":{"category":%q},"content":[],`+
+			`"usage":{"input_tokens":1000,"output_tokens":0}}}`+"\n", at.Format(time.RFC3339Nano), id, category)
+	}
+	served := (412*5 + 264*25) / 1e6 // the attempt that answered, at Opus 4.8's prices, counted once
+	for _, c := range []struct {
+		name string
+		line string
+		usd  float64
+		by   map[string]int
+	}{
+		{"a cyber refusal before output is not billed", fallback("f1", "cyber", 0), served, map[string]int{ledger.Turn: 1}},
+		{"a bio refusal is billed even before output", fallback("f2", "bio", 0), served + 535*10/1e6, map[string]int{ledger.Turn: 1, ledger.Refused: 1}},
+		{"a refusal mid-stream is billed", fallback("f3", "cyber", 50), served + (535*10+50*50)/1e6, map[string]int{ledger.Turn: 1, ledger.Refused: 1}},
+		{"a refusal with no fallback, not billed", refusal("r1", "general_harms"), 0, map[string]int{ledger.Refused: 1}},
+		{"a refusal with no fallback, billed", refusal("r2", "frontier_llm"), 1000 * 4 / 1e6, map[string]int{ledger.Turn: 1}},
+	} {
+		path := filepath.Join(t.TempDir(), "conv.jsonl")
+		writeLines(t, path, c.line)
+		tally := tokenTally{since: at.Add(-time.Hour)}
+		tally.update([]string{path})
+		s := tally.spent([]string{path})
+		if got := s.Total(""); !nearUSD(got.USD, c.usd) || !got.Known() {
+			t.Errorf("%s: %+v, want $%v", c.name, got, c.usd)
+		}
+		by := s.By(func(k ledger.Key) string { return k.Purpose }, "")
+		for purpose, n := range c.by {
+			if by[purpose].Calls != n {
+				t.Errorf("%s: %d %s calls, want %d (%v)", c.name, by[purpose].Calls, purpose, n, by)
+			}
+		}
 	}
 }

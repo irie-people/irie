@@ -39,7 +39,15 @@ The two faults that matter are both of Claude Code's figure: it can send the fre
 
 ## Measured after
 
-The numbers above were taken before the build. Measured again on the live machine, after the install, through `irie ctl costs`: see DESIGN §6.3.
+These numbers come from the live machine on 2026-11-23, through `irie ctl costs --json`, once the sweep had priced the closed sessions:
+
+- **The month.** 77,242 calls cost $9,368 at list price. 30 calls ran on `dory-4b` and `bonsai-2:9b` and were free. Every other model had a price, so no call was unpriced.
+- **Against the status lines.** 508 sessions have both figures: the ledger says $9,036 and the status lines $7,609.
+  - 68 status lines read under half of the ledger, and 55 of those read $0.00. $1,884 is missing in all.
+  - The morning's crash made it worse: `reopen --lost` started every card's process again. Of the open sessions, 45 read $0.00 against $1,707 in the ledger.
+- **The other way.** 376 sessions were never reopened, and their status lines are 6.4% above the ledger. The gap is 8.0% for the 161 that used WebSearch or WebFetch and 4.5% for those that did not. 64 of the 72 sessions over 1.1 times used those tools, with 1,341 searches and 2,022 fetches between them. Both tools make model calls of their own that the transcript does not record. Those calls, like the prompt hooks behind Mikael's door, show only in Claude Code's own figure.
+- **The router.** Sonnet's cost for medium work, measured against Opus's, fell from 0.16 to 0.12. That is because Opus sessions no longer read low after a reopen. Each class still goes where it went: small work to Dory, medium to Sonnet, hard to Opus.
+- **Fixed after the first live reading.** The first build counted the attempt a fallback model answered twice, 7 calls and $1.72 in the month. It also counted 443 replies that Claude Code writes itself as $0 calls. Version 2 prices fallbacks and refusals as Anthropic bills them, and prices every closed session again.
 
 ## Not in it
 

@@ -28,9 +28,13 @@ const (
 	// on a model of its own.
 	Compaction = "compaction"
 	Advisor    = "advisor"
-	Route      = "route" // route.embed: a task's class (§6.4)
-	Find       = "find"  // irie ctl find: what sessions were about (§4.5)
-	Card       = "card"  // a materialized card
+	// Refused is an attempt a model declined: billed when it had begun its
+	// output, or its refusal's category is billed (RefusalBilled); else it
+	// used nothing that is paid for.
+	Refused = "refused"
+	Route   = "route" // route.embed: a task's class (§6.4)
+	Find    = "find"  // irie ctl find: what sessions were about (§4.5)
+	Card    = "card"  // a materialized card
 )
 
 // Usage is what a call used, each kind once.
