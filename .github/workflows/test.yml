@@ -246,10 +246,10 @@ jobs:
             $script = @'
           set -e
           t=$(mktemp -d); tr -d '\r' < 'SITE' > "$t/install.sh"
-          IRIE_VERSION='VERSION' IRIE_NO_SETUP=1 sh "$t/install.sh" </dev/null
+          IRIE_VERSION='@RELEASE@' IRIE_NO_SETUP=1 sh "$t/install.sh" </dev/null
           ~/.local/bin/irie version </dev/null
           '@
-            $script = $script.Replace('VERSION', $env:LINUX)
+            $script = $script.Replace('@RELEASE@', $env:LINUX)
           }
           $out = Linux $script.Replace('DIST', $d).Replace('SITE', $sh) | Out-String
           $code = $LASTEXITCODE
