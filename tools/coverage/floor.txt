@@ -60,7 +60,7 @@ internal/peer 79 0
 internal/perf 91 0
 internal/plugins 91 0
 internal/proc 86 1
-internal/raphael 73 0
+internal/raphael 76 0
 internal/ready 85 0
 internal/rebuild 92 0
 internal/remote 74 0
@@ -70,7 +70,7 @@ internal/sdk 79 0
 internal/search 98 0
 internal/skills 85 0
 internal/statusline 88 0
-internal/sysload 89 0
+internal/sysload 90 0
 internal/team 82 0
 internal/terms 84 0
 internal/testrun 81 0
