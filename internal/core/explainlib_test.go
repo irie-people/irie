@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/explained"
 	"github.com/irie-people/irie/internal/ipc"
@@ -32,7 +33,7 @@ func TestTheLibraryKeepsExplainsAndReusesEveryExplanation(t *testing.T) {
 	if err != nil || r.State != "fresh" || r.Versions != 1 || r.Kept {
 		t.Fatalf("first: %+v, %v", r, err)
 	}
-	lib := explained.Library{Dir: filepath.Join(c.paths.Home, "Documents", "Irie", "Explained")}
+	lib := explained.Library{Dir: filepath.Join(c.paths.Home, "Documents", brand.Name, "Explained")}
 	md, js := lib.Files("irie", q)
 	if r.Saved != md {
 		t.Errorf("saved at %q; want %q", r.Saved, md)

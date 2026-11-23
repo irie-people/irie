@@ -175,3 +175,14 @@ func TestAnAnonymousSessionIsNotToldToDelegate(t *testing.T) {
 		t.Errorf("an anonymous session is told %q", h)
 	}
 }
+
+// TestAnonymousResearchWaitsForItsPlugin: +anon says the plugin is off
+// before anything else.
+func TestAnonymousResearchWaitsForItsPlugin(t *testing.T) {
+	cfg := config.Default()
+	cfg.Anon.On, cfg.Plugins.Privacy = true, false
+	c := bareCore(t, cfg)
+	if _, _, err := c.prepareAnon("leads", "mullvad"); err == nil || !strings.Contains(err.Error(), brand.Slug+" plugins on privacy") {
+		t.Errorf("err = %v", err)
+	}
+}
