@@ -353,6 +353,14 @@ else
 	esac
 	# gofmt, go vet, go test and PROVENANCE.md's rows, as CI runs them.
 	sh tools/check.sh
+	# The checks raise a coverage floor where coverage rose (DESIGN §2.12):
+	# the raise goes in with this install, as a commit of its own, so that
+	# the checkout stays a commit for a merge that starts this again.
+	if ! git diff --quiet -- tools/coverage/floor.txt; then
+		TZ=UTC git commit -q -s -m "test(coverage): raise the floors to what the tests now cover" -- tools/coverage/floor.txt
+		head=$(git rev-parse HEAD)
+		say "the coverage floors rose, committed as $(git log -1 --format=%h)"
+	fi
 fi
 
 # A change outside the Go code needs no new core, so the running one stays,
