@@ -118,7 +118,7 @@ func TestSetupAddsTheLineToThePATHWithAYes(t *testing.T) {
 	if !strings.Contains(string(b), `export PATH="$HOME/.local/bin:$PATH"`) {
 		t.Errorf(".zshrc =\n%s\nprinted:\n%s", b, out.String())
 	}
-	if !strings.Contains(out.String(), "Everything "+brand.Slug+".") {
+	if !strings.Contains(out.String(), brand.Tagline) {
 		t.Errorf("printed:\n%s", out.String())
 	}
 }
@@ -140,7 +140,7 @@ func TestSetupRunsAFixAndChecksAgain(t *testing.T) {
 	if len(ran) != 1 || ran[0][1] != "auth" || ran[0][2] != "login" {
 		t.Errorf("ran %q", ran)
 	}
-	if s := out.String(); !strings.Contains(s, "✓ Signed in") || !strings.Contains(s, "Everything "+brand.Slug+".") {
+	if s := out.String(); !strings.Contains(s, "✓ Signed in") || !strings.Contains(s, brand.Tagline) {
 		t.Errorf("printed:\n%s", s)
 	}
 }

@@ -88,7 +88,8 @@ func setupIrie(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 		return exitCode{1, fmt.Errorf(brand.Name+" can't start agents yet: %s. %s", missing(r.Blocking()), next)}
 	}
-	fmt.Fprintln(stdout, "Everything "+brand.Slug+". "+howToOpen())
+	// The tagline: Irie's "Everything irie.", a copy's own.
+	fmt.Fprintln(stdout, brand.Tagline+" "+howToOpen())
 	fmt.Fprintln(stdout, "Free local models for the small jobs: "+brand.Slug+" setup local")
 	return nil
 }
