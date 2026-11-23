@@ -150,13 +150,13 @@ type (
 	ArchItem          = ipc.ArchItem
 	ArchSetting       = ipc.ArchSetting
 	RaphaelArgs       = ipc.RaphaelArgs
+	Tell              = ipc.Tell
+	RaphaelCleared    = ipc.RaphaelCleared
 	RaphaelResult     = ipc.RaphaelResult
 	RaphaelFinding    = ipc.RaphaelFinding
 	RaphaelFix        = ipc.RaphaelFix
 	RaphaelDone       = ipc.RaphaelDone
 	RaphaelRestart    = ipc.RaphaelRestart
-	RaphaelCleared    = ipc.RaphaelCleared
-	Tell              = ipc.Tell
 	GabrielArgs       = ipc.GabrielArgs
 	GabrielResult     = ipc.GabrielResult
 	GabrielSession    = ipc.GabrielSession
