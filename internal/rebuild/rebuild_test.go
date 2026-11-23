@@ -304,7 +304,7 @@ func TestALineSaysWhatItsTopLevelLeavesOut(t *testing.T) {
 		`{"type":"advisor_message","model":"claude-opus-5-5","input_tokens":823,"cache_read_input_tokens":12,"cache_creation_input_tokens":40,"output_tokens":1612},` +
 		`{"type":"message","input_tokens":23000,"output_tokens":1000}]}}}`
 	l, ok := ParseLine([]byte(line))
-	if !ok || !l.Usage || l.Searches != 4 || len(l.Parts) != 2 {
+	if !ok || !l.Usage || l.Searches != 4 || len(l.Parts) != 3 || l.Parts[2].Type != "message" || l.Refused || l.Refusal != "" {
 		t.Fatalf("parsed %+v, %v", l, ok)
 	}
 	if c := l.Parts[0]; c.Type != "compaction" || c.Model != "" || c.Input != 180_000 || c.Output != 3500 {
@@ -317,5 +317,25 @@ func TestALineSaysWhatItsTopLevelLeavesOut(t *testing.T) {
 	l, _ = ParseLine([]byte(reply("m2", t0, 3, 0, 20_000, 0, 10)))
 	if l.Searches != 0 || l.Parts != nil {
 		t.Errorf("an older line %+v", l)
+	}
+}
+
+func TestALineSaysItsRefusal(t *testing.T) {
+	refused := `{"type":"assistant","timestamp":"2026-11-14T09:00:00Z","message":{"id":"m1","model":"claude-opus-5-5","stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber","explanation":"x"},"content":[],"usage":{"input_tokens":900,"output_tokens":0}}}`
+	if l, _ := ParseLine([]byte(refused)); !l.Refused || l.Refusal != "cyber" {
+		t.Errorf("a refusal %+v", l)
+	}
+	// After a fallback the reply's content says what was refused.
+	fellBack := `{"type":"assistant","timestamp":"2026-11-14T09:00:00Z","message":{"id":"m2","model":"claude-opus-4-8","stop_reason":"end_turn","stop_details":null,` +
+		`"content":[{"type":"fallback","from":{"model":"claude-fable-5"},"to":{"model":"claude-opus-4-8"},"trigger":{"type":"refusal","category":"bio"}}],` +
+		`"usage":{"input_tokens":412,"output_tokens":264,"iterations":[{"type":"message","model":"claude-fable-5","input_tokens":535,"output_tokens":0},{"type":"fallback_message","model":"claude-opus-4-8","input_tokens":412,"output_tokens":264}]}}}`
+	l, _ := ParseLine([]byte(fellBack))
+	if l.Refused || l.Refusal != "bio" || len(l.Parts) != 2 || l.Parts[0].Model != "claude-fable-5" || l.Parts[1].Type != "fallback_message" {
+		t.Errorf("a fallback %+v", l)
+	}
+	// Words of the model's that name a fallback are no fallback block.
+	text := `{"type":"assistant","timestamp":"2026-11-14T09:00:00Z","message":{"id":"m3","model":"claude-opus-5-5","content":[{"type":"text","text":"the \"fallback\" model"}],"usage":{"input_tokens":1,"output_tokens":1}}}`
+	if l, _ := ParseLine([]byte(text)); l.Refusal != "" {
+		t.Errorf("text %+v", l)
 	}
 }

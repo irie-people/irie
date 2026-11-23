@@ -170,7 +170,7 @@ func TestTotalsReadBackAsWritten(t *testing.T) {
 		t.Fatalf("read %v, %v", got, ok)
 	}
 	// Totals priced another way are priced again.
-	if err := os.WriteFile(path, []byte(`{"v":0,"rows":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"v":1,"rows":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := ReadTotals(path); ok {
