@@ -205,7 +205,7 @@ jobs:
           if ($code -ne 0) { Note 'Ubuntu user' $out; throw "making Ubuntu's user failed" }
           wsl.exe --terminate Ubuntu
           wsl.exe -l -v
-          $out += Linux 'id; echo "PATH=$PATH"; echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"; echo "pid 1: $(ps -p 1 -o comm=)"' | Out-String
+          $out += Linux 'id; echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"; ls -ld "${XDG_RUNTIME_DIR:-/nonexistent}"; echo "pid 1: $(ps -p 1 -o comm=)"; loginctl list-sessions --no-pager 2>&1 | head -5' | Out-String
           $out
           Note 'Ubuntu' $out
       - name: Irie in Ubuntu, from site/install.sh and this checkout's build
@@ -227,7 +227,9 @@ jobs:
           t=$(mktemp -d); cp 'DIST/irie' 'DIST/LICENSE' "$t"; chmod +x "$t/irie"
           tar -czf 'DIST/irie-linux-amd64.tar.gz' -C "$t" irie LICENSE
           cd 'DIST' && sha256sum irie-linux-amd64.tar.gz > SHA256SUMS && cd
-          IRIE_DOWNLOADS='file://DIST' IRIE_NO_SETUP=1 sh 'SITE' </dev/null
+          # Git on Windows checks site/install.sh out with CRLFs; the site serves it with LFs.
+          tr -d '\r' < 'SITE' > "$t/install.sh"
+          IRIE_DOWNLOADS='file://DIST' IRIE_NO_SETUP=1 sh "$t/install.sh" </dev/null
           ~/.local/bin/irie version </dev/null
           ~/.local/bin/irie setup --check </dev/null || true
           '@
