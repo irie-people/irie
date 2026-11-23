@@ -49,7 +49,7 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day, and R16, R21 
 | R21 | Two copies side by side leave each other's agents alone: no part of one core slows, lists as its own, moves, stops or speaks for the other's sessions, and their servers keep apart | Next | §3, 6 |
 | R22 | The Mac app takes the strip's default, cheer or tips, from the brand until the core answers, and its snapshots draw a copy's own plugins and VPN | Later | |
 | R23 | A copy names its arch agents after their work: their names (Mikael, Gabriel, Raphael, Raguel and the short names Raffi and Ragu) and the pronoun their texts use come from the brand, in their texts, messages, the council and the Mac app; their keys stay Irie's. `tools/rebrand.sh` gives Guard, Priority, Medic and Planner, spoken of as it | Built | DESIGN §2.10 |
-| R24 | A published copy carries none of the plugins it leaves out: their Go packages and files, the skills they embed and the Mac app's views for them are gone from its source, not only left out of its builds | Next | `tools/prune` |
+| R24 | A published copy carries none of the plugins it leaves out: their Go packages and files, the skills they embed and the Mac app's views for them are gone from its source, not only left out of its builds | Built | `tools/prune`, DESIGN §4.17 |
 
 ## 3. Next, in order
 
