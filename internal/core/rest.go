@@ -111,10 +111,9 @@ func restLine(r *ipc.Rest, frozen bool) string {
 	why := "Resting"
 	switch r.Why {
 	case ipc.RestMemory:
+		// Not by how much: ps's resident size leaves out what the kernel
+		// had compressed or swapped of an idle agent, most of what it held.
 		why = "Resting to free memory"
-		if r.Freed > 0 {
-			why = "Resting to free " + localmodel.Bytes(r.Freed)
-		}
 	case ipc.RestRestore:
 		why = "Resting since the restart"
 	}
