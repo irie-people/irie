@@ -933,6 +933,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-22 | https://code.claude.com/docs/en/hooks.md (PreToolUse decision control) ; https://code.claude.com/docs/en/permission-modes.md (Protected paths) | permissionDecision ask: shown to the user in the permission prompt, auto mode's classifier does not decide it, a -p run denies it, deny wins; .git and .gitconfig as protected paths (DESIGN §3.3, §4.11) |
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_048_harness_learning.md HE-02, HE-60 | The idea, no code: the journal keeps what a failed call's error said, and tools/habits.sh ranks what failed most with what worked next, evidence with no model call (DESIGN §5.2) |
 | 2026-11-22 | https://github.com/retail-cortex/blitz (Apache-2.0): docs/content/about/specs/spec_023_workers.md WK-05, WK-05a, WK-31 | The idea, no code: what a plugin of yours runs is pinned by hash when you turn it on, and a change holds its helpers and tools until you turn it on again (DESIGN §4.17) |
+| 2026-11-23 | macOS 14.1 `sysctl vm.swapfileprefix` and `vm.swapusage`, statfs(2) and df(1) on /System/Volumes/VM, run locally ; https://man7.org/linux/man-pages/man5/proc_meminfo.5.html (`SwapTotal`, `SwapFree`) | Where the swap files go and the free disk they can grow into, the RAM and the swap in use: internal/sysload Room, the disk buffer Raffi keeps and the floor below which heavy work waits |
 
 ## Third-party code
 
