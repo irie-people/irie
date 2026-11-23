@@ -37,6 +37,9 @@ const (
                [--idle DUR] [--proxy socks5://HOST:PORT] [--search URL] [--check URL]
                             the browser connector: an MCP server that drives
                             Mullvad Browser for an agent; --check opens a page
+  ` + brand.Slug + ` browser serve --sessions DIR --dir DIR [--port N] [same options]
+                            one browser connector for every session, over
+                            HTTP on 127.0.0.1; the core runs it
   ` + brand.Slug + ` anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR]
                             an anonymous research session's tools: search,
                             fetch and the exit's check through its compartment

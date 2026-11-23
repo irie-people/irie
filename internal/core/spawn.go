@@ -612,7 +612,7 @@ func (c *Core) prepareRun(j job, x *session, profile config.Profile, h harness.H
 			return harness.Spawn{}, nil, nil, "", err
 		}
 	} else if j.probe.Flags["--mcp-config"] {
-		if mcp, warn := c.browserMCP(id); warn != "" {
+		if mcp, warn := c.browserMCP(id, s.Environ); warn != "" {
 			x.warnings = append(x.warnings, warn)
 		} else if mcp != nil {
 			s.MCP = mcp

@@ -1,7 +1,6 @@
 package terms
 
 import (
-	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -69,7 +68,7 @@ func shown(r rune) rune {
 // control characters or the marks that reverse text.
 func Clean(s string) string { return strings.Map(shown, strings.ToValidUTF8(s, "")) }
 
-var spaces = regexp.MustCompile(`[ ]{2,}`)
+var spaces = lazy(`[ ]{2,}`)
 
 // squash collapses runs of spaces and trims the ends.
 func squash(s string) string {
@@ -78,15 +77,15 @@ func squash(s string) string {
 
 var (
 	// mdHeading is a heading as internal/htmltext writes one: # Title.
-	mdHeading = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	mdHeading = lazy(`^(#{1,6})\s+(.+)$`)
 	// numbered is a heading's number or label: 1., 12.3, (a), IV., A.,
 	// Section 5, Article III.
-	numbered = regexp.MustCompile(`^(?:\(?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[A-Z]|[IVXL]{1,6})[.)]|\d{1,2}(?:\.\d{1,2}){1,3}|(?i:section|article|part|clause|chapter)\s+(?:\d{1,3}(?:\.\d{1,2})*|[IVXL]{1,6})[.:]?)\s+\S`)
+	numbered = lazy(`^(?:\(?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[A-Z]|[IVXL]{1,6})[.)]|\d{1,2}(?:\.\d{1,2}){1,3}|(?i:section|article|part|clause|chapter)\s+(?:\d{1,3}(?:\.\d{1,2})*|[IVXL]{1,6})[.:]?)\s+\S`)
 	// runIn is a numbered paragraph that starts with its own short title:
 	// "4. Your Content. You keep...".
-	runIn = regexp.MustCompile(`^(\(?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[A-Z])[.)]?\s+)([A-Z][A-Za-z'&,/ -]{2,70}?)[.:]\s+(\S.*)$`)
+	runIn = lazy(`^(\(?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[A-Z])[.)]?\s+)([A-Z][A-Za-z'&,/ -]{2,70}?)[.:]\s+(\S.*)$`)
 	// listItem is a line of a list.
-	listItem = regexp.MustCompile(`^(?:[-*\x{2022}]\s+|\(?[a-z0-9]{1,3}[.)]\s+)`)
+	listItem = lazy(`^(?:[-*\x{2022}]\s+|\(?[a-z0-9]{1,3}[.)]\s+)`)
 )
 
 // segment cuts text into its headings and clauses.
@@ -212,7 +211,7 @@ func isHeading(line string) bool {
 	return capitals(line) && n >= 1 && len(line) >= 4
 }
 
-var numberedLabel = regexp.MustCompile(`^(?:\(?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[A-Z]|[IVXL]{1,6})[.)]|\d{1,2}(?:\.\d{1,2}){1,3}|(?i:section|article|part|clause|chapter)\s+(?:\d{1,3}(?:\.\d{1,2})*|[IVXL]{1,6})[.:]?)\s+`)
+var numberedLabel = lazy(`^(?:\(?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[A-Z]|[IVXL]{1,6})[.)]|\d{1,2}(?:\.\d{1,2}){1,3}|(?i:section|article|part|clause|chapter)\s+(?:\d{1,3}(?:\.\d{1,2})*|[IVXL]{1,6})[.:]?)\s+`)
 
 // smallWords may start in lower case in a title.
 var smallWords = map[string]bool{"a": true, "an": true, "and": true, "as": true, "at": true, "by": true, "for": true, "from": true, "in": true, "into": true, "of": true, "on": true, "or": true, "the": true, "to": true, "with": true, "your": true, "our": true, "us": true, "you": true, "we": true, "its": true, "not": true, "this": true, "these": true, "that": true, "use": true}

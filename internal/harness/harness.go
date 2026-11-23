@@ -5,6 +5,7 @@ package harness
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -142,11 +143,36 @@ type Sandbox struct {
 	DenyEnv             []string // variables' names
 }
 
-// MCPServer is an MCP server that an agent runs over stdio: its command and
-// arguments, as an entry of an mcpServers config.
+// MCPServer is an MCP server of a session's, as an entry of an mcpServers
+// config: a program the agent runs and talks to over stdio, by its command
+// and arguments; or, of Type MCPHTTP, a server it reaches at URL over MCP's
+// Streamable HTTP, with Headers on each request and at most Timeout
+// milliseconds for each tool call (0 = the agent's own limits), such as
+// Irie's shared browser server (DESIGN §4.15).
 type MCPServer struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
+	Type    string            `json:"type,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Timeout int               `json:"timeout,omitempty"`
+}
+
+// MCPHTTP is the Type of a server reached over HTTP, as Claude Code's
+// mcpServers config names it.
+const MCPHTTP = "http"
+
+// MarshalJSON writes a stdio server as its command and its arguments, and
+// a server of another type with what it has.
+func (m MCPServer) MarshalJSON() ([]byte, error) {
+	if m.Type == "" {
+		return json.Marshal(struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}{m.Command, m.Args})
+	}
+	type plain MCPServer
+	return json.Marshal(plain(m))
 }
 
 // MCPFile is the file in the session dir that holds a session's MCP

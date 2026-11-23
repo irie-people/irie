@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
@@ -29,6 +30,9 @@ import (
 // With --check it opens one page, prints what an agent would read there
 // and exits.
 func browserCmd(args []string) int {
+	if len(args) > 0 && args[0] == "serve" {
+		return browserServe(args[1:])
+	}
 	o, check, err := browser.ParseArgs(args, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, brand.Slug+" browser:", err)
@@ -51,6 +55,37 @@ func browserCmd(args []string) int {
 	}
 	if err := browser.Serve(ctx, os.Stdin, os.Stdout, o); err != nil {
 		fmt.Fprintln(os.Stderr, brand.Slug+" browser:", err)
+		return 1
+	}
+	return 0
+}
+
+// browserServe is `irie browser serve`: one browser server for every
+// Claude Code session (DESIGN §4.15), MCP over HTTP on 127.0.0.1, which
+// the core runs in a window of its own. It ends on SIGHUP, as when its
+// pane goes, SIGTERM or an interrupt, and closes every browser it started.
+func browserServe(args []string) int {
+	so, err := browser.ParseServeArgs(args, os.Stderr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, brand.Slug+" browser serve:", err)
+		return 2
+	}
+	so.Version = version.String()
+	so.Log = os.Stderr
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
+	signal.Ignore(syscall.SIGPIPE)
+	started := time.Now()
+	if err := browser.ServeShared(ctx, so, nil); err != nil {
+		fmt.Fprintln(os.Stderr, brand.Slug+" browser serve:", err)
+		// The core starts a server that exited again at once: one that
+		// can't start waits a while first, so it doesn't start each second.
+		if time.Since(started) < 10*time.Second {
+			select {
+			case <-ctx.Done():
+			case <-time.After(30 * time.Second):
+			}
+		}
 		return 1
 	}
 	return 0
