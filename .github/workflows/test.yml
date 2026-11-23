@@ -1,4 +1,5 @@
-# tools/check.sh (gofmt, go vet, the tests and PROVENANCE.md's rows) on Linux and macOS, for every
+# tools/check.sh (gofmt, PROVENANCE.md's rows, the docs' paths, go vet, the tests and their coverage
+# floors, DESIGN §2.12) on Linux and macOS, for every
 # push to main and every pull request, as tools/live.sh runs it before an install, again on Linux
 # with the checkout renamed to a company's copy, and Irie for
 # Windows and its wrapper on Windows. The Mac app (mac/) is not built here; mac/build.sh takes about ten

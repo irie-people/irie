@@ -335,6 +335,7 @@ phase checks
 if [ -z "$code" ]; then
 	say "only docs changed since the live build, so the tests are skipped"
 	sh tools/provenance.sh check
+	sh tools/docpaths.sh
 else
 	# A session in macOS's background state (another one promoted, or Gabriel
 	# holding it back while the user works on something else, DESIGN §4.11)

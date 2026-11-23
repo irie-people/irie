@@ -7,3 +7,8 @@ PROVENANCE.md merge=union
 # minified line with an escape character in it, which a diff can't show,
 # and gh pr diff refuses to print.
 internal/winapp/web/vendor/xterm/*.js binary linguist-vendored
+
+# A branch that raises a coverage floor changes its line, and two branches
+# often raise floors at once. A union merge keeps both lines, and
+# tools/coverage.sh holds the higher of a package's two floors.
+tools/coverage/floor.txt merge=union
