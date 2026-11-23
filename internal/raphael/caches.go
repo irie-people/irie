@@ -225,7 +225,7 @@ func goCacheFinding(c cache, goBin, home string) Finding {
 		Fix: &Fix{
 			Label: "Clear Go's build cache",
 			Run:   []string{command(tildePath(goBin, home), "clean", "-cache")},
-			About: fmt.Sprintf("Frees about %s. Raffi waits until no Go build or test runs, so none of them breaks.", Size(c.size)),
+			About: fmt.Sprintf("Frees about %s. "+brand.Raffi+" waits until no Go build or test runs, so none of them breaks.", Size(c.size)),
 			kind:  fixTool, tool: goBin, path: c.path, busy: []string{"go"},
 		},
 	}
@@ -310,7 +310,7 @@ func appCacheFinding(ctx context.Context, r Runner, c cache, id string, running 
 		Text: fmt.Sprintf("%s's cache takes %s (%s).", name, Size(c.size), tildePath(c.path, in.Home)),
 	}
 	if appRunning(id, app, running, in.Procs) {
-		f.Advice = fmt.Sprintf("%s is open now. Quit it, and Raffi can put its cache in the Trash.", name)
+		f.Advice = fmt.Sprintf("%s is open now. Quit it, and "+brand.Raffi+" can put its cache in the Trash.", name)
 		return f
 	}
 	if app == "" {

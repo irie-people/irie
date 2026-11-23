@@ -1,3 +1,4 @@
+#if !NOYOINK
 import AppKit
 import SwiftUI
 
@@ -390,3 +391,4 @@ extension Store {
         Task { await yoink.refresh() }
     }
 }
+#endif

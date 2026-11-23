@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/irie-people/irie/internal/brand"
 	"testing"
 
 	"github.com/irie-people/irie/internal/config"
@@ -164,6 +165,6 @@ func TestMikaelAsksBeforeAChangeToGit(t *testing.T) {
 	}
 	cfg.Arch.Mikael.Door = false
 	if got := guard(bareCore(t, cfg), "Bash", map[string]string{"command": "git config core.hooksPath .hooks"}); got != "" {
-		t.Errorf("with Mikael's door off: %q", got)
+		t.Errorf("with "+brand.Mikael+"'s door off: %q", got)
 	}
 }

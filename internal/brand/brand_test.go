@@ -45,6 +45,14 @@ func TestNamesAreWellFormed(t *testing.T) {
 	if App != Name+".app" {
 		t.Errorf("App = %q", App)
 	}
+	for _, n := range []string{Mikael, Gabriel, Raphael, Raffi, Raguel} {
+		if !regexp.MustCompile(`^[\p{L}\p{N}]([\p{L}\p{N}.-]| [\p{L}\p{N}])*$`).MatchString(n) || utf8.RuneCountInString(n) > MaxName {
+			t.Errorf("arch agent's name %q: want up to %d letters, digits, spaces, hyphens and full stops", n, MaxName)
+		}
+	}
+	if p := He + " " + Him + " " + His; p != "he him his" && p != "she her her" && p != "it it its" {
+		t.Errorf("He, Him, His = %q: want he him his, she her her, or it it its", p)
+	}
 }
 
 // TestScriptAgrees: the build scripts read the same names through
@@ -138,6 +146,30 @@ func TestText(t *testing.T) {
 		if got := text(s, "Irie", "irie", "IRIE", guide); got != s {
 			t.Errorf("Irie's own text(%q) = %q", s, got)
 		}
+	}
+}
+
+// TestArchNames: a copy's names and pronoun for its arch agents reach their
+// texts as words, and leave keys and other words alone.
+func TestArchNames(t *testing.T) {
+	names := [][2]string{{"Mikael", "Guard"}, {"Gabriel", "Priority"}, {"Raphael", "Medic"}, {"Raffi", "Medic"}, {"Raguel", "Planner"}}
+	work := func(s string) string { return words(words(s, names), pronouns("it", "it", "its")) }
+	for in, want := range map[string]string{
+		"Mikael, the first of the arch agents, is with you. He stands with your user.": "Guard, the first of the arch agents, is with you. It stands with your user.",
+		"Raffi's report: his advice, then ask him himself.":                            "Medic's report: its advice, then ask it itself.",
+		"Gabriel gives your focus the machine first.":                                  "Priority gives your focus the machine first.",
+		"Raguel holds the council; Raphael heals.":                                     "Planner holds the council; Medic heals.",
+		// Keys, other words, and words that only start with a name stay.
+		"the irie-gabriel skill, arch.gabriel, `ctl raphael`, Raffiesque, the head, hers": "the irie-gabriel skill, arch.gabriel, `ctl raphael`, Raffiesque, the head, hers",
+	} {
+		if got := work(in); got != want {
+			t.Errorf("%q\n got %q\nwant %q", in, got, want)
+		}
+	}
+	// Irie's own names and pronoun leave a text as it is.
+	s := "Mikael, and Raffi's advice: he, him, his, himself."
+	if got := words(words(s, [][2]string{{"Mikael", "Mikael"}, {"Raffi", "Raffi"}}), pronouns("he", "him", "his")); got != s {
+		t.Errorf("Irie's own words(%q) = %q", s, got)
 	}
 }
 

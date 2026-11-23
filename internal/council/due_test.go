@@ -1,6 +1,7 @@
 package council
 
 import (
+	"github.com/irie-people/irie/internal/brand"
 	"testing"
 	"time"
 )
@@ -49,7 +50,7 @@ func TestDueWaitsForAQuietTime(t *testing.T) {
 		want bool
 	}{
 		{"due, the user at the computer", due, 2 * time.Minute, 0.3, false},
-		{"due, the user just past Gabriel's away", due, 6 * time.Minute, 0.3, false},
+		{"due, the user just past " + brand.Gabriel + "'s away", due, 6 * time.Minute, 0.3, false},
 		{"due, the user away", due, DueAway, 0.3, true},
 		{"due, away, the week nearly spent", due, time.Hour, 0.85, false},
 		{"due, away, no word of the week", due, time.Hour, -1, true},

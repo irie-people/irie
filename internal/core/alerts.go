@@ -104,6 +104,6 @@ func (c *Core) keepRaphaelStyle(f raphael.Fix) {
 	}
 	v, _ := json.Marshal(style)
 	if err := c.configure(c.paths.ConfigFile(), []ipc.ConfigSet{{Key: key, Value: v}}); err != nil {
-		c.log.Warn("alerts: keep Raffi's style as the choice", "key", key, "err", err)
+		c.log.Warn("alerts: keep "+brand.Raffi+"'s style as the choice", "key", key, "err", err)
 	}
 }

@@ -20,7 +20,7 @@ import (
 
 // councilUsage is the part of ctlUsage for Raguel's council (DESIGN §4.11).
 const councilUsage = `  ` + brand.Slug + ` ctl council [tally [--days N]|convene|propose|done|yes N...|no N [--why TEXT]] [--json]
-                                         Raguel (Ragu): the latest council, its
+                                         ` + brand.Raguel + ` (` + brand.Ragu + `): the latest council, its
                                          plans and when the next is due. tally
                                          counts what the agents did and what it
                                          cost over N days (7), beside as many
@@ -118,7 +118,7 @@ func ctlCouncil(args []string) error {
 	case ipc.CouncilTally:
 		fmt.Print(r.Markdown)
 	case ipc.CouncilConvene:
-		fmt.Printf("Ragu holds a council in %s (%s), in %s: his plans show in `%s ctl council` and the Arch Agents tab as he puts them in.\n", r.Session.Name, r.Session.ID, repo.Tilde(r.Session.Cwd, homeDir()), brand.Slug)
+		fmt.Printf(brand.Ragu+" holds a council in %s (%s), in %s: "+brand.His+" plans show in `%s ctl council` and the Arch Agents tab as "+brand.He+" puts them in.\n", r.Session.Name, r.Session.ID, repo.Tilde(r.Session.Cwd, homeDir()), brand.Slug)
 	case ipc.CouncilPropose:
 		fmt.Printf("Plan %d is in.\n", r.Plan)
 	case ipc.CouncilDone:
@@ -128,7 +128,7 @@ func ctlCouncil(args []string) error {
 			fmt.Printf("Plan %d started as a jot: %s (%s), in %s.\n", j.Plan, j.Name, j.Session, repo.Tilde(j.Cwd, homeDir()))
 		}
 	case ipc.CouncilNo:
-		fmt.Println("Ragu lets it go.")
+		fmt.Println(brand.Ragu + " lets it go.")
 	default:
 		printCouncil(os.Stdout, r)
 	}

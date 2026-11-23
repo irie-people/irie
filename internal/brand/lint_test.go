@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -57,6 +58,13 @@ func named(s string) bool {
 	}
 }
 
+// archNamed says whether s names an arch agent as a person reads it: Mikael,
+// Gabriel, Raphael, Raffi or Raguel as a word. Their keys, such as gabriel
+// in arch.gabriel, stay.
+func archNamed(s string) bool { return archName.MatchString(s) }
+
+var archName = regexp.MustCompile(`\b(Mikael|Gabriel|Raphael|Raffi|Raguel|Ragu)\b`)
+
 // TestNoNameOutsideBrand: Go code names the product through this package
 // (Name, Slug, Env), so a copy renames it here alone (DESIGN §2.10).
 func TestNoNameOutsideBrand(t *testing.T) {
@@ -91,6 +99,9 @@ func TestNoNameOutsideBrand(t *testing.T) {
 					return true
 				}
 				v, err := strconv.Unquote(lit.Value)
+				if err == nil && archNamed(v) {
+					t.Errorf("%s:%d: %s names an arch agent; use brand.Mikael, brand.Gabriel, brand.Raphael, brand.Raffi or brand.Raguel, and brand.He, Him and His for him", rel, fset.Position(lit.Pos()).Line, lit.Value)
+				}
 				if err != nil || !named(v) {
 					return true
 				}
@@ -138,6 +149,10 @@ func TestSwiftNamesTheBrand(t *testing.T) {
 			if named(text) {
 				line := 1 + strings.Count(string(src[:r[0]]), "\n")
 				t.Errorf("%s:%d: %q names the product; use \\(Brand.name) or \\(Brand.slug)", filepath.Base(path), line, text)
+			}
+			if archNamed(text) {
+				line := 1 + strings.Count(string(src[:r[0]]), "\n")
+				t.Errorf("%s:%d: %q names an arch agent; use \\(Brand.mikael), \\(Brand.gabriel), \\(Brand.raphael), \\(Brand.raffi), \\(Brand.raguel) or \\(Brand.ragu)", filepath.Base(path), line, text)
 			}
 		}
 	}

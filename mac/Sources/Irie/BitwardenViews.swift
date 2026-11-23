@@ -54,10 +54,14 @@ extension Store {
 
     /// Unlocks with the master password, then fills each pane's sign-in.
     func unlockBitwarden(_ password: String) async {
+        #if !NOJAMMIN
         var origins = panes.filter(\.isWeb).compactMap { $0.origin.flatMap(URL.init(string:)) }
         // Spotify's sign-in on Jammin's sheet (JamminSignIn.swift), while
         // Jammin's Spotify part is on.
         if jamminSpotifyPart != nil, let spotify = URL(string: JamminSignInPage.origin) { origins.append(spotify) }
+        #else
+        let origins = panes.filter(\.isWeb).compactMap { $0.origin.flatMap(URL.init(string:)) }
+        #endif
         if let problem = await BitwardenVault.shared.unlock(password: password, origins: origins) {
             say(problem, error: true, seconds: 8)
             return

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/irie-people/irie/internal/brand"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -138,7 +139,7 @@ func TestRaffisRowCarriesTheLessons(t *testing.T) {
 		}
 	}
 	if raffi == nil {
-		t.Fatal("no Raffi in the arch op")
+		t.Fatal("no " + brand.Raffi + " in the arch op")
 	}
 	var draft *ipc.ArchAction
 	for i, a := range raffi.Actions {
@@ -147,7 +148,7 @@ func TestRaffisRowCarriesTheLessons(t *testing.T) {
 		}
 	}
 	if draft == nil || draft.Op != ipc.OpLessons || !strings.Contains(draft.Ask, "costs no tokens") {
-		t.Errorf("Raffi's actions: %+v", raffi.Actions)
+		t.Errorf(brand.Raffi+"'s actions: %+v", raffi.Actions)
 	}
 	var waiting, kept *ipc.ArchItem
 	for i, it := range raffi.Items {
@@ -159,7 +160,7 @@ func TestRaffisRowCarriesTheLessons(t *testing.T) {
 		}
 	}
 	if waiting == nil || kept == nil {
-		t.Fatalf("Raffi's items: %+v", raffi.Items)
+		t.Fatalf(brand.Raffi+"'s items: %+v", raffi.Items)
 	}
 	if len(waiting.Actions) != 2 || waiting.Actions[0].Label != "Keep" || !strings.Contains(waiting.Actions[0].Ask, "Every session hears this") || !strings.Contains(waiting.Detail, "134 calls in 52 sessions") {
 		t.Errorf("the waiting lesson: %+v", waiting)

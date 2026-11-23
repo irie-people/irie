@@ -2,6 +2,7 @@ package council
 
 import (
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"math"
 	"strconv"
 	"strings"
@@ -176,7 +177,7 @@ func (d *doc) list(now, before []Row, top int, c cols) {
 func render(t Tally, base int) *doc {
 	d := &doc{base: base - 1}
 	a, b := t.Now, t.Before
-	d.heading(1, "Raguel's tally, "+day(a.From)+" to "+day(a.To))
+	d.heading(1, brand.Raguel+"'s tally, "+day(a.From)+" to "+day(a.To))
 	d.para(fmt.Sprintf("%s, each number beside the %s before it (%s to %s) in brackets. Calls, waits and failures count in the stretch they came in; a session's cost, Claude Code's own from its start at list price, counts in the stretch of its last event.",
 		counted(t.Days, "day"), counted(t.Days, "day"), day(b.From), day(b.To)))
 	d.b.WriteString("\n")

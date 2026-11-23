@@ -1,3 +1,4 @@
+#if !NOYOINK
 import AppKit
 import SwiftUI
 
@@ -414,3 +415,4 @@ private struct YoinkBar: View {
         .accessibilityValue(fraction.map { "\(Int($0 * 100)) percent" } ?? "under way")
     }
 }
+#endif

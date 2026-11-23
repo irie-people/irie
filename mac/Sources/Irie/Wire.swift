@@ -570,7 +570,11 @@ struct ArchResult: Decodable {
 
 /// One arch agent, as a client draws him.
 struct ArchAgent: Decodable, Identifiable, Equatable {
+    /// Its key, such as gabriel, the same in every copy.
     var name: String
+    /// Its name as a person reads it, a copy's own (internal/brand); a core
+    /// from before it sends none.
+    var called: String?
     var nickname: String?
     var icon: String?
     var title: String
@@ -586,8 +590,8 @@ struct ArchAgent: Decodable, Identifiable, Equatable {
     /// How he is introduced: his icon, his name (with his nickname first)
     /// and his work.
     var heading: String {
-        var n = name.prefix(1).uppercased() + name.dropFirst()
-        if let nick = nickname, !nick.isEmpty { n = "\(nick) (\(n))" }
+        var n = called ?? (name.prefix(1).uppercased() + name.dropFirst())
+        if let nick = nickname, !nick.isEmpty, nick != n { n = "\(nick) (\(n))" }
         if let i = icon, !i.isEmpty { n = "\(i) \(n)" }
         return title.isEmpty ? n : "\(n) · \(title)"
     }
@@ -894,6 +898,7 @@ struct RenameResult: Decodable {
     var session: Session
 }
 
+#if !NOWRITING
 /// The variorum op (internal/core/variorum.go), which only a core whose
 /// hello lists variorum serves: the Writing plugin's tab asks where things
 /// stand, keeps one of Variorum's setups, lists the notes shared with
@@ -999,6 +1004,7 @@ extension VariorumBlock {
         comments = try c.decodeIfPresent([VariorumComment].self, forKey: .comments)
     }
 }
+#endif
 
 struct Empty: Codable {}
 

@@ -1535,13 +1535,13 @@ private struct AlertsSettings: View {
                     if let r = report {
                         let found = r.findings.filter { $0.area == "alerts" }
                         if found.isEmpty && !r.checking {
-                            Text(r.checked == nil ? "Raffi hasn’t looked yet." : "Nothing to see to.").foregroundStyle(.secondary)
+                            Text(r.checked == nil ? "\(Brand.raffi) hasn’t looked yet." : "Nothing to see to.").foregroundStyle(.secondary)
                         }
                         ForEach(found) { f in row(f, fixing: r.fixing == f.id) }
                         HStack {
                             if r.checking {
                                 ProgressView().controlSize(.small)
-                                Text("Raffi is looking over your Mac…").foregroundStyle(.secondary)
+                                Text("\(Brand.raffi) is looking over your Mac…").foregroundStyle(.secondary)
                             } else {
                                 Button("Look again") { send(RaphaelArgs(check: true)) }
                                 if let at = r.checked {
@@ -1556,9 +1556,9 @@ private struct AlertsSettings: View {
                         Label(p, systemImage: "exclamationmark.triangle").foregroundStyle(Theme.needs).textSelection(.enabled)
                     }
                 } header: {
-                    Text("What Raffi found")
+                    Text("What \(Brand.raffi) found")
                 } footer: {
-                    footnote("Raffi, the arch agent who heals, reads what macOS said in its log in the last two hours: the alerts it showed and the access it asked you for in \(Brand.name)’s name. He also checks how \(Brand.name) is signed: macOS forgets what you allowed a build signed ad hoc.")
+                    footnote("\(Brand.raffi), the arch agent who heals, reads what macOS said in its log in the last two hours: the alerts it showed and the access it asked you for in \(Brand.name)’s name. \(Brand.raffi) also checks how \(Brand.name) is signed: macOS forgets what you allowed a build signed ad hoc.")
                 }
             }
         }
@@ -1615,7 +1615,7 @@ private struct AlertsSettings: View {
     /// and how to undo it.
     static func ask(_ x: RaphaelReport.Fix?) -> String {
         guard let x else { return "" }
-        var s = "Raffi will run:\n" + x.run.map { "    " + $0 }.joined(separator: "\n") + "\n\n" + x.about
+        var s = "\(Brand.raffi) will run:\n" + x.run.map { "    " + $0 }.joined(separator: "\n") + "\n\n" + x.about
         if let u = x.undo, !u.isEmpty { s += "\n\nTo undo it: " + u }
         return s
     }
