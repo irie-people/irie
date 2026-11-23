@@ -144,6 +144,7 @@ type Core struct {
 	spaces     []ipc.Space           // the spaces, the first first (spaces.go)
 	groups     []ipc.Group           // your groups, in the order they were made (groups.go)
 	hues       map[string]int        // the colours the core gave the sessions, the closed ones' too (hue.go)
+	layout     map[string]string     // the layout options' copy in the state folder, as last written (layout.go)
 	bg         map[int]bgProc        // the processes Irie put in the background, by pid (priority.go)
 	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
 	zen        zenState              // your zen, and zen as the app shows it (zen.go)

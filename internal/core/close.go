@@ -689,13 +689,16 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	}
 	c.mu.Lock()
 	j.place.name, j.place.named = unique(r.Name, c.names(nil)), r.Named
+	// A closed session keeps its place in the order for its reopen; a lost
+	// one keeps it when the layout's copy brought the order back.
+	placed := slices.Contains(c.order, r.ID)
 	x, err := c.launch(j)
 	if err == nil {
 		c.dropClosed(r.ID)
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.UIReopened, Data: map[string]any{"name": x.name, "resume": j.resume != ""}})
 		c.comeHome(x, r)
 		if r.Lost {
-			c.comeBack(x, r)
+			c.comeBack(x, r, placed)
 		}
 	}
 	frames := c.changes()
