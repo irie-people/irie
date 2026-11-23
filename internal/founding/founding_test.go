@@ -850,24 +850,6 @@ func TestTheLinksAreInTheTexts(t *testing.T) {
 	}
 }
 
-// quoted gives the quotations in s, the spans in curly double quotes.
-func quoted(s string) []string {
-	var out []string
-	for {
-		i := strings.Index(s, "“")
-		if i < 0 {
-			return out
-		}
-		s = s[i+len("“"):]
-		j := strings.Index(s, "”")
-		if j < 0 {
-			return out
-		}
-		out = append(out, s[:j])
-		s = s[j+len("”"):]
-	}
-}
-
 // TestTheTenAgree: the Bill of Rights' ten amendments are the
 // Constitution's first ten, word for word.
 func TestTheTenAgree(t *testing.T) {

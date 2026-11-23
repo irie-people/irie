@@ -3,6 +3,9 @@
 package core
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -71,11 +74,58 @@ func (c *Core) recordFoundingAtStart() {
 	}
 }
 
+// writeChartersPage writes the Charters Graph page this build makes into
+// its folder, unless the file there holds it already, and says where it
+// is. The page is the same for every call while the build runs, so a
+// window that reloads it finds it unchanged; a file written by an older
+// build is replaced, by a rename, so a reader never sees half of one.
+func (c *Core) writeChartersPage() (string, error) {
+	b, err := founding.Page()
+	if err != nil {
+		return "", err
+	}
+	path := c.paths.ChartersPage()
+	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, b) {
+		return path, nil
+	}
+	foundingMu.Lock()
+	defer foundingMu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".graph-*.html")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // foundingOp answers anyone, an agent too: the texts are public, and the
 // op only reads them and keeps their chain.
 func (c *Core) foundingOp(_ int, a ipc.FoundingArgs) (ipc.FoundingResult, error) {
 	if why := plugins.Why(*c.cfg(), plugins.Founding); why != "" {
 		return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
+	}
+	if a.Graph {
+		page, err := c.writeChartersPage()
+		if err != nil {
+			return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeInternal, "the Charters Graph page: %v", err)
+		}
+		return ipc.FoundingResult{Page: page}, nil
 	}
 	docs, err := founding.Load()
 	if err != nil {

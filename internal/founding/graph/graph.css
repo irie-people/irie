@@ -1,0 +1,221 @@
+/* The Charters Graph page (DESIGN §4.17): the charters as a map to explore.
+   Its colours are the design library's, Roots, in Evergreen (DESIGN §2.11):
+   tools/design.sh keeps the blocks below the library's, and the tests fail
+   while one isn't. The page loads nothing from elsewhere. */
+:root {
+  /* design: evergreen light */
+  --sidebar: #F4F4EC; --ground: #E9EBDF; --card: #FBFBF6; --panel: #F1F2E8; --field: #FDFDF9;
+  --edge: #D8DCC9; --hover: #F6F7EF; --selection: #DDE5D3; --needs-tint: #FBE5DC;
+  --ink: #1E2B22; --muted: #56635A; --accent: #2F5D46; --accent-ink: #264D3A; --accent-fill: #9DB8A3; --on-accent: #1E2B22;
+  --needs: #892319; --done: #2C7043; --paused: #8C5500; --frozen: #00566B; --sun: #D9A93F; --waves: #5E8A6E;
+  /* design: end */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", system-ui, sans-serif;
+  --words: ui-serif, "New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --r: 12px;
+  --r-control: 8px;
+  --ease: cubic-bezier(.2, .85, .25, 1);
+  --bar: 52px;
+  --card-width: min(430px, 40vw);
+  /* The map's lane bands, and the light a quotation and a found word get. */
+  --band: color-mix(in oklab, var(--ground) 55%, var(--sidebar));
+  --quote: color-mix(in oklab, var(--sun) 30%, var(--card));
+  --found: color-mix(in oklab, var(--accent-fill) 45%, var(--card));
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* design: evergreen dark */
+    --sidebar: #141C17; --ground: #0E1410; --card: #1C2620; --panel: #18221C; --field: #202B24;
+    --edge: #34443A; --hover: #25322A; --selection: #2A3D31; --needs-tint: #4A251C;
+    --ink: #ECF0E6; --muted: #B3BFB5; --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
+    --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD; --waves: #9CC5A1;
+    /* design: end */
+    --band: color-mix(in oklab, var(--ground) 45%, var(--sidebar));
+    --quote: color-mix(in oklab, var(--sun) 28%, var(--card));
+    --found: color-mix(in oklab, var(--accent) 26%, var(--card));
+  }
+}
+@media (prefers-contrast: more) {
+  :root { --muted: color-mix(in oklab, var(--muted) 60%, var(--ink)); --edge: color-mix(in oklab, var(--edge) 60%, var(--ink)); }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--sidebar); color: var(--ink);
+  font: 13px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--accent-ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+
+/* ---- The bar: the name, the search, the trail, the keys --------------- */
+
+.bar {
+  flex: none; height: var(--bar);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 14px; padding-top: env(safe-area-inset-top, 0);
+  border-bottom: 1px solid var(--edge);
+  background: var(--sidebar);
+}
+.name { font: 600 15px/1 var(--round); white-space: nowrap; display: flex; align-items: baseline; gap: 8px; }
+.name small { font: 12px var(--font); color: var(--muted); }
+.search { position: relative; flex: 0 1 360px; min-width: 150px; }
+.search input {
+  width: 100%; height: 32px; padding: 0 10px 0 30px;
+  border: 1px solid var(--edge); border-radius: var(--r-control);
+  background: var(--field);
+}
+.search input::placeholder { color: var(--muted); }
+.search svg { position: absolute; left: 9px; top: 9px; width: 14px; height: 14px; stroke: var(--muted); fill: none; stroke-width: 1.8; pointer-events: none; }
+.results {
+  position: absolute; z-index: 20; top: 38px; left: 0; width: min(520px, calc(100vw - 28px));
+  max-height: min(70vh, 560px); overflow: auto;
+  background: var(--card); border: 1px solid var(--edge); border-radius: var(--r);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent), 0 10px 28px color-mix(in srgb, var(--ink) 12%, transparent);
+  padding: 6px;
+}
+.results h3 { margin: 8px 8px 4px; font: 600 11px var(--font); color: var(--muted); }
+.result { display: block; width: 100%; text-align: left; border: 0; background: none; border-radius: var(--r-control); padding: 6px 8px; }
+.result[aria-selected="true"], .result:hover { background: var(--hover); }
+.result[aria-selected="true"] { box-shadow: inset 0 0 0 1px var(--edge); }
+.result .what { display: block; }
+.result .where { display: block; font-size: 12px; color: var(--muted); }
+.result .snip { display: block; font: 13px/1.4 var(--words); color: var(--ink); }
+.results .none { padding: 8px; color: var(--muted); }
+mark { background: var(--found); color: inherit; border-radius: 3px; padding: 0 1px; }
+mark.quote { background: var(--quote); }
+.trail { flex: 1 1 auto; min-width: 0; display: flex; gap: 6px; overflow: hidden; mask-image: linear-gradient(to right, transparent 0, #000 18px); justify-content: flex-end; }
+.crumb {
+  flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--edge); background: var(--card); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--muted);
+}
+.crumb[aria-current="true"] { color: var(--ink); border-color: var(--accent-fill); }
+.icon-btn {
+  flex: none; width: 30px; height: 30px; border-radius: var(--r-control);
+  border: 1px solid var(--edge); background: var(--card); color: var(--ink);
+  display: grid; place-items: center; font: 600 13px var(--round);
+}
+.icon-btn:hover { background: var(--hover); }
+
+/* ---- The map and the card ------------------------------------------- */
+
+.main { flex: 1 1 auto; min-height: 0; display: flex; }
+.map { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; background: var(--sidebar); }
+.map canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; }
+.map canvas.dragging { cursor: grabbing; }
+.map canvas.over { cursor: pointer; }
+.map canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.zoom { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.legend {
+  position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 80px);
+  display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center;
+  background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--edge); border-radius: var(--r);
+  padding: 6px 10px; font-size: 12px; color: var(--muted);
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend svg { width: 26px; height: 8px; overflow: visible; }
+
+.card {
+  flex: none; width: var(--card-width); min-width: 300px;
+  overflow: auto; overscroll-behavior: contain;
+  background: var(--card); border-left: 1px solid var(--edge);
+  padding: 18px 20px 40px;
+}
+.card h1 { font: 600 19px/1.25 var(--round); margin: 0 0 4px; }
+.card h2 { font: 600 12px/1.3 var(--font); color: var(--muted); margin: 22px 0 8px; }
+.card p { margin: 0 0 10px; }
+.meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+.about { color: var(--muted); font-size: 12px; }
+.path { display: flex; flex-wrap: wrap; gap: 2px 4px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.path button { border: 0; background: none; padding: 0; color: var(--accent-ink); }
+.path button:hover { text-decoration: underline; }
+.link, .row {
+  display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none;
+  border-radius: var(--r-control); padding: 7px 8px; margin: 0 -8px; width: calc(100% + 16px);
+}
+.link:hover, .row:hover { background: var(--hover); border-color: var(--edge); }
+.link b, .row b { font-weight: 600; }
+.how {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted);
+  border: 1px solid var(--edge); border-radius: 999px; padding: 0 7px; margin-left: 6px; vertical-align: 1px;
+}
+.how svg { width: 18px; height: 6px; overflow: visible; }
+.why { display: block; color: var(--ink); font-size: 12.5px; margin-top: 3px; }
+.why q { font-family: var(--words); quotes: "“" "”"; background: var(--quote); border-radius: 3px; padding: 0 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--edge); background: var(--panel); border-radius: 999px;
+  padding: 3px 10px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center;
+}
+.chip:hover { background: var(--hover); }
+.chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip .dot, .fam .dot { width: 7px; height: 7px; border-radius: 2px; transform: rotate(45deg); background: var(--accent); flex: none; }
+.fam { margin: 12px 0 6px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.words { font: 15px/1.6 var(--words); }
+.words p { margin: 0 0 12px; white-space: pre-line; }
+.words .h { font: 600 13px/1.3 var(--font); color: var(--muted); margin: 18px 0 6px; }
+.words .note { font: italic 12px/1.45 var(--font); color: var(--muted); }
+.words ul { list-style: none; padding: 0; margin: 0 0 12px; columns: 2; column-gap: 16px; font-size: 13.5px; }
+.words .lit { animation: lit 1.6s var(--ease); border-radius: 4px; }
+@keyframes lit { from { background: var(--found); } to { background: transparent; } }
+.more { border: 1px solid var(--edge); background: var(--panel); border-radius: var(--r-control); padding: 5px 12px; font-size: 12px; }
+.muted { color: var(--muted); }
+.lead { font-size: 13.5px; }
+.count { font-variant-numeric: tabular-nums; }
+.snip { display: block; font: 13px/1.45 var(--words); color: var(--ink); margin-top: 2px; }
+
+/* ---- The tree of parts: WAI-ARIA's tree, one Tab stop ---------------- */
+
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { padding-left: 16px; }
+.tree li > .item {
+  display: flex; align-items: center; gap: 4px; min-height: 26px; padding: 2px 6px 2px 2px; border-radius: 6px;
+  cursor: pointer; scroll-margin-top: 8px;
+}
+.tree li > .item:hover { background: var(--hover); }
+.tree li > .item[aria-selected="true"] { background: var(--selection); }
+.tree li > .item:focus-visible { outline-offset: -2px; }
+.caret { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--muted); border: 0; background: none; padding: 0; }
+.caret svg { width: 9px; height: 9px; transition: transform .18s var(--ease); fill: currentColor; }
+li[aria-expanded="true"] > .item .caret svg { transform: rotate(90deg); }
+.caret.leaf svg { visibility: hidden; }
+.item .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .n { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; padding-left: 8px; }
+
+/* ---- The keys card --------------------------------------------------- */
+
+.keys {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.keys > div {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto;
+  background: var(--card); border: 1px solid var(--edge); border-radius: var(--r); padding: 18px 22px;
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--ink) 25%, transparent);
+}
+.keys h2 { font: 600 16px var(--round); margin: 0 0 10px; }
+.keys dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.keys dt { font: 12px var(--round); color: var(--muted); white-space: nowrap; }
+.keys dd { margin: 0; }
+kbd { font: 11px var(--round); border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; background: var(--panel); color: var(--ink); }
+
+/* ---- Narrow: the card goes under the map ----------------------------- */
+
+@media (max-width: 760px) {
+  .main { flex-direction: column; }
+  .map { flex: 0 0 52%; }
+  .card { width: auto; min-width: 0; flex: 1 1 auto; border-left: 0; border-top: 1px solid var(--edge); padding: 14px 16px calc(28px + env(safe-area-inset-bottom, 0)); }
+  .trail { display: none; }
+  .name small { display: none; }
+  .legend { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

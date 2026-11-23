@@ -24,6 +24,9 @@ const foundingUsage = `  ` + brand.Slug + ` ctl charters [--json]             th
                                          local chain, every version checked
   ` + brand.Slug + ` ctl charters log [-n N] [--json]  the chain's versions, newest first
   ` + brand.Slug + ` ctl charters export               every version's bytes, oldest first, one a line
+  ` + brand.Slug + ` ctl charters graph                where the Charters Graph page is: the texts,
+                                         their parts and the rights they name, as a map
+                                         to explore, in one file that loads nothing
 `
 
 // ctlFounding is `irie ctl charters` (and `irie ctl founding`, its first
@@ -41,7 +44,7 @@ func ctlFounding(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	usage := errors.New("usage: " + brand.Slug + " ctl charters [--json], log [-n N] [--json], or export [--json]")
+	usage := errors.New("usage: " + brand.Slug + " ctl charters [--json], log [-n N] [--json], export [--json], or graph [--json]")
 	var a ipc.FoundingArgs
 	switch {
 	case fs.NArg() > 0:
@@ -50,6 +53,8 @@ func ctlFounding(args []string) error {
 		a.Log = *n
 	case sub == "export":
 		a.Export = true
+	case sub == "graph":
+		a.Graph = true
 	case sub != "":
 		return usage
 	}
@@ -67,6 +72,10 @@ func ctlFounding(args []string) error {
 			return json.NewEncoder(os.Stdout).Encode(r.Versions)
 		case "export":
 			return json.NewEncoder(os.Stdout).Encode(r.Export)
+		case "graph":
+			return json.NewEncoder(os.Stdout).Encode(struct {
+				Page string `json:"page"`
+			}{r.Page})
 		}
 		type text struct {
 			ID, Title, When, Kind, SHA512 string
@@ -90,6 +99,10 @@ func ctlFounding(args []string) error {
 		for _, v := range r.Export {
 			fmt.Println(v)
 		}
+	case "graph":
+		// The path alone, so a script can open it; the Mac app shows it in
+		// Window › Charters Graph.
+		fmt.Println(r.Page)
 	default:
 		printFounding(os.Stdout, r)
 	}

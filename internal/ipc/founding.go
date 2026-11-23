@@ -17,12 +17,15 @@ type FoundingArgs struct {
 	Log int `json:"log,omitempty"`
 	// Export asks for every version's bytes, oldest first, in Export.
 	Export bool `json:"export,omitempty"`
+	// Graph asks for the Charters Graph page, the explorer, which the core
+	// writes to a file of its own: Page says where, and nothing else comes.
+	Graph bool `json:"graph,omitempty"`
 }
 
-// FoundingResult is the founding op's answer: always the documents, and
-// the passages Find found.
+// FoundingResult is the founding op's answer: the documents, and the
+// passages Find found; or, for Graph, only where the page is.
 type FoundingResult struct {
-	Docs  []FoundingDoc `json:"docs"`
+	Docs  []FoundingDoc `json:"docs,omitempty"`
 	Found []FoundingHit `json:"found,omitempty"`
 	// Links are how the texts bear on one another, the edges of the graph
 	// the chain carries with them; a search leaves them out.
@@ -35,6 +38,9 @@ type FoundingResult struct {
 	// Export is every version's bytes, oldest first, when asked for: each
 	// canonical JSON with no line break in it.
 	Export []string `json:"export,omitempty"`
+	// Page is the Charters Graph page's file, when Graph asked for it: one
+	// HTML file that loads nothing from elsewhere.
+	Page string `json:"page,omitempty"`
 }
 
 // FoundingLink is how one text bears on an earlier one: an edge of the

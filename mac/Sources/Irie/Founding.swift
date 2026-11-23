@@ -108,6 +108,22 @@ final class FoundingModel {
     /// The local chain, as the core checked it when the tab loaded.
     private(set) var chain: FoundingChainInfo?
 
+    /// A text for the Charters Graph window to show (ChartersGraph.swift),
+    /// with a count of asks, so asking for the same text again brings it
+    /// back into view.
+    struct GraphShow: Equatable {
+        var id: String
+        var n: Int
+    }
+
+    private(set) var graphShow: GraphShow?
+
+    /// Asks the Charters Graph window to show a text, the one on show here
+    /// unless another is named.
+    func explore(_ id: String? = nil) {
+        graphShow = GraphShow(id: id ?? doc?.id ?? showing, n: (graphShow?.n ?? 0) + 1)
+    }
+
     @ObservationIgnored private var isFixture = false
     @ObservationIgnored private var asked = ""
 
@@ -279,25 +295,41 @@ struct FoundingTab: View {
     }
 }
 
-/// The choice of document, and the search box with what it found.
+/// The choice of document, the way to the graph, and the search box with
+/// what it found.
 @MainActor
 private struct FoundingBar: View {
     @Environment(Store.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @FocusState private var focused: Bool
 
     var body: some View {
         let f = store.founding
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Document", selection: Binding(get: { f.doc?.id ?? f.showing }, set: { f.show($0) })) {
-                ForEach(f.docs) { d in
-                    let n = f.count(d.id)
-                    let year = d.year.isEmpty ? "" : ", \(d.year)"
-                    Text(f.searching && n > 0 ? "\(d.label)\(year) · \(n)" : "\(d.label)\(year)").tag(d.id)
+            HStack(spacing: 8) {
+                Picker("Document", selection: Binding(get: { f.doc?.id ?? f.showing }, set: { f.show($0) })) {
+                    ForEach(f.docs) { d in
+                        let n = f.count(d.id)
+                        let year = d.year.isEmpty ? "" : ", \(d.year)"
+                        Text(f.searching && n > 0 ? "\(d.label)\(year) · \(n)" : "\(d.label)\(year)").tag(d.id)
+                    }
                 }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .accessibilityLabel("Which document")
+                // The Charters Graph window, at the text on show.
+                Button {
+                    f.explore()
+                    openWindow(id: ChartersGraphWindow.id)
+                } label: {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                        .font(.system(size: 13))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.muted)
+                .help("Explore the charters as a graph, from this text")
+                .accessibilityLabel("Explore the charters as a graph, from this text")
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .accessibilityLabel("Which document")
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11))

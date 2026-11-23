@@ -85,4 +85,4 @@ Irie keeps these texts on a chain of its own on this computer, the Charters chai
 
 ## In Irie
 
-The Charters plugin shows the thirty-eight in the Charters tab of the Mac app's right sidebar, each with the links that say how it bears on the others. Its search finds a passage whatever its spelling or capitals, and its foot shows the chain's newest version.
+The Charters plugin shows the thirty-eight in the Charters tab of the Mac app's right sidebar, each with the links that say how it bears on the others. Its search finds a passage whatever its spelling or capitals, and its foot shows the chain's newest version. Window › Charters Graph, which the tab's Explore button opens, draws them as a map to explore: the texts on a timeline, their parts, the rights and ideas they name (found where their words are) and the links, pinned to the passages they quote. `irie ctl charters graph` prints where its page is, one file that loads nothing, which a person can open in a browser; an agent never opens it on the person's screen.

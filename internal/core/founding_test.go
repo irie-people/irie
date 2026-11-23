@@ -69,6 +69,55 @@ func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 	}
 }
 
+// TestTheChartersGraphPage: the op writes the Charters Graph page into a
+// folder of its own, private to the person, gives its path and nothing
+// else, and leaves a file that already holds the page alone.
+func TestTheChartersGraphPage(t *testing.T) {
+	cfg := config.Default()
+	c := bareCore(t, cfg)
+	if _, err := c.foundingOp(0, ipc.FoundingArgs{Graph: true}); err == nil {
+		t.Fatal("the page came while the plugin was off")
+	}
+	cfg.Plugins.Founding = true
+	c = bareCore(t, cfg)
+	r, err := c.foundingOp(0, ipc.FoundingArgs{Graph: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Page != c.paths.ChartersPage() || r.Docs != nil || r.Links != nil || r.Chain != nil {
+		t.Fatalf("page %q, %d docs, %d links, chain %v", r.Page, len(r.Docs), len(r.Links), r.Chain)
+	}
+	want, err := founding.Page()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(r.Page)
+	if err != nil || string(got) != string(want) {
+		t.Fatalf("the file holds %d bytes of the page's %d: %v", len(got), len(want), err)
+	}
+	st, err := os.Stat(r.Page)
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("the page's mode: %v, %v", st.Mode(), err)
+	}
+	before := st.ModTime()
+	if _, err := c.foundingOp(0, ipc.FoundingArgs{Graph: true}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(r.Page); !st.ModTime().Equal(before) {
+		t.Error("the page was written again, unchanged")
+	}
+	// A page an older build wrote is replaced.
+	if err := os.WriteFile(r.Page, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.foundingOp(0, ipc.FoundingArgs{Graph: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(r.Page); string(got) != string(want) {
+		t.Error("an older page stayed")
+	}
+}
+
 // TestTheFirstBuildsFoundingChainMovesIn: a chain the first build kept at
 // chain/founding, in its first form, moves into chain/charters as the core
 // first looks, and the texts this build carries go on after its version.

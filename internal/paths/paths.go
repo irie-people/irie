@@ -135,6 +135,11 @@ func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
 func (p Paths) Charters() string           { return filepath.Join(p.State, "chain", "charters") }
 func (p Paths) FoundingChainFirst() string { return filepath.Join(p.State, "chain", "founding") }
 
+// ChartersPage is the Charters Graph page the core writes (internal/founding,
+// page.go), in a folder of its own, so the Mac app's window reads that
+// folder and nothing else.
+func (p Paths) ChartersPage() string { return filepath.Join(p.State, "charters", "graph.html") }
+
 // Keys holds the keys that open Irie's vaults where the system keeps no
 // keychain (internal/keyring): apart from the vaults, so that a copy of
 // your settings carries none.

@@ -29,7 +29,7 @@ internal/explained 89 0
 internal/extension 80 0
 internal/filetx 86 0
 internal/focus 69 0
-internal/founding 86 0
+internal/founding 89 0
 internal/genui 85 0
 internal/habits 86 0
 internal/harness 59 0

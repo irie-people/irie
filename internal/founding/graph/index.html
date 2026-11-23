@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<meta name="color-scheme" content="light dark">
+<title>Charters</title>
+<style>/*{{style}}*/</style>
+</head>
+<body>
+<header class="bar">
+  <div class="name">Charters <small id="count"></small></div>
+  <div class="search" role="search">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+    <input id="q" type="search" placeholder="Search rights, texts and words" aria-label="Search rights, texts and words"
+      autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="results">
+    <div id="results" class="results" role="listbox" aria-label="What the search found" hidden></div>
+  </div>
+  <nav id="trail" class="trail" aria-label="Where you have been"></nav>
+  <button id="keys-open" class="icon-btn" aria-label="Keys and gestures" title="Keys and gestures (?)">?</button>
+</header>
+<div class="main">
+  <section class="map" aria-label="The map">
+    <canvas id="map" tabindex="0" role="img" aria-roledescription="map"
+      aria-label="The charters on a timeline, from Magna Carta to the Disabilities Convention, with the links between them. The card beside it lists everything on the map."></canvas>
+    <div id="legend" class="legend" aria-hidden="true"></div>
+    <div class="zoom">
+      <button id="zoom-in" class="icon-btn" aria-label="Zoom in" title="Zoom in (+)">+</button>
+      <button id="zoom-out" class="icon-btn" aria-label="Zoom out" title="Zoom out (−)">−</button>
+      <button id="zoom-fit" class="icon-btn" aria-label="Show everything" title="Show everything (0)">⤢</button>
+    </div>
+  </section>
+  <aside id="card" class="card" aria-label="Details" aria-live="polite"></aside>
+</div>
+<div id="keys" class="keys" role="dialog" aria-modal="true" aria-labelledby="keys-title" hidden>
+  <div>
+    <h2 id="keys-title">Keys and gestures</h2>
+    <dl>
+      <dt>Click</dt><dd>Pick a text or an idea; the card says how it bears on the rest</dd>
+      <dt>Drag, or two fingers</dt><dd>Move the map; let go while moving to glide</dd>
+      <dt>Pinch, or <kbd>⌘</kbd> and scroll</dt><dd>Zoom where you point</dd>
+      <dt>Double-click</dt><dd>Zoom in there</dd>
+      <dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>Walk from the pick to the text or idea that way; with <kbd>⇧</kbd>, move the map</dd>
+      <dt><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></dt><dd>Zoom in, out, and show everything</dd>
+      <dt><kbd>Return</kbd></dt><dd>Bring the pick into view</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Put the pick away</dd>
+      <dt><kbd>⌘←</kbd> <kbd>⌘→</kbd></dt><dd>Back and forward; in a browser, <kbd>⌘[</kbd> <kbd>⌘]</kbd> too</dd>
+      <dt><kbd>/</kbd></dt><dd>Search; in a browser, <kbd>⌘F</kbd> too</dd>
+      <dt>In the tree</dt><dd><kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>→</kbd> opens, <kbd>←</kbd> closes, <kbd>Return</kbd> picks, <kbd>*</kbd> opens the row's neighbours, typing jumps to a row</dd>
+      <dt><kbd>?</kbd></dt><dd>This card</dd>
+    </dl>
+  </div>
+</div>
+<script type="application/json" id="charters-data">{{data}}</script>
+<script>/*{{script}}*/</script>
+</body>
+</html>

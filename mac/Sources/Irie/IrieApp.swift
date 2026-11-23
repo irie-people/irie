@@ -72,6 +72,9 @@ struct IrieApp: App {
             #if !NOMAIL
             MailCommands(menu: store.menu)
             #endif
+            #if !NOFOUNDING
+            ChartersGraphCommands(menu: store.menu)
+            #endif
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -107,6 +110,17 @@ struct IrieApp: App {
                 .frame(minWidth: 760, minHeight: 420)
         }
         .defaultSize(width: 1080, height: 700)
+        .commandsRemoved()
+        #endif
+        #if !NOFOUNDING
+        // Window › Charters Graph, and the Charters tab's Explore button:
+        // the charters as a map to explore (ChartersGraph.swift). As with
+        // Markets, its item shows only while the plugin is on.
+        Window("Charters Graph", id: ChartersGraphWindow.id) {
+            ChartersGraphWindow()
+                .environment(store)
+        }
+        .defaultSize(width: 1320, height: 840)
         .commandsRemoved()
         #endif
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
