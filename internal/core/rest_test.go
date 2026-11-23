@@ -162,8 +162,16 @@ func TestARestingFrozenSessionWakesOnlyAtItsThaw(t *testing.T) {
 	if row.Frozen == nil || !strings.HasPrefix(row.Detail, "Frozen and resting") {
 		t.Errorf("row %+v", row)
 	}
-	// A frozen agent ends too: it is continued, then sent SIGTERM.
+	// A frozen agent ends too, gently: it is continued, then sent SIGTERM,
+	// and nothing stops it again on the way out.
 	testutil.Eventually(t, 10*time.Second, "the frozen agent did not end", func() bool { return c.paneDead(a.Pane) })
+	exited := false
+	for _, l := range c.agentLog(a.ID) {
+		exited = exited || l["t"] == "exit"
+	}
+	if !exited || !slices.Contains(c.signals(a.ID), "terminated") {
+		t.Errorf("the frozen agent did not end at its SIGTERM: %v", c.agentLog(a.ID))
+	}
 	// Opening it, or a message, leaves it be: it waits for its thaw.
 	c.show(a.ID, false)
 	if err := c.call(ipc.OpSend, ipc.SendArgs{Session: a.ID, Text: "hello"}, nil); code(err) != ipc.CodeBusy {

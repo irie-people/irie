@@ -336,7 +336,9 @@ func (c *Core) hostFreezes(x *session, hostPID int) bool {
 func (c *Core) keepFrozen() {
 	for _, x := range c.sessions {
 		f := x.track.frozen
-		if f == nil {
+		// A frozen session that rests is ending, or has ended: nothing of
+		// it is to stop again (rest.go).
+		if f == nil || x.track.rest != nil {
 			continue
 		}
 		p := c.snap.Pane(x.pane)
