@@ -17,6 +17,12 @@
 // "(planned)" just after it. Nor is a path git ignores, such as a build's
 // output (`mac/build/Irie.app`), which a fresh checkout lacks.
 //
+// A company's copy whose brand leaves plugins out (the Tags in
+// internal/brand, DESIGN §2.10) keeps Irie's docs, which name those
+// plugins' code, and tools/prune takes that code out of the copy's source.
+// There a path the checkout's own history deleted is no finding: Irie's
+// check holds the same docs to Irie's code.
+//
 // The idea is Blitz's tools/specs (PROVENANCE.md). It uses the standard
 // library alone, so tools/gotool.sh builds it once for each version.
 package main
@@ -72,6 +78,9 @@ func main() {
 		found = append(found, scan(f, string(text), r.exists)...)
 	}
 	found = unignored(found)
+	if len(found) > 0 && leavesPluginsOut(".") {
+		found = undeleted(".", found)
+	}
 	if len(found) == 0 {
 		return
 	}
@@ -247,6 +256,60 @@ func (r *repo) match(dir string, parts []string) bool {
 	}
 	for name := range names {
 		if ok, _ := path.Match(parts[0], name); ok && r.match(path.Join(dir, name), parts[1:]) {
+			return true
+		}
+	}
+	return false
+}
+
+// tagsLine is the Tags line of internal/brand/brand.go, as tools/brand.sh
+// reads it.
+var tagsLine = regexp.MustCompile(`(?m)^[ \t]*Tags[ \t]*=[ \t]*"([^"]*)"`)
+
+// leavesPluginsOut says whether the checkout at root is a copy whose brand
+// leaves plugins out of its builds, and so perhaps out of its source.
+func leavesPluginsOut(root string) bool {
+	b, err := os.ReadFile(filepath.Join(root, "internal", "brand", "brand.go"))
+	if err != nil {
+		return false
+	}
+	m := tagsLine.FindSubmatch(b)
+	return m != nil && len(bytes.TrimSpace(m[1])) > 0
+}
+
+// undeleted drops the findings for paths the history of the checkout at
+// root deleted: a file, a folder it deleted files from, or a glob that
+// matches one, as when tools/prune took a plugin's code out of a copy.
+func undeleted(root string, found []finding) []finding {
+	cmd := exec.Command("git", "log", "--diff-filter=D", "--name-only", "--format=", "HEAD")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return found
+	}
+	var gone []string
+	for _, p := range strings.Split(string(out), "\n") {
+		if p != "" {
+			gone = append(gone, p)
+		}
+	}
+	var kept []finding
+	for _, f := range found {
+		if !deletedIn(f.path, gone) {
+			kept = append(kept, f)
+		}
+	}
+	return kept
+}
+
+// deletedIn says whether p names something among the deleted paths gone.
+func deletedIn(p string, gone []string) bool {
+	p = strings.TrimSuffix(p, "/")
+	for _, d := range gone {
+		if d == p || strings.HasPrefix(d, p+"/") {
+			return true
+		}
+		if ok, _ := path.Match(p, d); ok {
 			return true
 		}
 	}

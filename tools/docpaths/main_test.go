@@ -152,3 +152,65 @@ func TestBuildsOutputIsNotChecked(t *testing.T) {
 		t.Errorf("unignored = %v, want only the path git keeps", got)
 	}
 }
+
+// TestACopyPassesOverWhatItsHistoryDeleted: a copy whose brand leaves
+// plugins out keeps Irie's docs, which name the code tools/prune took out
+// of its source, so there a path the checkout's history deleted, a file, a
+// folder of such files or a glob, is no finding, and any other still is.
+// Irie's own brand leaves nothing out and gets no such pass.
+func TestACopyPassesOverWhatItsHistoryDeleted(t *testing.T) {
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=alice", "-c", "user.email=alice@example.com", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"}, args...)...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("git %v: %v %s", args, err, out)
+		}
+	}
+	write := func(name, text string) {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	brand := func(tags string) string {
+		return "package brand\n\nconst (\n\tName = \"Basil\"\n\tTags = \"" + tags + "\"\n)\n"
+	}
+	write("internal/brand/brand.go", brand(""))
+	write("internal/plug/plug.go", "package plug\n")
+	write("internal/core/plug_on.go", "package core\n")
+	write("internal/core/core.go", "package core\n")
+	run("init", "-q")
+	run("add", "-A")
+	run("commit", "-q", "-m", "feat: a plugin")
+	if leavesPluginsOut(dir) {
+		t.Error("a brand with no Tags leaves plugins out")
+	}
+
+	write("internal/brand/brand.go", brand("noplug"))
+	run("rm", "-q", "-r", "internal/plug", "internal/core/plug_on.go")
+	run("commit", "-q", "-a", "-m", "chore(copy): take the plugin out")
+	if !leavesPluginsOut(dir) {
+		t.Error("a brand with Tags leaves no plugins out")
+	}
+	found := []finding{
+		{"docs/DESIGN.md", 1, "internal/plug"},
+		{"docs/DESIGN.md", 2, "internal/plug/"},
+		{"docs/DESIGN.md", 3, "internal/plug/plug.go"},
+		{"docs/DESIGN.md", 4, "internal/core/plug_on.go"},
+		{"docs/DESIGN.md", 5, "internal/core/*_on.go"},
+		{"docs/DESIGN.md", 6, "internal/never"},
+		{"docs/DESIGN.md", 7, "internal/core/gone.go"},
+	}
+	if got := paths(undeleted(dir, found)); !reflect.DeepEqual(got, []string{"internal/never", "internal/core/gone.go"}) {
+		t.Errorf("undeleted = %v, want only the paths no commit deleted", got)
+	}
+	if leavesPluginsOut(t.TempDir()) {
+		t.Error("a checkout with no brand leaves plugins out")
+	}
+}
