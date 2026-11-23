@@ -21,7 +21,7 @@ func darwin(pkgs map[string]floor) *floors {
 // everyFolder is a repository where every package is there, with tests.
 func everyFolder(string) (bool, bool) { return true, true }
 
-func TestANewPackageGetsAFloorHalfAPointUnderItsCoverage(t *testing.T) {
+func TestANewPackageGetsAFloorAPointAndAHalfUnderItsCoverage(t *testing.T) {
 	fl := &floors{pkgs: map[string]floor{}}
 	o := check(fl, []measure{
 		m("internal/a", 541, 471, 0),  // 87.06%
@@ -29,7 +29,7 @@ func TestANewPackageGetsAFloorHalfAPointUnderItsCoverage(t *testing.T) {
 		m("internal/c", 41, 41, 0),
 		m("internal/d", 300, 1, 0),
 	}, "darwin", everyFolder)
-	want := map[string]floor{"internal/a": {86, 0}, "internal/b": {80, 2}, "internal/c": {99, 0}, "internal/d": {0, 0}}
+	want := map[string]floor{"internal/a": {85, 0}, "internal/b": {79, 2}, "internal/c": {98, 0}, "internal/d": {0, 0}}
 	if !reflect.DeepEqual(fl.pkgs, want) || fl.on != "darwin" {
 		t.Errorf("floors %v on %q, want %v on darwin", fl.pkgs, fl.on, want)
 	}
@@ -58,16 +58,18 @@ func TestUnderTheFloorFails(t *testing.T) {
 	}
 }
 
-func TestAFloorRisesAPointAtATime(t *testing.T) {
+// TestAFloorRisesWithItsCoverage: a floor rises to a point and a half
+// under its package's coverage, in whole percent, once that is over it.
+func TestAFloorRisesWithItsCoverage(t *testing.T) {
 	for _, c := range []struct {
 		covered int
 		want    int
 	}{
 		{800, 80},  // 80.0%: on the floor
-		{814, 80},  // 81.4%: not a point and a half over it
-		{815, 81},  // 81.5%
-		{909, 90},  // 90.9%
-		{1000, 99}, // all
+		{824, 80},  // 82.4%: not two and a half points over it
+		{825, 81},  // 82.5%
+		{915, 90},  // 91.5%
+		{1000, 98}, // all
 	} {
 		fl := darwin(map[string]floor{"internal/a": {80, 1}})
 		o := check(fl, []measure{m("internal/a", 1000, c.covered, 0)}, "darwin", everyFolder)
@@ -76,6 +78,19 @@ func TestAFloorRisesAPointAtATime(t *testing.T) {
 		}
 		if c.want != 80 && fl.pkgs["internal/a"].skipped != 0 {
 			t.Error("a raised floor keeps the skips of the run that raised it")
+		}
+	}
+}
+
+func TestAFailingRunChangesNoFloor(t *testing.T) {
+	fl := darwin(map[string]floor{"internal/a": {80, 0}, "internal/b": {50, 0}})
+	o := check(fl, []measure{m("internal/a", 100, 70, 0), m("internal/b", 100, 90, 0), m("internal/new", 10, 10, 0)}, "darwin", everyFolder)
+	if len(o.problems) != 1 || o.changed {
+		t.Errorf("outcome %+v: a run under a floor must not write the file", o)
+	}
+	for _, n := range o.notes {
+		if strings.Contains(n, "raised") || strings.Contains(n, "set floors") || strings.Contains(n, "commit") {
+			t.Errorf("note %q on a failing run", n)
 		}
 	}
 }
@@ -101,12 +116,6 @@ func TestAnotherSystemHoldsNothing(t *testing.T) {
 }
 
 func TestPackagesGoneOrWithoutTests(t *testing.T) {
-	fl := darwin(map[string]floor{
-		"internal/gone":      {50, 0},
-		"internal/untested":  {70, 0},
-		"internal/elsewhere": {80, 0},
-		"internal/a":         {90, 0},
-	})
 	folders := func(p string) (bool, bool) {
 		switch p {
 		case "internal/gone":
@@ -116,15 +125,22 @@ func TestPackagesGoneOrWithoutTests(t *testing.T) {
 		}
 		return true, true
 	}
-	o := check(fl, []measure{m("internal/a", 100, 95, 0)}, "darwin", folders)
-	if _, ok := fl.pkgs["internal/gone"]; ok || !o.changed {
-		t.Errorf("a package that is gone keeps its floor: %v", fl.pkgs)
-	}
-	if !reflect.DeepEqual(o.problems, []string{"internal/untested: it has a floor of 70% but no tests"}) {
-		t.Errorf("problems %q", o.problems)
+	fl := darwin(map[string]floor{
+		"internal/gone":      {50, 0},
+		"internal/elsewhere": {80, 0},
+		"internal/a":         {90, 0},
+	})
+	o := check(fl, []measure{m("internal/a", 100, 91, 0)}, "darwin", folders)
+	if _, ok := fl.pkgs["internal/gone"]; ok || !o.changed || len(o.problems) != 0 {
+		t.Errorf("a package that is gone keeps its floor: %v, outcome %+v", fl.pkgs, o)
 	}
 	if _, ok := fl.pkgs["internal/elsewhere"]; !ok {
 		t.Error("a package this run didn't test lost its floor")
+	}
+	fl = darwin(map[string]floor{"internal/untested": {70, 0}, "internal/a": {90, 0}})
+	o = check(fl, []measure{m("internal/a", 100, 91, 0)}, "darwin", folders)
+	if !reflect.DeepEqual(o.problems, []string{"internal/untested: it has a floor of 70% but no tests"}) {
+		t.Errorf("problems %q", o.problems)
 	}
 }
 

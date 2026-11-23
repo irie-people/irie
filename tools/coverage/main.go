@@ -5,12 +5,13 @@
 // statements, how many its tests ran, and how many of its tests skipped.
 //
 // A package under its floor fails the check. A package whose coverage
-// rose a point or more over its floor, and a new one, gets a floor of its
-// coverage less half a point, in whole percent, so that a test that takes
-// another path now and then doesn't fail it; the check writes it, for the
-// change to commit. A floor is never lowered to let a change through: the
-// change brings tests. Two branches that each raised a floor merge as a
-// union (.gitattributes), and the higher floor holds.
+// rose, and a new one, gets a floor of its coverage less a point and a
+// half (margin), in whole percent; the check writes it, for the change to
+// commit, unless the run failed. The margin is for coverage that moves
+// between runs of the same code, as a select takes one channel or the
+// other. A floor is never lowered to let a change through: the change
+// brings tests. Two branches that each raised a floor merge as a union
+// (.gitattributes), and the higher floor holds.
 //
 // Coverage differs from machine to machine: a test may skip where a
 // program or a permission it needs is missing. A floor keeps how many of
@@ -271,10 +272,15 @@ type outcome struct {
 	changed         bool
 }
 
-// set is the floor a coverage sets: half a point under it, in whole
-// percent, so a test that takes another path now and then fails nothing.
+// margin is how far under a package's coverage its floor is set, in
+// points. Over three runs of the same code, five packages' coverage moved,
+// internal/sdk's the most, by a point (78.5% to 79.5%): a floor raised on
+// a run that took the longer paths must hold on one that took the shorter.
+const margin = 1.5
+
+// set is the floor a coverage sets: margin under it, in whole percent.
 func set(pct float64) int {
-	return max(0, int(math.Floor(pct-0.5)))
+	return max(0, int(math.Floor(pct-margin)))
 }
 
 // check holds each measured package to its floor, raises the floors that
@@ -333,6 +339,11 @@ func check(fl *floors, ms []measure, goos string, tests func(string) (bool, bool
 	}
 	for _, l := range []*[]string{&raised, &added, &gone, &unknown} {
 		sort.Strings(*l)
+	}
+	// A run that fails changes no floor: the change will run again, and
+	// raise them then, rather than leave the file changed for nothing.
+	if len(o.problems) > 0 {
+		raised, added, gone = nil, nil, nil
 	}
 	if len(raised) > 0 {
 		o.notes = append(o.notes, "raised the floors of "+strings.Join(raised, ", "))
