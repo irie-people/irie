@@ -243,7 +243,7 @@ func printRaphael(w io.Writer, r ipc.RaphaelResult) error {
 		}
 	}
 	if len(r.Cleared) > 0 {
-		fmt.Fprintln(w, "\nCleared by himself, to keep room for swap:")
+		fmt.Fprintln(w, "\nCleared by "+brand.Him+"self, to keep room for swap:")
 		for _, x := range r.Cleared {
 			line := fmt.Sprintf("  - %s %s: %s, in %s", x.At.Local().Format("15:04 on 2 Jan"), x.What, raphael.Size(x.Size), x.Path)
 			if x.Error != "" {

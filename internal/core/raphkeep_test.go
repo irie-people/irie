@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/raphael"
 	"github.com/irie-people/irie/internal/sysload"
@@ -125,7 +126,7 @@ func TestRaffiClearsCachesBelowTheBufferByHimself(t *testing.T) {
 	if len(rep.Cleared) != 1 || rep.Cleared[0].ID != "go-build" || rep.Cleared[0].Size < 128<<10 || !strings.Contains(rep.Room, "keeps 26.8 GB free for swap") {
 		t.Errorf("his report: %+v %q", rep.Cleared, rep.Room)
 	}
-	if now := c.raphaelNow(); !strings.Contains(now.status, "of caches by himself, to keep room for swap") {
+	if now := c.raphaelNow(); !strings.Contains(now.status, "of caches by "+brand.Him+"self, to keep room for swap") {
 		t.Errorf("his row: %q", now.status)
 	}
 	if tells := tellsInHeader(c); len(tells) != 0 {
@@ -143,8 +144,8 @@ func TestRaffiTellsOnceWhatIsYoursWhenTheCachesAreNotEnough(t *testing.T) {
 	waitKeep(t, c)
 	tells := tellsInHeader(c)
 	if len(tells) != 1 || !strings.HasPrefix(tells[0].ID, "room:") || tells[0].Level != raphael.Warn || tells[0].From != "raphael" ||
-		!strings.Contains(tells[0].Text, "short of the room Raffi keeps for swap") || len(tells[0].Lines) != 3 ||
-		!strings.Contains(tells[0].Lines[0], "of caches by himself") || tells[0].Lines[1] != "Biggest of yours: the Trash 3.2 GB." {
+		!strings.Contains(tells[0].Text, "short of the room "+brand.Raffi+" keeps for swap") || len(tells[0].Lines) != 3 ||
+		!strings.Contains(tells[0].Lines[0], "of caches by "+brand.Him+"self") || tells[0].Lines[1] != "Biggest of yours: the Trash 3.2 GB." {
 		t.Fatalf("told %+v", tells)
 	}
 	// His report lists the person's own, with its fix, which asks first.
@@ -256,7 +257,7 @@ func TestRaffiTellsOnceOfARestartAfterABoot(t *testing.T) {
 	if len(tells) != 1 || !strings.HasPrefix(tells[0].ID, "panic:") || tells[0].Level != raphael.Warn || !strings.Contains(tells[0].Text, "crashed and restarted") {
 		t.Fatalf("told %+v", tells)
 	}
-	if l := strings.Join(tells[0].Lines, "\n"); !strings.Contains(l, "swap had run out of disk") || !strings.Contains(l, "Claude Code 9 GB, llama-server 5 GB") || !strings.Contains(l, "Raffi now keeps 26.8 GB free for swap") {
+	if l := strings.Join(tells[0].Lines, "\n"); !strings.Contains(l, "swap had run out of disk") || !strings.Contains(l, "Claude Code 9 GB, llama-server 5 GB") || !strings.Contains(l, brand.Raffi+" now keeps 26.8 GB free for swap") {
 		t.Errorf("lines %q", tells[0].Lines)
 	}
 	var found bool

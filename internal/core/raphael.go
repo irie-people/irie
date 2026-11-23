@@ -281,7 +281,7 @@ func (c *Core) raphaelOp(peer int, a ipc.RaphaelArgs) (ipc.RaphaelResult, error)
 	switch {
 	case a.Told != "":
 		if c.fromAgent(peer) {
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say your user saw what Raffi told them.")
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say your user saw what "+brand.Raffi+" told them.")
 		}
 		c.markTold(a.Told)
 	case a.Fix != "":

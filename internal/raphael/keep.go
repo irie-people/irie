@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/sysload"
 )
@@ -240,7 +241,7 @@ func (k *keeper) goBuild(ctx context.Context) []Cleared {
 		return nil
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "README")); err != nil || !strings.HasPrefix(string(b), goReadme) {
-		k.leave("%s does not look like Go's build cache, so he left it be", tildePath(dir, k.in.Home))
+		k.leave("%s does not look like Go's build cache, so %s left it be", tildePath(dir, k.in.Home), brand.He)
 		return nil
 	}
 	ps, starts, err := k.procs(ctx)
@@ -364,7 +365,7 @@ func (k *keeper) brew(ctx context.Context) []Cleared {
 		return nil
 	}
 	if who := busyWith(ps, []string{"brew"}); who != "" {
-		k.leave("Homebrew is at work (%s), so he left its downloads be", who)
+		k.leave("Homebrew is at work (%s), so %s left its downloads be", who, brand.He)
 		return nil
 	}
 	var size int64
@@ -481,7 +482,7 @@ func (k *keeper) tools(ctx context.Context) []Cleared {
 			}
 		}
 		if at != "" {
-			k.leave("%s is at work (%s), so he left %s be", t.id, at, t.what)
+			k.leave("%s is at work (%s), so %s left %s be", t.id, at, brand.He, t.what)
 			continue
 		}
 		var size int64
@@ -535,12 +536,12 @@ func (k *keeper) derivedData(ctx context.Context) []Cleared {
 	}
 	running := runningApps(ctx, k.r)
 	if _, ok := running["com.apple.dt.Xcode"]; ok {
-		k.leave("Xcode is open, so he left its DerivedData be")
+		k.leave("Xcode is open, so %s left its DerivedData be", brand.He)
 		return nil
 	}
 	for _, p := range ps {
 		if strings.Contains(p.Path, "/Xcode.app/") || progIs(p, "xcodebuild") {
-			k.leave("Xcode is at work (%s, pid %d), so he left its DerivedData be", filepath.Base(p.Path), p.PID)
+			k.leave("Xcode is at work (%s, pid %d), so %s left its DerivedData be", filepath.Base(p.Path), p.PID, brand.He)
 			return nil
 		}
 	}
@@ -628,7 +629,7 @@ func (k *keeper) browsers(ctx context.Context) []Cleared {
 		open := appRunning(b.id, appPath(ctx, k.r, b.id), runningApps(ctx, k.r), ps) ||
 			slices.ContainsFunc(ps, func(p Proc) bool { return strings.Contains(p.Path, "/"+b.app+"/") })
 		if open {
-			k.leave("%s is open, so he left its cache be", b.name)
+			k.leave("%s is open, so %s left its cache be", b.name, brand.He)
 			continue
 		}
 		size, err := k.emptyDir(dir)

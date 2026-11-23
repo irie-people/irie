@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // A kernel panic (DESIGN §4.11). When macOS's kernel panics, the Mac
@@ -279,9 +281,9 @@ func PanicFinding(p Panic, now time.Time) (Finding, bool) {
 	}
 	switch {
 	case p.LowSwap:
-		f.Advice = "Memory ran short and the swap couldn't grow: Raffi now keeps room free on the disk for it, clearing caches by himself, and rests idle cards while memory is short. Fewer agents and local models at once help too."
+		f.Advice = "Memory ran short and the swap couldn't grow: " + brand.Raffi + " now keeps room free on the disk for it, clearing caches by " + brand.Him + "self, and rests idle cards while memory is short. Fewer agents and local models at once help too."
 	case p.Reason == "":
-		f.Advice = "If it happens again, note what ran: Raffi says so here after each restart."
+		f.Advice = "If it happens again, note what ran: " + brand.Raffi + " says so here after each restart."
 	default:
 		f.Advice = "A panic that comes again with the same words is worth reporting to Apple, with the report."
 	}

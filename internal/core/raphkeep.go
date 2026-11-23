@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/raphael"
@@ -248,7 +249,7 @@ func (c *Core) keepRun(now time.Time) {
 // cleared, the biggest of theirs, and where to clear them.
 func roomTell(room sysload.Room, cleared []raphael.Cleared, own []raphael.Finding, now time.Time) ipc.Tell {
 	t := ipc.Tell{ID: "room:" + now.UTC().Format(time.RFC3339Nano), From: "raphael", At: now, Level: raphael.Warn,
-		Text: fmt.Sprintf("Your disk is short of the room Raffi keeps for swap: %s free, under %s.", sysload.Size(room.DiskFree), sysload.Size(room.Buffer()))}
+		Text: fmt.Sprintf("Your disk is short of the room %s keeps for swap: %s free, under %s.", brand.Raffi, sysload.Size(room.DiskFree), sysload.Size(room.Buffer()))}
 	if room.Starved() {
 		t.Text = fmt.Sprintf("Your disk is nearly full: %s free, under the %s floor, so new heavy work waits.", sysload.Size(room.DiskFree), sysload.Size(room.Floor()))
 	}
@@ -257,9 +258,9 @@ func roomTell(room sysload.Room, cleared []raphael.Cleared, own []raphael.Findin
 		total += x.Size
 	}
 	if total > 0 {
-		t.Lines = append(t.Lines, fmt.Sprintf("He cleared %s of caches by himself.", raphael.Size(total)))
+		t.Lines = append(t.Lines, fmt.Sprintf("%s cleared %s of caches by %sself.", brand.Raffi, raphael.Size(total), brand.Him))
 	} else {
-		t.Lines = append(t.Lines, "He found no cache he could clear.")
+		t.Lines = append(t.Lines, brand.Raffi+" found no cache "+brand.He+" could clear.")
 	}
 	if len(own) > 0 {
 		var parts []string
@@ -267,7 +268,7 @@ func roomTell(room sysload.Room, cleared []raphael.Cleared, own []raphael.Findin
 			parts = append(parts, raphael.OwnName(f)+" "+raphael.Size(f.Size))
 		}
 		t.Lines = append(t.Lines, "Biggest of yours: "+strings.Join(parts, ", ")+".")
-		t.Lines = append(t.Lines, "Raffi's row in Settings › Arch Agents clears each, on your OK.")
+		t.Lines = append(t.Lines, brand.Raffi+"'s row in Settings › Arch Agents clears each, on your OK.")
 	}
 	return t
 }
@@ -319,7 +320,7 @@ func (c *Core) notePanic(now time.Time) {
 		c.log.Warn("raphael: the computer restarted", "at", p.At, "report", p.File, "said", text, "low_swap", p.LowSwap, "most_memory", p.TopWords())
 		if p.LowSwap {
 			if room, err := k.room(); err == nil && room.Known() {
-				lines = append(lines, fmt.Sprintf("Raffi now keeps %s free for swap.", sysload.Size(room.Buffer())))
+				lines = append(lines, fmt.Sprintf("%s now keeps %s free for swap.", brand.Raffi, sysload.Size(room.Buffer())))
 			}
 		}
 		c.tell(ipc.Tell{ID: "panic:" + filepath.Base(p.File), From: "raphael", At: now, Level: raphael.Warn, Text: text, Lines: lines[:min(len(lines), 3)]})
@@ -420,8 +421,8 @@ func (c *Core) keepReport(res *ipc.RaphaelResult) {
 
 // roomWords says the free disk against the room he keeps, for his report.
 func roomWords(room sysload.Room) string {
-	s := fmt.Sprintf("%s of the disk is free. He keeps %s free for swap, clearing caches by himself below it; under %s, new heavy work waits.",
-		sysload.Size(room.DiskFree), sysload.Size(room.Buffer()), sysload.Size(room.Floor()))
+	s := fmt.Sprintf("%s of the disk is free. %s keeps %s free for swap, clearing caches by %sself below it; under %s, new heavy work waits.",
+		sysload.Size(room.DiskFree), brand.Raffi, sysload.Size(room.Buffer()), brand.Him, sysload.Size(room.Floor()))
 	switch {
 	case room.Starved():
 		s += " It is under that floor now."
@@ -447,5 +448,5 @@ func clearedLine(cleared []ipc.RaphaelCleared, now time.Time) string {
 	if total == 0 {
 		return ""
 	}
-	return fmt.Sprintf("At %s he cleared %s of caches by himself, to keep room for swap.", last.Local().Format("15:04"), raphael.Size(total))
+	return fmt.Sprintf("At %s %s cleared %s of caches by %sself, to keep room for swap.", last.Local().Format("15:04"), brand.He, raphael.Size(total), brand.Him)
 }

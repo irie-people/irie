@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // The person's own files (DESIGN §4.11): the Trash, Downloads, Pictures, a
@@ -97,12 +99,12 @@ func OwnFindings(ctx context.Context, r Runner, in OwnInput) []Finding {
 			f = trashFinding(p, in)
 		case p.id == "own:models":
 			f = Finding{Text: fmt.Sprintf("Local models take %s (%s).", Size(p.size), tildePath(p.path, in.Home)),
-				Advice: "Raffi never deletes them himself. `ollama list` names them and `ollama rm NAME` deletes one; or move them to another drive and point OLLAMA_MODELS there."}
+				Advice: brand.Raffi + " never deletes them by " + brand.Him + "self. `ollama list` names them and `ollama rm NAME` deletes one; or move them to another drive and point OLLAMA_MODELS there."}
 		case p.id == "own:downloads":
 			f = downloadsFinding(p, in)
 		case p.id == "own:pictures":
 			f = Finding{Text: fmt.Sprintf("Pictures takes %s.", Size(p.size)),
-				Advice: "Raffi never clears your pictures. If Photos keeps them in iCloud, Photos › Settings › iCloud › Optimize Mac Storage keeps smaller copies here and the full ones there."}
+				Advice: brand.Raffi + " never clears your pictures. If Photos keeps them in iCloud, Photos › Settings › iCloud › Optimize Mac Storage keeps smaller copies here and the full ones there."}
 		default:
 			f = backupFinding(ctx, r, p, in)
 		}
@@ -211,7 +213,7 @@ func downloadsFinding(p own, in OwnInput) Finding {
 		}
 	}
 	if len(old) == 0 {
-		f.Advice = "Raffi never deletes your downloads by himself, and something in each has changed in the last 90 days."
+		f.Advice = brand.Raffi + " never deletes your downloads by " + brand.Him + "self, and something in each has changed in the last 90 days."
 		return f
 	}
 	slices.SortFunc(old, func(a, b download) int {
@@ -224,7 +226,7 @@ func downloadsFinding(p own, in OwnInput) Finding {
 		return strings.Compare(a.name, b.name)
 	})
 	f.Text += fmt.Sprintf(" %s of it is in %s nothing has changed in 90 days.", Size(total), plural(len(old), "1 download", "%d downloads"))
-	f.Advice = "Raffi never deletes your downloads by himself. The biggest of the old ones:"
+	f.Advice = brand.Raffi + " never deletes your downloads by " + brand.Him + "self. The biggest of the old ones:"
 	run := []string{}
 	keep := make([]string, len(old))
 	for i, d := range old {
@@ -287,14 +289,14 @@ func doOwn(ctx context.Context, f Fix, in DoInput) (string, error) {
 	case fixOldDownloads:
 		return doOldDownloads(f, in)
 	}
-	return "", errors.New("Raffi has no such fix")
+	return "", errors.New(brand.Raffi + " has no such fix")
 }
 
 // doEmptyTrash deletes what is in the Trash.
 func doEmptyTrash(f Fix, in DoInput) (string, error) {
 	trash := filepath.Join(in.Home, ".Trash")
 	if f.path != trash || !realDir(trash, in.Home) {
-		return "", fmt.Errorf("%s is not your Trash, so Raffi leaves it be", f.path)
+		return "", fmt.Errorf("%s is not your Trash, so %s leaves it be", f.path, brand.Raffi)
 	}
 	names, err := readNames(trash)
 	if err != nil {
@@ -320,10 +322,10 @@ func doEmptyTrash(f Fix, in DoInput) (string, error) {
 // doDeleteBackup deletes a device's backup, once it is sure it is one.
 func doDeleteBackup(f Fix, in DoInput) (string, error) {
 	if filepath.Dir(f.path) != backupsDir(in.Home) || !realDir(f.path, in.Home) {
-		return "", fmt.Errorf("%s is not a device's backup, so Raffi leaves it be", tildePath(f.path, in.Home))
+		return "", fmt.Errorf("%s is not a device's backup, so %s leaves it be", tildePath(f.path, in.Home), brand.Raffi)
 	}
 	if !exists(filepath.Join(f.path, "Info.plist")) && !exists(filepath.Join(f.path, "Manifest.db")) && !exists(filepath.Join(f.path, "Manifest.plist")) {
-		return "", fmt.Errorf("%s doesn't look like a backup, so Raffi leaves it be", tildePath(f.path, in.Home))
+		return "", fmt.Errorf("%s doesn't look like a backup, so %s leaves it be", tildePath(f.path, in.Home), brand.Raffi)
 	}
 	size := treeSize(f.path)
 	if err := os.RemoveAll(f.path); err != nil {
@@ -337,7 +339,7 @@ func doDeleteBackup(f Fix, in DoInput) (string, error) {
 func doOldDownloads(f Fix, in DoInput) (string, error) {
 	dir := filepath.Join(in.Home, "Downloads")
 	if f.path != dir || !realDir(dir, in.Home) || f.start == 0 {
-		return "", fmt.Errorf("%s is not your Downloads, so Raffi leaves it be", f.path)
+		return "", fmt.Errorf("%s is not your Downloads, so %s leaves it be", f.path, brand.Raffi)
 	}
 	cutoff := time.Unix(f.start, 0)
 	var freed int64
@@ -364,7 +366,7 @@ func doOldDownloads(f Fix, in DoInput) (string, error) {
 	}
 	said := fmt.Sprintf("Deleted %s untouched since %s: freed %s.", plural(n, "1 download", "%d downloads"), cutoff.Local().Format("2 Jan"), Size(freed))
 	if kept > 0 {
-		said += fmt.Sprintf(" %s had changed since, so he kept %s.", plural(kept, "1", "%d"), plural(kept, "it", "them"))
+		said += fmt.Sprintf(" %s had changed since, so %s kept %s.", plural(kept, "1", "%d"), brand.He, plural(kept, "it", "them"))
 	}
 	return said, nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/sysload"
 )
 
@@ -83,18 +84,18 @@ func diskFinding(d Disk) Finding {
 	case d.Starved():
 		f.Level = Warn
 		f.Text = fmt.Sprintf("Your disk is nearly full: %s, under the %s floor the swap needs to grow.", words, Size(d.Floor))
-		f.Advice = "New installs, test runs, local models and sessions wait until there is room. Raffi clears the caches that come back by themselves; the biggest files below are yours to clear."
+		f.Advice = "New installs, test runs, local models and sessions wait until there is room. " + brand.Raffi + " clears the caches that come back by themselves; the biggest files below are yours to clear."
 	case d.Buffer > 0 && d.Low():
 		f.Level = Warn
-		f.Text = fmt.Sprintf("Your disk is short of the %s Raffi keeps free for swap: %s.", Size(d.Buffer), words)
-		f.Advice = "macOS grows the swap onto the disk when memory runs short, and a full disk stops it: on 23 Nov 2026 that brought a Mac down. Raffi clears the caches that come back by themselves; the biggest files below are yours to clear."
+		f.Text = fmt.Sprintf("Your disk is short of the %s %s keeps free for swap: %s.", Size(d.Buffer), brand.Raffi, words)
+		f.Advice = "macOS grows the swap onto the disk when memory runs short, and a full disk stops it: on 23 Nov 2026 that brought a Mac down. " + brand.Raffi + " clears the caches that come back by themselves; the biggest files below are yours to clear."
 	case d.Low():
 		f.Level = Warn
 		f.Text = "Your disk is nearly full: " + words + "."
 		f.Advice = "macOS needs room for updates and swap, and slows down without it. Clear the caches below, and empty the Trash; then move or delete big files you no longer need."
 	case d.Buffer > 0 && d.Free < 2*d.Buffer:
 		f.Level = Note
-		f.Text = fmt.Sprintf("Your disk is getting full: %s. Raffi keeps %s free for swap, clearing caches by himself below it.", words, Size(d.Buffer))
+		f.Text = fmt.Sprintf("Your disk is getting full: %s. %s keeps %s free for swap, clearing caches by %sself below it.", words, brand.Raffi, Size(d.Buffer), brand.Him)
 		f.Advice = "The caches below are safe to clear, and the Trash may hold more."
 	case d.Buffer == 0 && (float64(d.Free) < 2*diskLowShare*float64(d.Total) || d.Free < 2*diskLow):
 		f.Level = Note
@@ -103,7 +104,7 @@ func diskFinding(d Disk) Finding {
 	default:
 		f.Text = "Disk: " + words + "."
 		if d.Buffer > 0 {
-			f.Text = fmt.Sprintf("Disk: %s, with the %s Raffi keeps free for swap.", words, Size(d.Buffer))
+			f.Text = fmt.Sprintf("Disk: %s, with the %s %s keeps free for swap.", words, Size(d.Buffer), brand.Raffi)
 		}
 	}
 	return f

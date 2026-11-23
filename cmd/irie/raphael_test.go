@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -25,7 +26,7 @@ func TestRaphaelsReportSaysTheRoomWhatHeClearedAndWhatHeTold(t *testing.T) {
 	out := b.String()
 	for _, want := range []string{
 		r.Room,
-		"Cleared by himself, to keep room for swap:",
+		"Cleared by " + brand.Him + "self, to keep room for swap:",
 		"  - 14:02 on 23 Nov Go's build cache: the 900 oldest entries, untouched for 3 hours or more: 3.1 GB, in ~/Library/Caches/go-build\n",
 		"pip's download cache: 800 MB, in ~/Library/Caches/pip (it stopped short: permission denied)",
 		"Told you:\n  - 14:02 on 23 Nov Your Mac crashed and restarted",
