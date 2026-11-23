@@ -1,5 +1,10 @@
 package ipc
 
+import (
+	"slices"
+	"strings"
+)
+
 // Spaces (DESIGN §4.1): named sets of sessions that a sidebar shows one at
 // a time, each with its own Pinned and Parked, like a browser's spaces.
 // Every session is in one: the first, unless it was put in another. A row
@@ -36,6 +41,20 @@ type SpacesArgs struct {
 	Space  string `json:"space,omitempty"`
 	Name   string `json:"name,omitempty"`
 	Before string `json:"before,omitempty"`
+}
+
+// FindSpace is where among spaces the space that ref names is: by its id,
+// or by its name in any case, since no two spaces share one. -1 when none
+// has it.
+func FindSpace(spaces []Space, ref string) int {
+	ref = strings.Join(strings.Fields(ref), " ")
+	if ref == "" {
+		return -1
+	}
+	if i := slices.IndexFunc(spaces, func(s Space) bool { return s.ID == ref }); i >= 0 {
+		return i
+	}
+	return slices.IndexFunc(spaces, func(s Space) bool { return strings.EqualFold(s.Name, ref) })
 }
 
 // SpacesResult is the spaces in their order, and the space new made.

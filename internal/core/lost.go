@@ -340,17 +340,18 @@ func (c *Core) comeHome(x *session, r closedRecord) {
 }
 
 // comeBack puts a lost session that reopen brought back where it was:
-// pinned last in Pinned, or parked last in Parked, as before; and, if it
-// was frozen, frozen again once its agent has started (refreezeLost). The
-// caller holds c.mu.
-func (c *Core) comeBack(x *session, r closedRecord) {
+// pinned or parked as before, in its place when the order named it before
+// reopen (placed), as the layout's copy keeps it (layout.go), else last in
+// Pinned or Parked; and, if it was frozen, frozen again once its agent has
+// started (refreezeLost). The caller holds c.mu.
+func (c *Core) comeBack(x *session, r closedRecord, placed bool) {
 	switch {
 	case r.Pinned:
-		if c.setPinned(x.id, true) {
+		if c.setPinned(x.id, true) && !placed {
 			c.toEnd(x.id)
 		}
 	case r.Parked:
-		if changed, _ := c.setParked(x.id, true); changed {
+		if changed, _ := c.setParked(x.id, true); changed && !placed {
 			c.toEnd(x.id)
 		}
 	}
