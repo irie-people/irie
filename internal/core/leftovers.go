@@ -12,7 +12,8 @@ package core
 //     binary that started before it still runs;
 //   - one an agent of this core's started, which its server's environment
 //     says (IRIE_SESSION, with this core's IRIE_SOCKET), once that session
-//     is closed;
+//     is closed: macOS shows tmux's environment, as tmux is not one of its
+//     own programs, whose alone it hides (proc.Args);
 //   - either once it has run a day: no check takes that long.
 //
 // Its team and dock servers go with it. Every other tmux server is left
