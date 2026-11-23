@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/irie-people/irie/internal/ledger"
 )
 
 // Dollars is v in dollars and cents, as "$4.10"; "<$0.01" for less than a
-// cent that is more than nothing.
-func Dollars(v float64) string {
-	if v > 0 && v < 0.005 {
-		return "<$0.01"
-	}
-	return fmt.Sprintf("$%.2f", v)
-}
+// cent that is more than nothing (ledger.Dollars).
+func Dollars(v float64) string { return ledger.Dollars(v) }
 
 // Tokens is n tokens in a few characters: 950, 12k, 1.2M.
 func Tokens(n int64) string {

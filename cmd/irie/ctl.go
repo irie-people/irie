@@ -71,7 +71,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          own in the last day. A jot you close is
                                          done, listed only for a week after, when
                                          you closed it with commits not landed
-` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + costsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -98,7 +98,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          it on your OK; mine N tells him a startup
                                          item is yours; on and off turn him on or
                                          off (arch.raphael.on)
-` + councilUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
+` + councilUsage + lessonsUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
                                          agent it sends on, and what it did
@@ -224,6 +224,8 @@ func ctl(args []string) error {
 		return ctlDog(args[1:])
 	case "rebuilds":
 		return ctlRebuilds(args[1:])
+	case "costs":
+		return ctlCosts(args[1:])
 	case "materialize":
 		return ctlMaterialize(args[1:])
 	case "zen":
@@ -238,6 +240,8 @@ func ctl(args []string) error {
 		return ctlRaphael(args[1:])
 	case "council", "ragu", "raguel":
 		return ctlCouncil(args[1:])
+	case "lessons", "lesson":
+		return ctlLessons(args[1:])
 	case "arch":
 		return ctlArch(args[1:])
 	case "show":

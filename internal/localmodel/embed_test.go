@@ -28,3 +28,25 @@ func TestEmbedGivesAVectorForEachInput(t *testing.T) {
 		}
 	}
 }
+
+func TestAMeterSeesEachAnsweredCall(t *testing.T) {
+	f := ollamafake.New(0, []ollamafake.Model{{Name: "embeddinggemma-2:270m", Size: 378 << 20, Embeds: true}})
+	srv := httptest.NewServer(f.Handler())
+	defer srv.Close()
+	o := Ollama{URL: srv.URL}
+	var uses []Use
+	ctx := WithMeter(context.Background(), func(u Use) { uses = append(uses, u) })
+	if _, err := o.Embed(ctx, "embeddinggemma-2:270m", []string{"fix the typo", "design a plugin system"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(uses) != 1 || uses[0].Model != "embeddinggemma-2:270m" || uses[0].URL != srv.URL || uses[0].Prompt != 7 {
+		t.Fatalf("uses %+v", uses)
+	}
+	// A call that fails reports nothing, and a context without a meter
+	// none at all.
+	o.Embed(ctx, "none:1b", []string{"x"}, "")
+	o.Embed(context.Background(), "embeddinggemma-2:270m", []string{"x"}, "")
+	if len(uses) != 1 {
+		t.Errorf("%d uses, want 1", len(uses))
+	}
+}

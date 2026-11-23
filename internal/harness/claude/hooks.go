@@ -131,7 +131,7 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 		}
 		data := map[string]any{"tool": tool}
 		// What the error said, for what failed most (tools/habits.sh).
-		if s := errorLine(tool, p.str("error"), p.flag("is_interrupt")); hook == "PostToolUseFailure" && s != "" {
+		if s := ErrorLine(tool, p.str("error"), p.flag("is_interrupt")); hook == "PostToolUseFailure" && s != "" {
 			data["error"] = s
 		}
 		if ms, ok := p.number("duration_ms"); ok {
@@ -319,11 +319,12 @@ func firstQuestion(input json.RawMessage) string {
 	return strings.Join(strings.Fields(in.Questions[0].Question), " ")
 }
 
-// errorLine is a failed call's error on one line, for the journal (DESIGN
+// ErrorLine is a failed call's error on one line, for the journal (DESIGN
 // §5.2): a shell command's exit code and the last line it wrote, else the
 // error's first line, cut to 200 characters. A call the user cut short has
-// none: it failed through no fault of its own.
-func errorLine(tool, err string, interrupted bool) string {
+// none: it failed through no fault of its own. A transcript's failed call
+// reads the same way (internal/lessons).
+func ErrorLine(tool, err string, interrupted bool) string {
 	err = strings.TrimSpace(err)
 	if interrupted || err == "" {
 		return ""

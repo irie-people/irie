@@ -47,7 +47,8 @@ func (c *Core) notesNote(x *session) string {
 // startNote is what a session is told each time it starts, after a /clear
 // or a compaction too: whether it can delegate, how to show a file, its
 // profile's playbook and where a local model keeps its findings, then the
-// user's preferences, so that they hold all along. The caller holds c.mu.
+// user's preferences, so that they hold all along. The lessons the user
+// kept follow it, as many as fit (withLessons). The caller holds c.mu.
 func (c *Core) startNote(x *session) string {
 	var notes []string
 	for _, n := range []string{c.delegateHint(x), codeNote(x), anonNote(x), c.playbookNote(x), c.notesNote(x), preferencesNote(c.cfg().Spawn.Preferences), c.zenStartNote(x)} {
