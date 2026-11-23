@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -160,11 +161,14 @@ func (b *Backend) post(v any) {
 	b.host.Post(msg)
 }
 
+// setLink posts the link's state and words, and logs them, so app.log says
+// what the window's cover said.
 func (b *Backend) setLink(state, text string) {
 	b.mu.Lock()
 	b.link.State, b.link.Text = state, text
 	l := b.link
 	b.mu.Unlock()
+	log.Printf("link: %s: %s", state, text)
 	b.post(l)
 }
 
