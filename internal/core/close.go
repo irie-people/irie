@@ -408,6 +408,9 @@ func (c *Core) closeWith(id string, auto bool, notLive map[string]ipc.NotLive) e
 	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: data})
 	c.addClosed(r)
 	delete(c.sessions, id)
+	// Its ledger stays for the router and the costs report: once out of
+	// the registry, its tally is the writer's alone.
+	go c.keepSpent(x.id, &x.tally, slices.Clone(x.track.transcripts), x.local)
 	// A frozen agent's held tool calls go through, so it ends gently.
 	os.Remove(c.paths.FreezeFile(id))
 	c.end(*p)
@@ -689,13 +692,16 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	}
 	c.mu.Lock()
 	j.place.name, j.place.named = unique(r.Name, c.names(nil)), r.Named
+	// A closed session keeps its place in the order for its reopen; a lost
+	// one keeps it when the layout's copy brought the order back.
+	placed := slices.Contains(c.order, r.ID)
 	x, err := c.launch(j)
 	if err == nil {
 		c.dropClosed(r.ID)
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.UIReopened, Data: map[string]any{"name": x.name, "resume": j.resume != ""}})
 		c.comeHome(x, r)
 		if r.Lost {
-			c.comeBack(x, r)
+			c.comeBack(x, r, placed)
 		}
 	}
 	frames := c.changes()

@@ -6,7 +6,8 @@ package core
 // state change nor a boost, a promotion included, ever moves one: a boost
 // changes only how the machine serves a session (priority.go).
 // The order lives in a user option of the agents' tmux session, as the
-// registry lives in pane options, so a restarted core keeps it. A closed
+// registry lives in pane options, so a restarted core keeps it, and in a
+// copy in the state folder, so a new tmux server does too (layout.go). A closed
 // session keeps its place for its reopen.
 //
 // Parking a session puts it last in the Parked group at the end of the
@@ -38,7 +39,7 @@ const agentsTarget = "=" + tmux.AgentsSession + ":"
 
 // loadOrder reads the order a previous core kept.
 func (c *Core) loadOrder() {
-	out, err := c.tmux.Run("show-options", "-qv", "-t", agentsTarget, optOrder)
+	out, err := c.layoutOption(optOrder)
 	if err != nil {
 		c.log.Warn("order", "err", err)
 		return
@@ -101,12 +102,12 @@ func (c *Core) fullOrder() []string {
 }
 
 // setOrder makes ids the order, with each of your groups' sessions kept
-// together as the sidebars draw them (groups.go), and keeps it in tmux.
-// The caller holds c.mu.
+// together as the sidebars draw them (groups.go), and keeps it in tmux and
+// the layout's copy (layout.go). The caller holds c.mu.
 func (c *Core) setOrder(ids []string) {
 	ids = c.together(ids)
 	c.order = ids
-	if _, err := c.tmux.Run("set-option", "-t", agentsTarget, optOrder, strings.Join(ids, " ")); err != nil {
+	if err := c.setLayoutOption(optOrder, strings.Join(ids, " ")); err != nil {
 		c.log.Warn("order", "err", err)
 	}
 }

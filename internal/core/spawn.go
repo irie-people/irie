@@ -466,6 +466,7 @@ func (c *Core) launch(j job) (*session, error) {
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
 		vendorID: vendorID, warnings: warnings,
 		model: profile.Model, local: profile.Local != nil, tutor: j.tutor, out: c.outcome(id),
+		tally: tokenTally{since: created},
 	}
 
 	dir := c.paths.Session(id)
