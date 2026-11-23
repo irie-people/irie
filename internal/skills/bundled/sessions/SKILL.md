@@ -20,14 +20,17 @@ A restart or a power cut ends Irie's tmux server, and every card goes with it. T
 
 1. Check that the list is empty and history shows the `lost` ones: `irie ctl list`, then `irie ctl history`.
 2. Look in the core's log (`core.log` in Irie's state folder, `~/.local/state/irie` by default) for the `msg=lost` lines. One with `resume=false` never had a conversation, so reopening it starts its task over and spends tokens. Name it to the person rather than reopening it.
-3. Bring the rest back with `irie ctl reopen --lost`, in the background, since it takes a few seconds a session. It reopens one at a time, each once the one before has started, and only while a quarter of the memory is free. Each comes back with its conversation, in its place, its space and its group, pinned, parked or frozen as it was. If it stops for memory, run it again later and it goes on with the rest.
+3. Bring the rest back with `irie ctl reopen --lost`, in the background. Each comes back in its place, its space and its group, pinned, parked or frozen as it was. Only the cards that were at work when they were lost, or boosted, start their agents, one at a time, each once the one before has started, and only while a quarter of the memory is free; if it stops for memory, run it again later and it goes on with the rest. The others come back resting: the card with its conversation, and no agent until the person opens it or a message is sent to it, so a restore never starts every agent at once. `--awake` starts them all, but only when the person asks for that.
 4. Tell the person how many came back and what is left.
 
 To bring back one closed session, use `irie ctl reopen ID` or its name. Reopening costs nothing until the session's next turn.
 
 ## Start them up again
 
-Only start up what the person asked for. A session's next turn may first rebuild its prompt cache, and `irie ctl thaw` prints what that costs.
+Only start up what the person asked for. A session's next turn may first rebuild its prompt cache, and `irie ctl thaw` and `irie ctl wake` print what that costs.
+
+- `irie ctl wake ID` starts a resting card's agent again, carrying its conversation on; opening the card or sending it a message does the same. A card that rests frozen wakes at its thaw.
+- `irie ctl rest ID` ends an idle card's agent to free memory and keeps the card; `irie ctl rest --idle` rests every card that may, the longest idle first. Raffi does this by himself while memory is short.
 
 - `irie ctl thaw ID` lets a frozen one go on.
 - `irie ctl continue ID` sends one on, as typing "continue" would. Use it for a card cut off mid-turn, or one whose turn failed for a reason that is fixed now, such as a sign-in.

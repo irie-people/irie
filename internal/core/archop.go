@@ -67,6 +67,7 @@ var archTable = map[string]archEntry{
 			{Key: "arch.raphael.core", Kind: ipc.ArchDuration, Label: "Restart the core when its loop has stood still for", Help: "0s for never. Its supervisor starts it again at once."},
 			{Key: "arch.raphael.every", Kind: ipc.ArchDuration, Label: "Look over your Mac every", Help: "0s for only when you ask. He looks in the background, so your work comes first."},
 			{Key: "arch.raphael.known", Kind: ipc.ArchLines, Label: "Startup items you know", Help: "By label, plist or program: Raffi no longer flags them. It's mine adds one."},
+			{Key: "arch.raphael.rest", Kind: ipc.ArchBool, Label: "Rest idle cards while memory is short", Help: "Their agents end and the cards stay, conversation and all. Opening one, or a message to it, starts its agent again."},
 		},
 		now: (*Core).raphaelNow,
 	},
