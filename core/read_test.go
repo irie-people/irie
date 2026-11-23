@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 )
 
 // view is a list as a client would show it: a running session, a frozen
@@ -150,6 +151,30 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		if st.Op != c.op || !reflect.DeepEqual(st.Args, c.args) {
 			t.Errorf("%q: %s %+v, want %s %+v", c.text, st.Op, st.Args, c.op, c.args)
 		}
+	}
+}
+
+// TestTheCommandsAreThoseOfThisBuild: the error for an unknown command
+// lists a plugin's commands and :setup guides only where the build has the
+// plugin, so a copy that leaves one out never offers it.
+func TestTheCommandsAreThoseOfThisBuild(t *testing.T) {
+	_, err := Read(InputArgs{Text: ":bogus"}, view())
+	if err == nil {
+		t.Fatal(":bogus ran")
+	}
+	said := err.Error()
+	for word, built := range map[string]bool{
+		":write [TASK]": config.WritingBuilt, ":markets [TASK]": config.MarketsBuilt, ":mail,": config.MailBuilt,
+		":chat,": config.ChatBuilt, ":yoink ": config.YoinkBuilt, ":jammin ": config.JamminBuilt, ":vpn [": config.VPNBuilt,
+		"|switch|": config.PrivacyBuilt, "|anon|": config.PrivacyBuilt, "|privacy": config.PrivacyBuilt,
+		":rename NAME": true, ":setup [local": true, ":open FILE[:LINE]": true,
+	} {
+		if strings.Contains(said, word) != built {
+			t.Errorf("built %v, but the list says %q: %v", built, word, strings.Contains(said, word))
+		}
+	}
+	if config.PrivacyBuilt && config.VPNBuilt && config.WritingBuilt && config.MarketsBuilt && config.MailBuilt && config.ChatBuilt && config.YoinkBuilt && config.JamminBuilt && !strings.Contains(said, Commands) {
+		t.Errorf("a build with every plugin lists them all:\n%s", said)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/proc"
 )
 
@@ -68,9 +69,9 @@ func TestWhoseTellsTheSessionByItsEnvironmentConversationOrWorktree(t *testing.T
 		want string // the session's id, "core" for another core's, "" for none
 		how  string // what How says, in part
 	}{
-		{"its environment, with this core's socket", Orphan{Root: with(root, func(s *Seen) { s.Session, s.Socket = "s38gone", sock })}, "s38gone", "Its environment names the session: IRIE_SESSION=s38gone."},
+		{"its environment, with this core's socket", Orphan{Root: with(root, func(s *Seen) { s.Session, s.Socket = "s38gone", sock })}, "s38gone", "Its environment names the session: " + brand.Env("SESSION") + "=s38gone."},
 		{"the environment of a process it runs", Orphan{Root: root, Kids: []Seen{{PID: 101, Name: "node", Session: "s38open", Socket: sock}}}, "s38open", "The environment of node (pid 101), which it runs"},
-		{"an id this core no longer lists", Orphan{Root: with(root, func(s *Seen) { s.Session, s.Socket = "s38old", sock })}, "s38old", "IRIE_SESSION=s38old"},
+		{"an id this core no longer lists", Orphan{Root: with(root, func(s *Seen) { s.Session, s.Socket = "s38old", sock })}, "s38old", brand.Env("SESSION") + "=s38old"},
 		{"another core that is gone", Orphan{Root: with(root, func(s *Seen) { s.Session, s.Socket = "s9", "/tmp/irie-t-1/run/irie/core.sock" })}, "core", "which is gone"},
 		{"another core that runs, whatever its folder says", Orphan{Root: with(root, func(s *Seen) {
 			s.Session, s.Socket, s.Cwd = "s9", "/tmp/irie-t-2/run/irie/core.sock", trees+"/irie/fix-login"
@@ -158,7 +159,7 @@ func TestLeftFindingsNameTheSessionAndStopTheRootFirst(t *testing.T) {
 	}
 	test := Left{
 		Orphan: Orphan{Path: "/private/var/folders/xy/T/irie-bin-1/fakeagent", Root: Seen{PID: 300, Start: 10, Name: "fakeagent"}},
-		Claim:  Claim{Core: "/tmp/irie-t-1/run/irie/core.sock", How: "gone"}, For: 15 * time.Hour,
+		Claim:  Claim{Core: "/tmp/" + brand.Slug + "-t-1/run/" + brand.Slug + "/core.sock", How: "gone"}, For: 15 * time.Hour,
 	}
 	hot := []Hot{{Proc: Proc{PID: 101, UID: 501, Path: "/usr/bin/python3"}, Start: 8, Share: 0.97, For: 3 * time.Hour}}
 	fs, _ := Quick(Input{Home: "/Users/alice", UID: 501, Left: []Left{loop, server, test}, Hot: hot}, Memory{}, Disk{})
@@ -182,7 +183,7 @@ func TestLeftFindingsNameTheSessionAndStopTheRootFirst(t *testing.T) {
 	if s := byID["left:200:9"]; s.Text != "devserver -port 8080 was left running by the session “fix-login”, quiet for 3 hours (pid 200, for 5 hours)." || s.Level != Note || !slices.Equal(s.Fix.Run, []string{"kill -TERM 200"}) || s.Fix.Label != "Stop devserver" {
 		t.Errorf("the server: %q, %+v", s.Text, s.Fix)
 	}
-	if f := byID["left:300:10"]; f.Text != "fakeagent was left running by a test's Irie, gone now (pid 300, for 15 hours)." {
+	if f := byID["left:300:10"]; f.Text != "fakeagent was left running by a test's "+brand.Name+", gone now (pid 300, for 15 hours)." {
 		t.Errorf("the test's: %q", f.Text)
 	}
 	// A core after this one runs the fix as it was found.
@@ -225,7 +226,7 @@ func TestStopTreeFixLeavesAPidUsedAgainAndAStuckRootsChildrenBe(t *testing.T) {
 	// would only be started again.
 	f.start = 1
 	said, err := Do(context.Background(), nil, f, DoInput{})
-	if err != nil || !slices.Equal(sent, []int{10}) || !strings.Contains(said, "it may be stuck, so Raffi left what it runs be") {
+	if err != nil || !slices.Equal(sent, []int{10}) || !strings.Contains(said, "it may be stuck, so "+brand.Raffi+" left what it runs be") {
 		t.Errorf("a stuck root: %q, %v, sent %v", said, err, sent)
 	}
 }

@@ -113,7 +113,7 @@ func ctlLessons(args []string) error {
 	case ipc.LessonsKeep:
 		fmt.Println("Kept: every session hears it from its next start.")
 	case ipc.LessonsNo:
-		fmt.Println("Raffi lets it go.")
+		fmt.Println(brand.Raffi + " lets it go.")
 	case ipc.LessonsDrop:
 		fmt.Println("Dropped: sessions stop hearing it from their next start.")
 	default:

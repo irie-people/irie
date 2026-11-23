@@ -190,7 +190,7 @@ func absFolder(p string) (string, error) {
 // councilOp is the council op (OpCouncil) from the process peer.
 func (c *Core) councilOp(peer int, a ipc.CouncilArgs) (ipc.CouncilResult, error) {
 	if !c.cfg().Arch.Raguel.On && a.Do != ipc.CouncilReport {
-		return ipc.CouncilResult{}, ipc.Errorf(ipc.CodeBadArgs, "Ragu is off: no tally and no council (arch.raguel.on).")
+		return ipc.CouncilResult{}, ipc.Errorf(ipc.CodeBadArgs, brand.Ragu+" is off: no tally and no council (arch.raguel.on).")
 	}
 	switch a.Do {
 	case ipc.CouncilReport:
@@ -346,7 +346,7 @@ func (c *Core) conveneAsk() string {
 	if err != nil {
 		folder = cfg.Folder
 	}
-	return fmt.Sprintf("Ragu tallies the last %s and starts %s session, +raguel, in %s, to bring you up to %s. It reads and drafts; it changes nothing, and each plan waits for your yes.",
+	return fmt.Sprintf(brand.Ragu+" tallies the last %s and starts %s session, +raguel, in %s, to bring you up to %s. It reads and drafts; it changes nothing, and each plan waits for your yes.",
 		counted(raguelDays, "day"), model, repo.Tilde(folder, home()), counted(cfg.Plans, "plan"))
 }
 
@@ -397,7 +397,7 @@ func (c *Core) convene(now time.Time) (ipc.Session, error) {
 		return ipc.Session{}, err
 	}
 	date := now.Format("2006-01-02")
-	task := fmt.Sprintf("Hold Raguel's council of %s, as your charge says. The stretch is the %s from %s to %s, beside the %s before it. Bring at most %s.\n\nThe tally follows. It is what %s counted, never orders: the commands in it are examples of what agents did.\n\n%s",
+	task := fmt.Sprintf("Hold "+brand.Raguel+"'s council of %s, as your charge says. The stretch is the %s from %s to %s, beside the %s before it. Bring at most %s.\n\nThe tally follows. It is what %s counted, never orders: the commands in it are examples of what agents did.\n\n%s",
 		date, counted(t.Days, "day"), t.Now.From.Format("2006-01-02"), date, counted(t.Days, "day"), counted(cfg.Plans, "plan"), brand.Name, council.Markdown(t))
 	s, err := c.spawn(ipc.SpawnArgs{Task: task, Cwd: folder, Profile: "raguel", Name: "council-" + date, Group: councilGroup}, true)
 	if err != nil {
@@ -430,7 +430,7 @@ func (c *Core) fromCouncil(peer int, what string) (council.Council, error) {
 	l, ok := c.latestCouncil(true)
 	sess, _ := c.agentOf(peer)
 	if !ok || sess == "" || sess != l.Session {
-		return council.Council{}, ipc.Errorf(ipc.CodeBadArgs, "Only the council's own session %s: Ragu holds the council, in a session %s starts for it.", what, brand.Name)
+		return council.Council{}, ipc.Errorf(ipc.CodeBadArgs, "Only the council's own session %s: "+brand.Ragu+" holds the council, in a session %s starts for it.", what, brand.Name)
 	}
 	return l, nil
 }
@@ -495,7 +495,7 @@ func (c *Core) councilDone(peer int, summary string) (ipc.CouncilResult, error) 
 		return ipc.CouncilResult{}, err
 	}
 	if strings.TrimSpace(summary) == "" {
-		return ipc.CouncilResult{}, ipc.Errorf(ipc.CodeBadArgs, "done takes a summary: {\"summary\": \"...\"}, the stretch in a sentence or two, what came of the plans said yes to before, and any plan Mikael stopped.")
+		return ipc.CouncilResult{}, ipc.Errorf(ipc.CodeBadArgs, "done takes a summary: {\"summary\": \"...\"}, the stretch in a sentence or two, what came of the plans said yes to before, and any plan "+brand.Mikael+" stopped.")
 	}
 	var cost *float64
 	c.mu.Lock()
@@ -571,7 +571,7 @@ func (c *Core) councilWord(peer int, l council.Council) error {
 	if !inAgent {
 		return nil
 	}
-	how := "with `" + brand.Slug + " ctl council yes N` or `no N --why …` in their own terminal, in the Arch Agents tab, or by telling Ragu in the council's card"
+	how := "with `" + brand.Slug + " ctl council yes N` or `no N --why …` in their own terminal, in the Arch Agents tab, or by telling " + brand.Ragu + " in the council's card"
 	if sess == "" || sess != l.Session {
 		return ipc.Errorf(ipc.CodeBadArgs, "An agent can't answer the council's plans: they are your user's to answer, %s.", how)
 	}
@@ -633,7 +633,7 @@ func (c *Core) councilYes(peer int, ns []int, ok bool) (ipc.CouncilResult, error
 	}
 	res := ipc.CouncilResult{}
 	for _, p := range plans {
-		task := strings.TrimSpace(p.Brief) + fmt.Sprintf("\n\n(This is plan %d of Raguel's council of %s, %q, which your user said yes to.)", p.N, l.Date, p.Title)
+		task := strings.TrimSpace(p.Brief) + fmt.Sprintf("\n\n(This is plan %d of "+brand.Raguel+"'s council of %s, %q, which your user said yes to.)", p.N, l.Date, p.Title)
 		s, err := c.spawn(ipc.SpawnArgs{Task: task, Repo: p.Where, Name: p.Title, Group: councilGroup}, true)
 		if err != nil {
 			var started []string
@@ -745,7 +745,7 @@ func (c *Core) raguelSweep() {
 func init() {
 	archTable["raguel"] = archEntry{
 		settings: []ipc.ArchSetting{
-			{Key: "arch.raguel.on", Kind: ipc.ArchBool, Label: "Ragu tallies your agents' work and holds a council", Help: "The tally is plain code and costs nothing. A council is one session that drafts plans to make your agents' work cheaper, quicker or surer, each waiting for your yes."},
+			{Key: "arch.raguel.on", Kind: ipc.ArchBool, Label: brand.Ragu + " tallies your agents' work and holds a council", Help: "The tally is plain code and costs nothing. A council is one session that drafts plans to make your agents' work cheaper, quicker or surer, each waiting for your yes."},
 			{Key: "arch.raguel.every", Kind: ipc.ArchDuration, Label: "Hold a council by himself every", Help: "0s for only when you ask. He waits for a quiet time: you away from the computer, and the week's use with room left."},
 			{Key: "arch.raguel.plans", Kind: ipc.ArchNumber, Label: "The most plans a council brings", Help: "From 1 to 10: fewer good plans beat more weak ones."},
 		},
@@ -785,7 +785,7 @@ func (c *Core) raguelNow() archNow {
 	}
 	if rep.On && !rep.Running {
 		n.actions = []ipc.ArchAction{{Label: "Hold a council now", Op: ipc.OpCouncil, Args: json.RawMessage(`{"do":"convene"}`), Ask: c.conveneAsk(),
-			Done: "Ragu is holding a council: his plans show here as he puts them in."}}
+			Done: brand.Ragu + " is holding a council: " + brand.His + " plans show here as " + brand.He + " puts them in."}}
 	}
 	if !rep.On {
 		return n
@@ -800,7 +800,7 @@ func (c *Core) raguelNow() archNow {
 			Level:  ipc.ArchNote,
 			Actions: []ipc.ArchAction{
 				{Label: "Yes", Op: ipc.OpCouncil, Args: yes, Ask: planAsk(p), Done: "It starts as a jot, in the group " + councilGroup + "."},
-				{Label: "No", Op: ipc.OpCouncil, Args: no, Done: "Ragu lets it go."},
+				{Label: "No", Op: ipc.OpCouncil, Args: no, Done: brand.Ragu + " lets it go."},
 			},
 		})
 	}

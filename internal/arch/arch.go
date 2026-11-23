@@ -37,7 +37,8 @@ var files embed.FS
 
 // Agent is one arch agent.
 type Agent struct {
-	Name        string   // such as mikael
+	Name        string   // such as mikael: its key, the same in every copy
+	Called      string   // its name as a person reads it, such as Mikael, a copy's own (brand.Arch)
 	Nickname    string   // what people may call him for short, such as Raffi; "" for none
 	Icon        string   // his mark, one or two emoji, which every client can draw
 	Rank        int      // the order arch agents come in, Mikael first
@@ -216,11 +217,14 @@ func loadAgent(fsys fs.FS, name string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	fields, _, body, err := frontmatter(brand.Text(string(data)))
+	fields, _, body, err := frontmatter(brand.Arch(string(data)))
 	if err != nil {
 		return Agent{}, err
 	}
-	a := Agent{Name: fields["name"], Nickname: fields["nickname"], Icon: fields["icon"], Title: fields["title"], Description: fields["description"], Color: fields["color"], Charge: body, Call: fields["call"] != "no"}
+	a := Agent{Name: fields["name"], Called: fields["called"], Nickname: fields["nickname"], Icon: fields["icon"], Title: fields["title"], Description: fields["description"], Color: fields["color"], Charge: body, Call: fields["call"] != "no"}
+	if a.Called == "" && a.Name != "" {
+		a.Called = strings.ToUpper(a.Name[:1]) + a.Name[1:]
+	}
 	switch {
 	case a.Name != name:
 		return Agent{}, fmt.Errorf("name %q must be the file's name, %q", a.Name, name)
@@ -240,12 +244,12 @@ func loadAgent(fsys fs.FS, name string) (Agent, error) {
 		}
 	}
 	if data, err := fs.ReadFile(fsys, "agents/"+name+".word.md"); err == nil {
-		if a.word, err = template.New(name + ".word.md").Option("missingkey=error").Parse(brand.Text(string(data))); err != nil {
+		if a.word, err = template.New(name + ".word.md").Option("missingkey=error").Parse(brand.Arch(string(data))); err != nil {
 			return Agent{}, err
 		}
 	}
 	if data, err := fs.ReadFile(fsys, "agents/"+name+".door.md"); err == nil {
-		fields, lists, body, err := frontmatter(brand.Text(string(data)))
+		fields, lists, body, err := frontmatter(brand.Arch(string(data)))
 		if err != nil {
 			return Agent{}, fmt.Errorf("%s.door.md: %w", name, err)
 		}

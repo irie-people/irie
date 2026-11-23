@@ -230,11 +230,18 @@ type Line struct {
 	// Searches are the request's web searches, which cost on top of its
 	// tokens (usage.server_tool_use.web_search_requests).
 	Searches int64
-	// Parts are the sub-inferences of the request that its top-level usage
-	// leaves out and usage.iterations holds, as a compaction's summary or
-	// the advisor tool's answer: every iteration but the reply's own
-	// ("message"), which the top level sums.
+	// Parts are the request's usage.iterations, each sub-inference or
+	// attempt with its tokens. The top level sums the reply's own
+	// ("message"), except after a server-side fallback, when it is the
+	// attempt that answered ("fallback_message") and each "message" is an
+	// attempt a model declined. A compaction's summary and the advisor
+	// tool's answer are only here.
 	Parts []Part
+	// Refused says the reply is a refusal (stop_reason "refusal"), and
+	// Refusal names its category, or that of the refusal a fallback block
+	// says the reply came after; "" for none or a null one.
+	Refused bool
+	Refusal string
 }
 
 // Part is one sub-inference of a request that its top-level usage leaves
@@ -266,10 +273,13 @@ func ParseLine(b []byte) (Line, bool) {
 		Sidechain bool   `json:"isSidechain"`
 		AgentID   string `json:"agentId"`
 		Message   struct {
-			ID         string `json:"id"`
-			Model      string `json:"model"`
-			StopReason string `json:"stop_reason"`
-			Usage      *struct {
+			ID          string `json:"id"`
+			Model       string `json:"model"`
+			StopReason  string `json:"stop_reason"`
+			StopDetails *struct {
+				Category *string `json:"category"`
+			} `json:"stop_details"`
+			Usage *struct {
 				Input         int64 `json:"input_tokens"`
 				Output        int64 `json:"output_tokens"`
 				CacheWrite    int64 `json:"cache_creation_input_tokens"`
@@ -329,7 +339,7 @@ func ParseLine(b []byte) (Line, bool) {
 		l.Searches = st.Searches
 	}
 	for _, it := range u.Iterations {
-		if it.Type == "message" || it.Type == "" {
+		if it.Type == "" {
 			continue
 		}
 		p := Part{Type: it.Type, Model: it.Model, Input: it.Input, Write: it.CacheWrite, Read: it.CacheRead, Output: it.Output}
@@ -338,7 +348,40 @@ func ParseLine(b []byte) (Line, bool) {
 		}
 		l.Parts = append(l.Parts, p)
 	}
+	l.Refused = rec.Message.StopReason == "refusal"
+	if sd := rec.Message.StopDetails; sd != nil && sd.Category != nil {
+		l.Refusal = *sd.Category
+	}
+	if l.Refusal == "" && bytes.Contains(b, []byte(`"fallback"`)) {
+		l.Refusal = fallbackCategory(b)
+	}
 	return l, true
+}
+
+// fallbackCategory is the category of the refusal a fallback block in a
+// reply line's content says it came after, as {"type": "fallback",
+// "trigger": {"type": "refusal", "category": "cyber"}}; "" for none. Only
+// a line that names a fallback is read again for it.
+func fallbackCategory(line []byte) string {
+	var rec struct {
+		Message struct {
+			Content []struct {
+				Type    string `json:"type"`
+				Trigger *struct {
+					Category *string `json:"category"`
+				} `json:"trigger"`
+			} `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &rec) != nil {
+		return ""
+	}
+	for _, b := range rec.Message.Content {
+		if b.Type == "fallback" && b.Trigger != nil && b.Trigger.Category != nil {
+			return *b.Trigger.Category
+		}
+	}
+	return ""
 }
 
 // Read takes a line of the transcript and reports whether it rebuilt its

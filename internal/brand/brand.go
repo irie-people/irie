@@ -66,6 +66,26 @@ const (
 	// that a company's VPN connects to, so its people set nothing. "" =
 	// none.
 	VPNServer = ""
+
+	// Mikael, Gabriel, Raphael and Raguel are the arch agents' names as a
+	// person reads them (DESIGN §4.11), and Raffi and Ragu are Raphael's and
+	// Raguel's short names.
+	// A company's copy may name them after the work they do, as
+	// tools/rebrand.sh does: Guard, Priority, Medic and Planner. Their keys
+	// stay Irie's in every copy: [arch.gabriel], `irie ctl raphael`, the
+	// mikael profile.
+	Mikael  = "Mikael"
+	Gabriel = "Gabriel"
+	Raphael = "Raphael"
+	Raffi   = "Raffi"
+	Raguel  = "Raguel"
+	Ragu    = "Ragu"
+	// He, Him and His are how the texts speak of an arch agent: he, him and
+	// his, she, her and her, or, in a copy whose agents are tools, it, it
+	// and its.
+	He  = "he"
+	Him = "him"
+	His = "his"
 )
 
 // MaxName is the most characters Name may have.
@@ -108,7 +128,72 @@ func exe(name, slug string) string {
 // (irie-phone) or a tmux option (@irie_role), and so does a link other than
 // the guide's, such as the source's on github.com. The texts keep Irie's
 // names in the source, so they read as they are.
-func Text(s string) string { return text(s, Name, Slug, EnvPrefix, Site) }
+func Text(s string) string { return words(text(s, Name, Slug, EnvPrefix, Site), archNames) }
+
+// Arch is one of the arch agents' own texts made this product's: Text, and
+// he, him, his and himself, which speak of the agent there, as He, Him
+// and His say.
+func Arch(s string) string {
+	return words(Text(s), pronouns(He, Him, His))
+}
+
+// archNames pairs each arch agent's name in Irie's texts with this
+// product's.
+var archNames = [][2]string{{"Mikael", Mikael}, {"Gabriel", Gabriel}, {"Raphael", Raphael}, {"Raffi", Raffi}, {"Raguel", Raguel}, {"Ragu", Ragu}}
+
+// pronouns pairs Irie's pronouns for an arch agent, with and without a
+// capital, with these.
+func pronouns(he, him, his string) [][2]string {
+	self := map[string]string{"he": "himself", "she": "herself", "it": "itself"}[he]
+	var out [][2]string
+	for _, p := range [][2]string{{"he", he}, {"him", him}, {"his", his}, {"himself", self}} {
+		out = append(out, p, [2]string{upper(p[0]), upper(p[1])})
+	}
+	return out
+}
+
+func upper(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// words puts each pair's second for its first wherever the first is a
+// word of its own in s, in one pass: not joined to a letter, digit or
+// underscore on either side, so Raffi's is renamed and irie-gabriel is
+// not.
+func words(s string, pairs [][2]string) string {
+	same := true
+	for _, p := range pairs {
+		same = same && p[0] == p[1]
+	}
+	if same {
+		return s
+	}
+	part := func(c byte) bool {
+		return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		done := false
+		if i == 0 || !part(s[i-1]) {
+			for _, p := range pairs {
+				if p[0] != p[1] && strings.HasPrefix(s[i:], p[0]) && (i+len(p[0]) == len(s) || !part(s[i+len(p[0])])) {
+					b.WriteString(p[1])
+					i += len(p[0])
+					done = true
+					break
+				}
+			}
+		}
+		if !done {
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
+}
 
 // guide is the guide's address as Irie's own texts have it.
 const guide = "https://irie-people.github.io/irie/"

@@ -27,7 +27,9 @@ var swiftAgents = []roots.Number{
 
 // Copies are Irie's files that keep some of the library's values, each
 // saying why. Go's own clients read the library itself (internal/ui,
-// internal/config).
+// internal/config). A plugin's copy joins them from a file of the
+// plugin's own, which a build without the plugin leaves out (DESIGN
+// §4.17), as extension.go does.
 var Copies = []roots.Copy{
 	{
 		Path:   "mac/Sources/Irie/Theme.swift",
@@ -79,11 +81,6 @@ var Copies = []roots.Copy{
 	{
 		Path:   "internal/remote/web/setup.html",
 		Why:    "The phone's setup page stands alone: it loads before the app and its scripts.",
-		Blocks: []string{"evergreen light", "evergreen dark"},
-	},
-	{
-		Path:   "internal/extension/web/panel.css",
-		Why:    "The browser extension's side panel loads nothing from elsewhere: its pages may run only their own files.",
 		Blocks: []string{"evergreen light", "evergreen dark"},
 	},
 	{

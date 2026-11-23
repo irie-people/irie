@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/irie-people/irie/internal/brand"
 	"os"
 	"slices"
 	"strings"
@@ -283,7 +284,7 @@ func TestABoostAfterAPIErrorsRanksWithTheRestOfTheFocus(t *testing.T) {
 	}
 	c.gab = gabState{holding: true}
 	if c.stepsBack("s-boost", nil) || !c.stepsBack("s-other", nil) {
-		t.Error("Gabriel holding back: the boosted session should stay out, the other step back")
+		t.Error(brand.Gabriel + " holding back: the boosted session should stay out, the other step back")
 	}
 	c.gab = gabState{holding: true, topBusy: true, top: map[string]bool{"s-top": true}}
 	if !c.stepsBack("s-boost", nil) {

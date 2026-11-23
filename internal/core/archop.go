@@ -40,7 +40,7 @@ type archEntry struct {
 var archTable = map[string]archEntry{
 	"mikael": {
 		settings: []ipc.ArchSetting{
-			{Key: "arch.mikael.on", Kind: ipc.ArchBool, Label: "Mikael goes with every session"},
+			{Key: "arch.mikael.on", Kind: ipc.ArchBool, Label: brand.Mikael + " goes with every session"},
 			{Key: "arch.mikael.door", Kind: ipc.ArchBool, Label: "He weighs calls that can’t be taken back", Help: "A small model weighs each such call in his name and stops one that would do evil, telling the agent why."},
 			{Key: "arch.mikael.good", Kind: ipc.ArchLines, Label: "The good you want to see in the world", Help: "In your own words: every agent he goes with hears them."},
 		},
@@ -48,7 +48,7 @@ var archTable = map[string]archEntry{
 	},
 	"gabriel": {
 		settings: []ipc.ArchSetting{
-			{Key: "arch.gabriel.on", Kind: ipc.ArchBool, Label: "Gabriel gives your focus the machine first"},
+			{Key: "arch.gabriel.on", Kind: ipc.ArchBool, Label: brand.Gabriel + " gives your focus the machine first"},
 			{Key: "arch.gabriel.outside", Kind: ipc.ArchBool, Label: "Slow your heavy apps outside " + brand.Name + " too"},
 			{Key: "arch.gabriel.away", Kind: ipc.ArchDuration, Label: "You’re away after", Help: "With no keyboard or mouse this long, nothing is held back."},
 			{Key: "arch.gabriel.word", Kind: ipc.ArchDuration, Label: "A session you message stays in your focus for"},
@@ -56,17 +56,17 @@ var archTable = map[string]archEntry{
 			{Key: "arch.gabriel.boost", Kind: ipc.ArchDuration, Label: "A boost lasts", Help: "Your focus first at once, busy or not; it changes only what runs first, never a clock or a fan."},
 			{Key: "arch.gabriel.always", Kind: ipc.ArchBool, Label: "Always boost while you’re at the computer", Help: "A boost that never ends. The rest runs on the efficiency cores even when there is room to spare, so it finishes later; nothing is held back while you’re away."},
 			{Key: "arch.gabriel.heavy", Kind: ipc.ArchNumber, Label: "Heavy from (percent of a CPU)", Help: "An app outside " + brand.Name + " this busy is slowed. The tab you’re on this busy has every other session but an install step back for it, the rest of your focus too."},
-			{Key: "arch.gabriel.spare", Kind: ipc.ArchLines, Label: "Apps Gabriel never slows", Help: "Calls, music, video and recording; an app that plays sound or holds a call is spared too."},
+			{Key: "arch.gabriel.spare", Kind: ipc.ArchLines, Label: "Apps " + brand.Gabriel + " never slows", Help: "Calls, music, video and recording; an app that plays sound or holds a call is spared too."},
 		},
 		now: (*Core).gabrielNow,
 	},
 	"raphael": {
 		settings: []ipc.ArchSetting{
-			{Key: "arch.raphael.on", Kind: ipc.ArchBool, Label: "Raffi restarts what stops answering, and looks over your Mac", Help: "Agents keep running through every restart. He fixes a thing only once you say OK to what he will run."},
+			{Key: "arch.raphael.on", Kind: ipc.ArchBool, Label: brand.Raffi + " restarts what stops answering, and looks over your Mac", Help: "Agents keep running through every restart. " + brand.Raffi + " fixes a thing only once you say OK to what " + brand.He + " will run."},
 			{Key: "ui.freeze_dog", Kind: ipc.ArchDuration, Label: "Restart the Mac app when it has not answered for", Help: "0s for never; a sidebar gets a minute at least. A report of where it was stuck goes in the freezes folder beside core.log."},
 			{Key: "arch.raphael.core", Kind: ipc.ArchDuration, Label: "Restart the core when its loop has stood still for", Help: "0s for never. Its supervisor starts it again at once."},
-			{Key: "arch.raphael.every", Kind: ipc.ArchDuration, Label: "Look over your Mac every", Help: "0s for only when you ask. He looks in the background, so your work comes first."},
-			{Key: "arch.raphael.known", Kind: ipc.ArchLines, Label: "Startup items you know", Help: "By label, plist or program: Raffi no longer flags them. It's mine adds one."},
+			{Key: "arch.raphael.every", Kind: ipc.ArchDuration, Label: "Look over your Mac every", Help: "0s for only when you ask. " + brand.Raffi + " looks in the background, so your work comes first."},
+			{Key: "arch.raphael.known", Kind: ipc.ArchLines, Label: "Startup items you know", Help: "By label, plist or program: " + brand.Raffi + " no longer flags them. It's mine adds one."},
 			{Key: "arch.raphael.rest", Kind: ipc.ArchBool, Label: "Rest idle cards while memory is short", Help: "Their agents end and the cards stay, conversation and all. Opening one, or a message to it, starts its agent again."},
 		},
 		now: (*Core).raphaelNow,
@@ -78,7 +78,7 @@ func (c *Core) archList() ipc.ArchResult {
 	tree := config.Tree(*c.cfg())
 	r := ipc.ArchResult{Agents: []ipc.ArchAgent{}}
 	for _, a := range arch.All() {
-		ag := ipc.ArchAgent{Name: a.Name, Nickname: a.Nickname, Icon: a.Icon, Title: a.Title, About: a.Description}
+		ag := ipc.ArchAgent{Name: a.Name, Called: a.Called, Nickname: a.Nickname, Icon: a.Icon, Title: a.Title, About: a.Description}
 		if e, ok := archTable[a.Name]; ok {
 			n := e.now(c)
 			ag.On, ag.Status, ag.Actions, ag.Items = n.on, n.status, n.actions, n.items
@@ -122,8 +122,8 @@ func (c *Core) mikaelNow() archNow {
 	}
 	// Talking with him starts a session that runs as him (+mikael).
 	if _, ok := c.cfg().Profiles["mikael"]; ok {
-		args, _ := json.Marshal(ipc.SpawnArgs{Task: "Hello, Mikael. Say who you are in a line, and ask what I would like your help with.", Profile: "mikael", Name: "mikael"})
-		n.actions = append(n.actions, ipc.ArchAction{Label: "Talk with Mikael", Op: ipc.OpSpawn, Args: args, Done: "Mikael is starting in a session of his own."})
+		args, _ := json.Marshal(ipc.SpawnArgs{Task: "Hello, " + brand.Mikael + ". Say who you are in a line, and ask what I would like your help with.", Profile: "mikael", Name: "mikael"})
+		n.actions = append(n.actions, ipc.ArchAction{Label: "Talk with " + brand.Mikael, Op: ipc.OpSpawn, Args: args, Done: brand.Mikael + " is starting in a session of " + brand.His + " own."})
 	}
 	return n
 }

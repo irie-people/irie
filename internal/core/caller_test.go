@@ -45,17 +45,49 @@ func TestAnAgentCannotTurnAPluginOn(t *testing.T) {
 		_, err = c.CallFrom(peer, ipc.OpPlugins, raw)
 		return err
 	}
-	if err := plugin(os.Getpid(), "markets", true); err == nil || !strings.Contains(err.Error(), "An agent can't turn a plugin on") {
-		t.Errorf("on, from an agent: %v", err)
+	// One of the plugins this build has: markets where it is built, which
+	// starts off, or else another that drives nothing outside, so that a
+	// copy that leaves plugins out checks the same. Never the VPN.
+	isOn := func(name string) (on, found bool) {
+		t.Helper()
+		r, err := c.pluginsOp(ipc.PluginsArgs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range r.Plugins {
+			if p.Name == name {
+				return p.On, true
+			}
+		}
+		return false, false
 	}
-	if c.cfg().Plugins.Markets {
-		t.Error("the agent turned markets on")
+	name := ""
+	for _, n := range []string{"markets", "obsidian", "chat", "bitwarden"} {
+		if _, ok := isOn(n); ok {
+			name = n
+			break
+		}
 	}
-	if err := plugin(0, "markets", true); err != nil || !c.cfg().Plugins.Markets {
-		t.Errorf("on, from the person: %v", err)
-	}
-	if err := plugin(os.Getpid(), "markets", false); err != nil || c.cfg().Plugins.Markets {
-		t.Errorf("off, from an agent: %v", err)
+	if name != "" {
+		if err := plugin(0, name, false); err != nil {
+			t.Fatalf("%s off, from the person: %v", name, err)
+		}
+		if err := plugin(os.Getpid(), name, true); err == nil || !strings.Contains(err.Error(), "An agent can't turn a plugin on") {
+			t.Errorf("%s on, from an agent: %v", name, err)
+		}
+		if on, _ := isOn(name); on {
+			t.Errorf("the agent turned %s on", name)
+		}
+		if err := plugin(0, name, true); err != nil {
+			t.Errorf("%s on, from the person: %v", name, err)
+		} else if on, _ := isOn(name); !on {
+			t.Errorf("the person turned %s on, and it is off", name)
+		}
+		if err := plugin(os.Getpid(), name, false); err != nil {
+			t.Errorf("%s off, from an agent: %v", name, err)
+		} else if on, _ := isOn(name); on {
+			t.Errorf("an agent turned %s off, and it is on", name)
+		}
 	}
 	set := func(peer int, key string, value bool) error {
 		v, _ := json.Marshal(value)

@@ -183,7 +183,7 @@ func TestRaphaelsArchRow(t *testing.T) {
 			row = a
 		}
 	}
-	if row.Nickname != "Raffi" || row.Icon != "❤️‍🩹" || !row.On || !strings.Contains(row.Status, "2 are worth a look") && !strings.Contains(row.Status, "2 things are worth a look") {
+	if row.Nickname != brand.Raffi || row.Icon != "❤️‍🩹" || !row.On || !strings.Contains(row.Status, "2 are worth a look") && !strings.Contains(row.Status, "2 things are worth a look") {
 		t.Fatalf("row = %+v", row)
 	}
 	// His look, then a draft of lessons from what agents failed at (lessons.go).
@@ -408,6 +408,6 @@ func TestRaphaelOffRestartsNothing(t *testing.T) {
 		c.lookAtWindows(t0.Add(time.Duration(i) * time.Second))
 	}
 	if restarting(c) != 0 {
-		t.Error("restarting with Raphael off")
+		t.Error("restarting with " + brand.Raphael + " off")
 	}
 }

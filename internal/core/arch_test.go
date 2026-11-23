@@ -40,7 +40,7 @@ func TestArchForFollowsTheConfig(t *testing.T) {
 		{"every session", claude, "claude-code", harness.Arch{With: []string{"mikael"}, Good: cfg.Arch.Mikael.Good, Door: true}},
 		// The small model that would weigh its calls is the local one.
 		{"a local model", local, "claude-code", harness.Arch{With: []string{"mikael"}, Good: cfg.Arch.Mikael.Good}},
-		{"Mikael himself", mikael, "claude-code", harness.Arch{With: []string{"mikael"}, As: "mikael", Good: cfg.Arch.Mikael.Good}},
+		{brand.Mikael + " himself", mikael, "claude-code", harness.Arch{With: []string{"mikael"}, As: "mikael", Good: cfg.Arch.Mikael.Good}},
 		{"another harness", claude, "generic", harness.Arch{}},
 	} {
 		if got := c.archFor(tc.p, tc.harness); !reflect.DeepEqual(got, tc.want) {
@@ -55,11 +55,11 @@ func TestArchForFollowsTheConfig(t *testing.T) {
 	cfg.Arch.Mikael.On = false
 	c.useConfig(cfg)
 	if got := c.archFor(claude, "claude-code"); len(got.With) != 0 || got.Door {
-		t.Errorf("Mikael off: %+v", got)
+		t.Errorf(brand.Mikael+" off: %+v", got)
 	}
 	// Off, he still answers a session started to talk to him.
 	if got := c.archFor(mikael, "claude-code"); got.As != "mikael" || len(got.With) != 0 {
-		t.Errorf("Mikael off, +mikael: %+v", got)
+		t.Errorf(brand.Mikael+" off, +mikael: %+v", got)
 	}
 	// Gabriel goes with every session where he can work.
 	t.Setenv(brand.Env("GABRIEL"), "")
@@ -67,12 +67,12 @@ func TestArchForFollowsTheConfig(t *testing.T) {
 	c.useConfig(cfg)
 	got := c.archFor(claude, "claude-code")
 	if want := []string{"mikael", "gabriel"}; proc.CanBackground && !slices.Equal(got.With, want) {
-		t.Errorf("with Gabriel: %v, want %v", got.With, want)
+		t.Errorf("with "+brand.Gabriel+": %v, want %v", got.With, want)
 	}
 	cfg.Arch.Gabriel.On = false
 	c.useConfig(cfg)
 	if got := c.archFor(claude, "claude-code"); slices.Contains(got.With, "gabriel") {
-		t.Errorf("Gabriel off: %v", got.With)
+		t.Errorf(brand.Gabriel+" off: %v", got.With)
 	}
 }
 
@@ -93,18 +93,18 @@ func TestArchWordGoesToSessionsAndSubagentsThatStart(t *testing.T) {
 	}
 	took("s1", harness.Arch{With: []string{"mikael"}, OnCall: true, Door: true, Good: []string{"Be honest with clients."}})
 	w := c.archWord("s1", start)
-	for _, want := range []string{"[" + brand.Name + "] Mikael, the first of " + brand.Name + "'s arch agents, is with you", "ask the mikael agent", "never work around him", "- Be honest with clients."} {
+	for _, want := range []string{"[" + brand.Name + "] " + brand.Mikael + ", the first of " + brand.Name + "'s arch agents, is with you", "ask the mikael agent", "never work around " + brand.Him, "- Be honest with clients."} {
 		if !strings.Contains(w, want) {
 			t.Errorf("the word to a session does not say %q:\n%s", want, w)
 		}
 	}
 	// A subagent hears it too, but cannot call on him.
-	if w := c.archWord("s1", sub("Explore")); !strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") || strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "never work around him") {
+	if w := c.archWord("s1", sub("Explore")); !strings.Contains(w, brand.Mikael+", the first of "+brand.Name+"'s arch agents, is with you") || strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "never work around "+brand.Him) {
 		t.Errorf("the word to a subagent:\n%s", w)
 	}
 	// Mikael called as a subagent hears nothing from himself.
 	if w := c.archWord("s1", sub("mikael")); w != "" {
-		t.Errorf("Mikael heard his own word: %q", w)
+		t.Errorf(brand.Mikael+" heard his own word: %q", w)
 	}
 	// Nor does a session that runs as him.
 	took("s2", harness.Arch{With: []string{"mikael"}, As: "mikael", OnCall: true})
@@ -113,7 +113,7 @@ func TestArchWordGoesToSessionsAndSubagentsThatStart(t *testing.T) {
 	}
 	// A session that took no door is not told of one.
 	took("s3", harness.Arch{With: []string{"mikael"}, OnCall: true})
-	if w := c.archWord("s3", start); strings.Contains(w, "never work around him") || !strings.Contains(w, "ask the mikael agent") {
+	if w := c.archWord("s3", start); strings.Contains(w, "never work around "+brand.Him) || !strings.Contains(w, "ask the mikael agent") {
 		t.Errorf("no door:\n%s", w)
 	}
 	// Other events, and sessions that took nothing, hear nothing.
@@ -203,10 +203,10 @@ arch = "mikael"
 	}
 
 	// The session and its subagent hear his word as they start.
-	if w := hookStdout(c, s.ID, "SessionStart"); !strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") || !strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "Give credit where it is due.") {
+	if w := hookStdout(c, s.ID, "SessionStart"); !strings.Contains(w, brand.Mikael+", the first of "+brand.Name+"'s arch agents, is with you") || !strings.Contains(w, "ask the mikael agent") || !strings.Contains(w, "Give credit where it is due.") {
 		t.Errorf("SessionStart answered %q", w)
 	}
-	if w := hookStdout(c, s.ID, "SubagentStart"); !strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") || strings.Contains(w, "ask the mikael agent") {
+	if w := hookStdout(c, s.ID, "SubagentStart"); !strings.Contains(w, brand.Mikael+", the first of "+brand.Name+"'s arch agents, is with you") || strings.Contains(w, "ask the mikael agent") {
 		t.Errorf("SubagentStart answered %q", w)
 	}
 
@@ -218,8 +218,8 @@ arch = "mikael"
 	if i := slices.Index(spec.Argv, "--agent"); i < 0 || i+1 >= len(spec.Argv) || spec.Argv[i+1] != "mikael" {
 		t.Errorf("+helper argv = %q", spec.Argv)
 	}
-	if w := hookStdout(c, helper.ID, "SessionStart"); strings.Contains(w, "Mikael, the first of "+brand.Name+"'s arch agents, is with you") {
-		t.Errorf("+helper heard Mikael's word: %q", w)
+	if w := hookStdout(c, helper.ID, "SessionStart"); strings.Contains(w, brand.Mikael+", the first of "+brand.Name+"'s arch agents, is with you") {
+		t.Errorf("+helper heard "+brand.Mikael+"'s word: %q", w)
 	}
 	if d := settingsDoors(t, c, helper.ID); len(d) != 0 {
 		t.Errorf("+helper has %d doors", len(d))
@@ -241,9 +241,9 @@ func TestMikaelOffLeavesSessionsAsTheyWere(t *testing.T) {
 		t.Errorf("%d doors", len(d))
 	}
 	if _, err := os.Stat(filepath.Join(c.paths.Session(s.ID), harness.ArchFile)); err == nil {
-		t.Error("an arch file with Mikael off")
+		t.Error("an arch file with " + brand.Mikael + " off")
 	}
-	if w := hookStdout(c, s.ID, "SessionStart"); strings.Contains(w, "Mikael") {
+	if w := hookStdout(c, s.ID, "SessionStart"); strings.Contains(w, brand.Mikael) {
 		t.Errorf("SessionStart answered %q", w)
 	}
 }
