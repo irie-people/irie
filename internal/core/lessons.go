@@ -27,6 +27,7 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/lessons"
 	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/sysload"
 )
 
 // lessonsState is the user's lessons. It has a lock of its own, taken
@@ -312,9 +313,10 @@ func (c *Core) draftLessons(days int, model string, journalOnly bool, asked stri
 }
 
 // modelRoom says whether the local model m may be loaded now to draft:
-// it is loaded already, or the memory free now holds it with room to spare
-// and the disk has room for swap (localmodel.RoomToLoad). A 9B model loaded
-// into a laptop short of both brought it down with a kernel panic, every
+// it is loaded already, or the disk is above the floor that leaves the
+// swap room to grow (sysload.Room) and the memory free now holds the
+// model with room to spare (localmodel.RoomToLoad). A 9B model loaded into
+// a laptop short of both brought it down with a kernel panic, every
 // session with it.
 func modelRoom(ctx context.Context, m localmodel.ChatModel) error {
 	o := localmodel.Ollama{URL: m.URL}
@@ -323,6 +325,11 @@ func modelRoom(ctx context.Context, m localmodel.ChatModel) error {
 			if localmodel.SameModel(l.Name, m.Name) {
 				return nil
 			}
+		}
+	}
+	if r, err := sysload.ReadRoom(); err == nil {
+		if why := r.HeavyWaits(); why != "" {
+			return fmt.Errorf("%s, so %s was not loaded", why, m.Name)
 		}
 	}
 	models, err := o.Models(ctx)
@@ -343,12 +350,7 @@ func modelRoom(ctx context.Context, m localmodel.ChatModel) error {
 	if err != nil {
 		return err
 	}
-	home, _ := os.UserHomeDir()
-	free, err := localmodel.FreeDisk(home)
-	if err != nil {
-		return err
-	}
-	if err := localmodel.RoomToLoad(localmodel.Estimate(size, info, lessons.Context, "f16", 1), mac, free); err != nil {
+	if err := localmodel.RoomToLoad(localmodel.Estimate(size, info, lessons.Context, "f16", 1), mac); err != nil {
 		return fmt.Errorf("%w, so %s was not loaded: draft again once there is room", err, m.Name)
 	}
 	return nil
