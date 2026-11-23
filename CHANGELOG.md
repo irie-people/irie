@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.1](https://github.com/irie-people/irie/compare/v1.10.0...v1.10.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **check:** let a pruned copy's docs name the plugins it took out ([3cc9d3b](https://github.com/irie-people/irie/commit/3cc9d3bff6596737939ce6f45d1bdd8ecb7b8508))
+* **ipc:** keep the lessons' code out of the wire types, so Irie for Windows builds again ([ab74b82](https://github.com/irie-people/irie/commit/ab74b82698214f1f772bceecebce3e2cdc796880))
+
 ## [1.10.0](https://github.com/irie-people/irie/compare/v1.9.1...v1.10.0) (2026-11-23)
 
 
