@@ -19,6 +19,11 @@ type Want struct {
 	Budget     int64  // the most local models may take
 	Machine    Machine
 	Force      bool // load the model even when it does not fit the memory now
+	// Waits is why no model may be loaded now whatever its size, as the
+	// disk under the floor that leaves the swap room to grow
+	// (sysload.Room.HeavyWaits); "" when one may. Force does not override
+	// it: a machine whose swap cannot grow can panic.
+	Waits string
 }
 
 // Check is a model checked before an agent is spawned on it (DESIGN §6.1).
@@ -113,6 +118,10 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 		}
 		need := Estimate(m.Size, info, ctxLen, w.KVCache, w.Parallel)
 		c.Need = need.Total
+		if w.Waits != "" {
+			problem("%s, so %s was not loaded", w.Waits, model)
+			return c
+		}
 		short := false
 		if w.Budget > 0 && need.Total > w.Budget {
 			short = true

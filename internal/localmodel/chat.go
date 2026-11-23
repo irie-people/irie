@@ -40,6 +40,11 @@ func (m ChatModel) Thinks() bool { return m.think }
 // ErrNoChatModel says no local model is here to chat with.
 var ErrNoChatModel = errors.New("no local model here to word answers")
 
+// ErrOffHere says no model may be loaded on this computer: its config's
+// local.here is false (DESIGN §6.3), which leaves a side task no server
+// to chat on unless local.url names another computer's.
+var ErrOffHere = errors.New("local models are off on this computer (local.here = false)")
+
 // maxChatModelGB is the most a model found by FindChatModel takes on disk:
 // one bigger takes the memory the person's own work needs.
 const maxChatModelGB = 10
@@ -47,8 +52,36 @@ const maxChatModelGB = 10
 // FindChatModel finds a local model to chat with: want, by its name, on
 // the first of the servers at urls that has it, else the best model for
 // chat that the first server to answer has. A cloud model is never one: it
-// runs on someone else's computer, at a price.
+// runs on someone else's computer, at a price. The model goes to a server
+// that has it loaded already, if one has, so that it is never loaded twice,
+// on Irie's own Ollama and on the user's, which share their models. No
+// urls is ErrOffHere's case.
 func FindChatModel(ctx context.Context, urls []string, want string) (ChatModel, error) {
+	if len(urls) == 0 {
+		return ChatModel{}, fmt.Errorf("%w: %w", ErrNoChatModel, ErrOffHere)
+	}
+	m, err := findChatModel(ctx, urls, want)
+	if err != nil || len(urls) < 2 || loadedOn(ctx, m.URL, m.Name) {
+		return m, err
+	}
+	for _, u := range urls {
+		if u != m.URL && loadedOn(ctx, u, m.Name) {
+			m.URL = u
+			break
+		}
+	}
+	return m, nil
+}
+
+// loadedOn says the Ollama server at url has model loaded now.
+func loadedOn(ctx context.Context, url, model string) bool {
+	c, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ls, err := Ollama{URL: url}.Running(c)
+	return err == nil && slices.ContainsFunc(ls, func(l Loaded) bool { return SameModel(l.Name, model) })
+}
+
+func findChatModel(ctx context.Context, urls []string, want string) (ChatModel, error) {
 	var tried []string
 	for _, u := range urls {
 		o := Ollama{URL: u}

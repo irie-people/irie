@@ -314,6 +314,9 @@ func NewEnv(t *testing.T) *Env {
 	// pass or fail with what the user's other programs take. It sees a
 	// machine with room for the fake models (IRIE_FAKE_MEMORY, in GiB).
 	t.Setenv("IRIE_FAKE_MEMORY", "64/48")
+	// Nor its free disk, for the floor under which no model loads
+	// (IRIE_FAKE_DISK, free and total in GiB).
+	t.Setenv("IRIE_FAKE_DISK", "500/1000")
 	for _, k := range []string{"TMUX", "TMUX_PANE", brand.Env("BIN")} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)

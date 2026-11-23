@@ -107,7 +107,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30, Close: true}); c.Bench != want {
 		t.Errorf("bench = %+v, want %+v", c.Bench, want)
 	}
-	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
+	if want := (Local{Here: true, Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
 	if want := (Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4}); c.Usage != want {
@@ -228,6 +228,7 @@ model = "qwen3.5:4b"
 local = { runtime = "ollama", min_context = 32768, enforce = false }
 
 [local]
+here = false
 ollama = "/home/alice/bin/ollama"
 port = 11500
 context = 131072

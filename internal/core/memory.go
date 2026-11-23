@@ -92,6 +92,7 @@ func (c *Core) sample() {
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()
+	c.easeModels() // what Irie's own model servers hold for nobody goes (localhere.go)
 }
 
 // treeUse is what a process tree takes of the machine.
