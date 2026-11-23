@@ -4,10 +4,11 @@ package core
 // a time, like a browser's spaces, each with its own Pinned and Parked.
 // Every session is in one: the first, unless you put it in another, or it
 // was started from a session in another. The spaces live in the
-// @irie_spaces option of the agents' session, as JSON, in their order; a
+// @irie_spaces option of the agents' session, as JSON, in their order,
+// with a copy in the state folder for a new tmux server (layout.go); a
 // session's space is in the journal (ui.spaced), as its park is, so a
 // restarted core keeps both, and a closed session keeps its space for its
-// reopen. A session whose space is gone is in the first. Moving sessions
+// reopen, a lost one too. A session whose space is gone is in the first. Moving sessions
 // to another space is one step of the history; making, renaming, moving
 // and removing a space are not.
 
@@ -37,8 +38,8 @@ const maxSpaceName = 40
 // loadSpaces reads the spaces a previous core kept.
 func (c *Core) loadSpaces() {
 	c.spaces = []ipc.Space{firstSpace}
-	out, err := c.tmux.Run("show-options", "-qv", "-t", agentsTarget, optSpaces)
-	if err != nil || strings.TrimSpace(out) == "" {
+	out, err := c.layoutOption(optSpaces)
+	if err != nil || out == "" {
 		return
 	}
 	var saved []ipc.Space
@@ -52,10 +53,11 @@ func (c *Core) loadSpaces() {
 	}
 }
 
-// saveSpaces keeps the spaces in tmux. The caller holds c.mu.
+// saveSpaces keeps the spaces in tmux and the layout's copy (layout.go).
+// The caller holds c.mu.
 func (c *Core) saveSpaces() {
 	b, _ := json.Marshal(c.spaces)
-	if _, err := c.tmux.Run("set-option", "-t", agentsTarget, optSpaces, string(b)); err != nil {
+	if err := c.setLayoutOption(optSpaces, string(b)); err != nil {
 		c.log.Warn("spaces", "err", err)
 	}
 }

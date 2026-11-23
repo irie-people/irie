@@ -51,6 +51,10 @@ func FindGroup(groups []Group, ref string) int { return ipc.FindGroup(groups, re
 // GroupWords are the names a path such as "Work / Irie" holds.
 func GroupWords(path string) []string { return ipc.GroupWords(path) }
 
+// FindSpace is where among spaces the space ref names is, by id or by name
+// in any case, as the core finds it; -1 when none has it.
+func FindSpace(spaces []Space, ref string) int { return ipc.FindSpace(spaces, ref) }
+
 // ReachOf is where op's effect goes (DESIGN §4.5, "Inside and outside"):
 // a read, inside Irie, which undo takes back and so never asks, inside
 // with outside effects, or outside, which the person confirms and Mikael
