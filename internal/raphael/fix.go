@@ -285,7 +285,7 @@ func doStopTree(ctx context.Context, f Fix) (string, error) {
 	if left, err := waitStopped(ctx, []proc.Proc{root}); err != nil {
 		return "", err
 	} else if len(left) > 0 {
-		return fmt.Sprintf("Asked %s (pid %d) to stop, but it still runs: it may be stuck, so Raffi left what it runs be. `kill -9 %d` makes it stop at once, losing what it was doing.", f.path, f.pid, f.pid), nil
+		return fmt.Sprintf("Asked %s (pid %d) to stop, but it still runs: it may be stuck, so "+brand.Raffi+" left what it runs be. `kill -9 %d` makes it stop at once, losing what it was doing.", f.path, f.pid, f.pid), nil
 	}
 	if len(kids) == 0 {
 		return fmt.Sprintf("Stopped %s (pid %d).", f.path, f.pid), nil
