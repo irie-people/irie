@@ -164,7 +164,11 @@ jobs:
       matrix:
         # This checkout's irie inside Linux, and 1.5.0's, the first with irie bridge: the
         # Windows installer updates the app but not Irie inside Linux, which can be older.
-        linux: [this, '1.5.0']
+        # And Linux run as root, as when Ubuntu's first start is closed before it makes a user.
+        include:
+          - { linux: this, user: alice }
+          - { linux: '1.5.0', user: alice }
+          - { linux: this, user: root }
     env:
       WSL_UTF8: '1'
     defaults:
@@ -176,6 +180,8 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - name: Ubuntu in WSL 2, with a user of its own
+        env:
+          AS: ${{ matrix.user }}
         run: |
           # Linux runs a script in Ubuntu, sent as base64 so that no quoting goes through wsl.exe,
           # and gives what it wrote; Note posts text as the run's notice.
@@ -195,17 +201,22 @@ jobs:
           wsl.exe --version
           wsl.exe --install -d Ubuntu --no-launch --web-download
           if ($LASTEXITCODE -ne 0) { throw "wsl --install exited $LASTEXITCODE" }
-          # As Ubuntu's first start makes one: uid 1000 with sudo, here with no password to type.
-          $out = Linux -user root @'
+          # As Ubuntu's first start makes one: uid 1000 with sudo, here with no password to type;
+          # or none, and Linux runs as root.
+          $out = Linux -user root (@'
           set -eu
-          name=$(getent passwd 1000 | cut -d: -f1)
-          if [ -z "$name" ]; then name=alice; useradd -m -s /bin/bash -u 1000 -G sudo "$name"; fi
-          echo "$name ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-"$name"
-          printf '\n[user]\ndefault=%s\n' "$name" >> /etc/wsl.conf
+          if [ '@AS@' = root ]; then
+            printf '\n[user]\ndefault=root\n' >> /etc/wsl.conf
+          else
+            name=$(getent passwd 1000 | cut -d: -f1)
+            if [ -z "$name" ]; then name=alice; useradd -m -s /bin/bash -u 1000 -G sudo "$name"; fi
+            echo "$name ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-"$name"
+            printf '\n[user]\ndefault=%s\n' "$name" >> /etc/wsl.conf
+          fi
           head -2 /etc/os-release
           if command -v tmux >/dev/null; then tmux -V; else echo 'no tmux'; fi
           for c in curl wget git; do command -v $c >/dev/null || echo "no $c"; done
-          '@ | Out-String
+          '@).Replace('@AS@', $env:AS) | Out-String
           $code = $LASTEXITCODE
           $out
           if ($code -ne 0) { Note 'Ubuntu user' $out; throw "making Ubuntu's user failed" }
@@ -285,6 +296,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: irie-for-windows-on-wsl-${{ matrix.linux }}
+          name: irie-for-windows-on-wsl-${{ matrix.linux }}-${{ matrix.user }}
           path: ${{ runner.temp }}/wsl-shots
           if-no-files-found: ignore
