@@ -149,6 +149,8 @@ type Core struct {
 	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
 	zen        zenState              // your zen, and zen as the app shows it (zen.go)
 	closes     closes                // closed sessions, and agents still ending (close.go)
+	rest       restState             // rests under way, and whether memory is short (rest.go)
+	room       sysload.Room          // the swap's room on disk, last read (memory.go)
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
 	chain      orgChain              // the sidebar's chain, the organisation's versions (chain.go); a lock of its own, taken after mu
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
@@ -960,7 +962,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpFind, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpUnlanded, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
-			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
+			ipc.OpFreeze, ipc.OpThaw, ipc.OpRest, ipc.OpWake, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpCosts, ipc.OpNotepad,
@@ -1493,6 +1495,11 @@ func (c *Core) show(a ipc.ShowArgs) error {
 	// While Gabriel holds back, the session now on show comes out of the
 	// background before this returns (gabriel.go).
 	c.refocus()
+	// A resting session you open starts its agent again (rest.go); one
+	// that rests frozen waits for its thaw.
+	if rests, frozen := c.resting(a.Session); err == nil && rests && !frozen {
+		c.wakeLater(a.Session, "shown")
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

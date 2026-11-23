@@ -430,6 +430,9 @@ type job struct {
 	// unattended is a session no one watches, such as a bench's run: what
 	// would wait on a permission prompt is refused (DESIGN §6.6).
 	unattended bool
+	// rest brings a reopened session back resting: its pane runs no agent
+	// until a wake (rest.go).
+	rest bool
 }
 
 // launch writes the session's files, creates its window and records the
@@ -469,118 +472,15 @@ func (c *Core) launch(j job) (*session, error) {
 		tally: tokenTally{since: created},
 	}
 
-	dir := c.paths.Session(id)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(c.paths.Session(id), 0o700); err != nil {
 		return nil, err
 	}
 	// A reopened session starts unfrozen (freeze.go), with no jots
 	// waiting for it from before it closed (follow.go).
 	os.Remove(c.paths.FreezeFile(id))
 	os.Remove(c.paths.FollowUpFile(id))
-	// Nor with what the arch agents brought it then (arch.go).
-	os.Remove(filepath.Join(dir, harness.ArchFile))
-	// Nor with the MCP servers it had then.
-	os.Remove(filepath.Join(dir, harness.MCPFile))
-	s := harness.Spawn{
-		Session: id, Task: j.task, Next: j.next, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
-		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
-		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
-		Arch:  c.archFor(profile, h.ID()),
-		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual, Tile: c.cfg().Learn.Pictures == config.PicturesTile,
-		Unattended: j.unattended,
-	}
-	// Irie's tips go under the agent's spinner, where its harness has one
-	// (docs/proposals/learning.md).
-	if c.cfg().Learn.AgentTips {
-		s.Tips = learn.Get().Tips
-	}
-	// Only the user's name goes to the agent: Claude Code titles a session
-	// it gets no name for, and the row follows the title (title.go).
-	if x.named {
-		s.Name = x.name
-	}
-	// Agent teams need the session's anchor on the team server first; a
-	// session whose anchor cannot be made starts without them.
-	var anchor teamAnchor
-	if c.teams(h.ID()) && j.anon == nil {
-		a, err := c.anchor(id)
-		if err != nil {
-			c.log.Warn("teams", "session", id, "err", err)
-		} else {
-			anchor, s.Teams = a, true
-		}
-	}
-	// Irie's skills, for a harness that loads them as a plugin.
-	if j.probe.Flags["--plugin-dir"] {
-		s.PluginDir = c.skillsFolder(profile, x)
-	}
-	// An anonymous session's servers and shut paths (DESIGN §4.16); else
-	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.15).
-	if j.anon != nil {
-		if h.ID() != "claude-code" {
-			return nil, fmt.Errorf("anonymous research runs only on Claude Code, which can shut its paths; +%s runs on %s", j.profile, h.ID())
-		}
-		if err := c.anonLaunch(&s, x, *j.anon); err != nil {
-			return nil, err
-		}
-	} else if j.probe.Flags["--mcp-config"] {
-		if mcp, warn := c.browserMCP(id); warn != "" {
-			x.warnings = append(x.warnings, warn)
-		} else if mcp != nil {
-			s.MCP = mcp
-		}
-		// A writing session's own way to Variorum (docs/proposals/writers.md).
-		for name, srv := range c.variorumMCP(x.cwd) {
-			if s.MCP == nil {
-				s.MCP = map[string]harness.MCPServer{}
-			}
-			s.MCP[name] = srv
-		}
-		// Your plugins' tools, after Irie's own (DESIGN §4.17).
-		s.MCP = c.ownToolsMCP(x, s.MCP)
-	}
-	launch := h.Launch
-	if j.resume != "" {
-		r, ok := h.(harness.Resumer)
-		if !ok {
-			return nil, fmt.Errorf("%s cannot carry a conversation on", h.ID())
-		}
-		launch = r.Resume
-	}
-	argv, env, files, err := launch(profile, s)
+	s, argv, files, spec, err := c.prepareRun(j, x, profile, h)
 	if err != nil {
-		return nil, err
-	}
-	for f, b := range files {
-		if err := filetx.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
-			return nil, err
-		}
-	}
-	// Irie's own variables let the agent's hooks find the core. tmux's are
-	// removed, so an agent's own tmux commands cannot reach Irie's server.
-	if env == nil {
-		env = map[string]string{}
-	}
-	env[brand.Env("SESSION")], env[brand.Env("SOCKET")], env[brand.Env("BIN")] = id, c.paths.Socket(), c.bin
-	var unset []string
-	if c.cfg().Spawn.HideTmux {
-		unset = []string{"TMUX", "TMUX_PANE"}
-	}
-	// With teams, TMUX names the team server instead.
-	var path []string
-	if s.Teams {
-		bin, err := c.armTeam(id, dir, anchor, profile, env)
-		if err != nil {
-			return nil, err
-		}
-		path = []string{bin}
-	}
-	spec := c.paths.SpecFile(id)
-	if err := host.WriteSpec(spec, host.Spec{
-		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
-		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
-		Model: x.model, Local: x.local, Tutor: x.tutor, Anon: x.anon,
-	}); err != nil {
 		return nil, err
 	}
 
@@ -597,11 +497,18 @@ func (c *Core) launch(j job) (*session, error) {
 		w, ht = z.W, z.H
 	}
 	size := []string{"-x", strconv.Itoa(w), "-y", strconv.Itoa(ht)}
+	// A session that comes back resting runs no agent: its pane ends at
+	// once, and tmux keeps it, dead, with the card, until a wake runs the
+	// host on the same spec (rest.go).
+	run := "host"
+	if j.rest {
+		run = "rested"
+	}
 	target := tmux.AgentsSession + ":=" + id
 	opt := func(k, v string) []string { return []string{"set-option", "-p", "-t", target, k, v} }
 	out, err := c.tmux.RunList([][]string{
 		{"set-option", "-t", tmux.AgentsSession, "default-size", fmt.Sprintf("%dx%d", w, ht)},
-		{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", id, "-c", x.cwd, "-P", "-F", "#{pane_id}", "--", c.bin, "host", "--spec", spec},
+		{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", id, "-c", x.cwd, "-P", "-F", "#{pane_id}", "--", c.bin, run, "--spec", spec},
 		opt(tmux.OptSession, id),
 		opt(tmux.OptAgent, x.agent),
 		opt(tmux.OptRole, tmux.RoleAgent),
@@ -641,4 +548,124 @@ func (c *Core) launch(j job) (*session, error) {
 		c.record(x, event.Event{Source: event.SourceIrie, Agent: event.Main, Kind: event.PromptSubmitted, Data: map[string]any{"chars": 0}})
 	}
 	return x, nil
+}
+
+// prepareRun writes what x's agent starts from for job j, on profile and
+// harness h: the files its harness asks for and the spec its host runs,
+// from which a spawn, a reopen and a wake start it alike (rest.go). The
+// caller holds c.mu.
+func (c *Core) prepareRun(j job, x *session, profile config.Profile, h harness.Harness) (s harness.Spawn, argv []string, files map[string][]byte, spec string, err error) {
+	id := x.id
+	dir := c.paths.Session(id)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return harness.Spawn{}, nil, nil, "", err
+	}
+	// Nor with what the arch agents brought it then (arch.go).
+	os.Remove(filepath.Join(dir, harness.ArchFile))
+	// Nor with the MCP servers it had then.
+	os.Remove(filepath.Join(dir, harness.MCPFile))
+	s = harness.Spawn{
+		Session: id, Task: j.task, Next: j.next, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
+		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
+		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+		Arch:  c.archFor(profile, h.ID()),
+		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual, Tile: c.cfg().Learn.Pictures == config.PicturesTile,
+		Unattended: j.unattended,
+	}
+	// Irie's tips go under the agent's spinner, where its harness has one
+	// (docs/proposals/learning.md).
+	if c.cfg().Learn.AgentTips {
+		s.Tips = learn.Get().Tips
+	}
+	// Only the user's name goes to the agent: Claude Code titles a session
+	// it gets no name for, and the row follows the title (title.go).
+	if x.named {
+		s.Name = x.name
+	}
+	// Agent teams need the session's anchor on the team server first; a
+	// session whose anchor cannot be made starts without them.
+	var anchor teamAnchor
+	if c.teams(h.ID()) && j.anon == nil {
+		a, err := c.anchor(id)
+		if err != nil {
+			c.log.Warn("teams", "session", id, "err", err)
+		} else {
+			anchor, s.Teams = a, true
+		}
+	}
+	// Irie's skills, for a harness that loads them as a plugin.
+	if j.probe.Flags["--plugin-dir"] {
+		s.PluginDir = c.skillsFolder(profile, x)
+	}
+	// An anonymous session's servers and shut paths (DESIGN §4.16); else
+	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.15).
+	if j.anon != nil {
+		if h.ID() != "claude-code" {
+			return harness.Spawn{}, nil, nil, "", fmt.Errorf("anonymous research runs only on Claude Code, which can shut its paths; +%s runs on %s", j.profile, h.ID())
+		}
+		if err := c.anonLaunch(&s, x, *j.anon); err != nil {
+			return harness.Spawn{}, nil, nil, "", err
+		}
+	} else if j.probe.Flags["--mcp-config"] {
+		if mcp, warn := c.browserMCP(id); warn != "" {
+			x.warnings = append(x.warnings, warn)
+		} else if mcp != nil {
+			s.MCP = mcp
+		}
+		// A writing session's own way to Variorum (docs/proposals/writers.md).
+		for name, srv := range c.variorumMCP(x.cwd) {
+			if s.MCP == nil {
+				s.MCP = map[string]harness.MCPServer{}
+			}
+			s.MCP[name] = srv
+		}
+		// Your plugins' tools, after Irie's own (DESIGN §4.17).
+		s.MCP = c.ownToolsMCP(x, s.MCP)
+	}
+	launch := h.Launch
+	if j.resume != "" {
+		r, ok := h.(harness.Resumer)
+		if !ok {
+			return harness.Spawn{}, nil, nil, "", fmt.Errorf("%s cannot carry a conversation on", h.ID())
+		}
+		launch = r.Resume
+	}
+	var env map[string]string
+	argv, env, files, err = launch(profile, s)
+	if err != nil {
+		return harness.Spawn{}, nil, nil, "", err
+	}
+	for f, b := range files {
+		if err := filetx.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
+			return harness.Spawn{}, nil, nil, "", err
+		}
+	}
+	// Irie's own variables let the agent's hooks find the core. tmux's are
+	// removed, so an agent's own tmux commands cannot reach Irie's server.
+	if env == nil {
+		env = map[string]string{}
+	}
+	env[brand.Env("SESSION")], env[brand.Env("SOCKET")], env[brand.Env("BIN")] = id, c.paths.Socket(), c.bin
+	var unset []string
+	if c.cfg().Spawn.HideTmux {
+		unset = []string{"TMUX", "TMUX_PANE"}
+	}
+	// With teams, TMUX names the team server instead.
+	var path []string
+	if s.Teams {
+		bin, err := c.armTeam(id, dir, anchor, profile, env)
+		if err != nil {
+			return harness.Spawn{}, nil, nil, "", err
+		}
+		path = []string{bin}
+	}
+	spec = c.paths.SpecFile(id)
+	if err := host.WriteSpec(spec, host.Spec{
+		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
+		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
+		Model: x.model, Local: x.local, Tutor: x.tutor, Anon: x.anon,
+	}); err != nil {
+		return harness.Spawn{}, nil, nil, "", err
+	}
+	return s, argv, files, spec, nil
 }

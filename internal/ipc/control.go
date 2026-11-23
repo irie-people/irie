@@ -1,5 +1,7 @@
 package ipc
 
+import "time"
+
 // Ops for what the user does to a session's whole process tree and to its
 // place in the list (DESIGN §2.4, §4.3). They are served when hello's
 // features name them.
@@ -8,6 +10,12 @@ const (
 	// session's; OpThaw continues it.
 	OpFreeze = "freeze"
 	OpThaw   = "thaw"
+	// OpRest ends an idle session's agent to free memory, and keeps its
+	// card, its place and its conversation; OpWake starts its agent again,
+	// carrying the conversation on (DESIGN §4.3). Showing a resting
+	// session, or sending it a message, wakes it too.
+	OpRest = "rest"
+	OpWake = "wake"
 	// OpPriority promotes a session (level 1) or puts it back (level 0).
 	OpPriority = "priority"
 	// OpReorder puts a session elsewhere in the list. Move, its near
@@ -45,6 +53,37 @@ type FreezeArgs struct {
 	Session string `json:"session,omitempty"`
 	All     bool   `json:"all,omitempty"`
 }
+
+// RestArgs name the session to rest or wake. Idle, for a rest, rests every
+// session that may rest now, the longest idle first, as Raffi does when
+// memory runs short.
+type RestArgs struct {
+	Session string `json:"session,omitempty"`
+	Idle    bool   `json:"idle,omitempty"`
+}
+
+// RestResult lists the sessions that rest or woke, and the memory their
+// agents took, which a rest frees once they have ended.
+type RestResult struct {
+	Sessions []string `json:"sessions"`
+	Freed    int64    `json:"freed,omitempty"`
+}
+
+// Rest is how a session rests: since when, why ("memory", Raffi's rest
+// when memory ran short; "you"; or "restore", as a restore brought it
+// back), and the memory its agent took when it ended.
+type Rest struct {
+	Since time.Time `json:"since"`
+	Why   string    `json:"why"`
+	Freed int64     `json:"freed,omitempty"`
+}
+
+// The reasons a session rests.
+const (
+	RestMemory  = "memory"
+	RestYou     = "you"
+	RestRestore = "restore"
+)
 
 // FreezeResult lists the sessions that were frozen or thawed. A thaw of
 // several thaws them in turn, one every 30 s (DESIGN §4.3): Queued are

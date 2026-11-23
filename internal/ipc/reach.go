@@ -52,6 +52,9 @@ var reaches = map[string]Reach{
 	// Steps whose agents carry on and sign in again, and undo and redo,
 	// which take them.
 	OpThaw: ReachInsideOut, OpReopen: ReachInsideOut, OpUndo: ReachInsideOut, OpRedo: ReachInsideOut,
+	// A rest ends an idle agent, whose conversation stays; a wake starts
+	// it again, as a reopen does. Neither is a step of the history.
+	OpRest: ReachInside, OpWake: ReachInsideOut,
 
 	// Irie's own settings, views and files, and the agents' own channel
 	// into Irie.

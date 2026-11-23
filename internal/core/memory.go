@@ -80,14 +80,20 @@ func (c *Core) sample() {
 	}
 	c.readMachine()
 	load, loadErr := sysload.Read()
+	room, roomErr := sysload.ReadRoom()
 	c.mu.Lock()
 	if loadErr == nil {
 		c.load = load
+	}
+	if roomErr == nil {
+		c.room = room
 	}
 	for id, x := range c.sessions {
 		x.memory, x.cpu = use[id].mem, use[id].cpu
 	}
 	c.localMem, c.llamaMem = local, llama
+	// While memory is short, Raffi rests idle cards (rest.go).
+	c.restUnderPressure(time.Now())
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

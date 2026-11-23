@@ -204,6 +204,11 @@ const (
 	StateIdle     = "idle"
 	StatePaused   = "paused"
 	StatePausing  = "pausing"
+	// StateResting is a session whose agent ended to free memory while its
+	// card stays, conversation and all: opening it or sending it a message
+	// starts its agent again (DESIGN §4.3). It comes after failed and
+	// before exited.
+	StateResting = "resting"
 )
 
 // Session is one row of the session list.
@@ -265,6 +270,9 @@ type Session struct {
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
+	// Rest is set while it rests: its agent ended to free memory, and its
+	// card stays, with its conversation (DESIGN §4.3).
+	Rest *Rest `json:"rest,omitempty"`
 
 	// Hue is which of the agents' colours it takes while it works, from 1
 	// to ui.AgentColors, the same for as long as it lives (internal/core,
@@ -955,6 +963,10 @@ type ClosedSession struct {
 	Closed time.Time `json:"closed"`
 	Auto   bool      `json:"auto,omitempty"`
 	Lost   bool      `json:"lost,omitempty"`
+	// Working says a lost session was at work when it was lost, or was
+	// boosted: a restore starts its agent again, and brings back the rest
+	// resting (DESIGN §4.5).
+	Working bool `json:"working,omitempty"`
 	// Cold is what its next turn would cost once reopened, now that its
 	// prompt cache has run out (DESIGN §6.3); nil while the cache is warm
 	// or when Irie cannot tell.
@@ -1026,6 +1038,10 @@ func (n NotLive) Words() string {
 // Session is empty.
 type ReopenArgs struct {
 	Session string `json:"session,omitempty"`
+	// Rest brings it back resting: its card in its place, with no agent
+	// until it is opened or sent a message (DESIGN §4.3), as a restore
+	// brings back the sessions that were not at work.
+	Rest bool `json:"rest,omitempty"`
 }
 
 type ReopenResult struct {

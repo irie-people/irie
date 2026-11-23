@@ -111,6 +111,11 @@ const (
 	// an API error records, or the end of the boost's time.
 	BoostOn  = "boost.on"
 	BoostOff = "boost.off"
+	// RestOn records that a session's agent ended to free memory while its
+	// card stays (DESIGN §4.3): why, and the memory it took; RestOff, that
+	// its agent started again, carrying its conversation on.
+	RestOn  = "rest.on"
+	RestOff = "rest.off"
 	// CacheRebuilt records a request that wrote most of its conversation's
 	// context into the prompt cache again instead of reading it, from the
 	// session's transcript (DESIGN §6.3): what it wrote again, what that
@@ -132,7 +137,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, DelegateTimedOut, RouteFallback, ModelSwitched, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DelegateTimedOut, RouteFallback, ModelSwitched, DogNudged, TrodSent, BoostOn, BoostOff, RestOn, RestOff, CacheRebuilt,
 		WorktreeDropped, WorktreeRestored,
 	} {
 		kinds[k] = true
