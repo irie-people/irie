@@ -14,6 +14,7 @@ type Input struct {
 	Owner Owner
 	Procs []Proc // the last sample of every process
 	Hot   []Hot  // what has run hot for long, by the sampler
+	Left  []Left // what agents left running (LeftRunning)
 	Now   time.Time
 	// Thorough asks Homebrew what it would clean up too, which can take
 	// minutes: for a look the person asked for.
@@ -26,10 +27,16 @@ type Input struct {
 	Signed []string
 }
 
-// Quick is the part of a look that runs no tool: what runs hot, memory,
-// and the disk. The core makes it at every sample.
+// Quick is the part of a look that runs no tool: what agents left running,
+// what runs hot, memory, and the disk, from what the core read at the
+// minute's sample.
 func Quick(in Input, m Memory, d Disk) (fs []Finding, fine []string) {
-	hot := hotFindings(in.Hot, in.Owner, in.UID, in.Home)
+	left := leftFindings(in.Left, in.Hot, in.Home)
+	fs = append(fs, left...)
+	if len(left) == 0 {
+		fine = append(fine, "No agent has left a program running.")
+	}
+	hot := hotFindings(in.Hot, in.Owner, in.UID, in.Home, leftPIDs(in.Left))
 	fs = append(fs, hot...)
 	if len(hot) == 0 {
 		fine = append(fine, "No program has run hot for long.")
