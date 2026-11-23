@@ -327,13 +327,13 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/hook/` | Shim logic | M2 |
 | `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2; `fakeollama/` and `ollamafake/` from M10 | M1–M2, M10 |
 | `internal/repo/`, `internal/worktree/` | Repo lookup, worktrees | M3 |
-| `internal/transcript/`, `internal/mirror/` | JSONL follower and parser, mirror view | M8 |
+| `internal/core/conversation.go`, `internal/core/helpers.go` | A session's conversation, read from its transcripts as they grow, and its helpers', each followed through its own transcript by the same reader; Irie draws them, with no mirror windows ([split-pane.md](proposals/split-pane.md)) | M8 |
 | `internal/skills/` | The skills that come with Irie: those built into the binary, which go to each session, and the plugin folder Claude Code loads them from | M12 |
 | `internal/browser/` | Irie's browser (§4.15): the MCP server `irie browser`, its WebDriver BiDi and WebSocket clients, and the browser's start, profiles and tools | after M12 |
 | `internal/mcp/` | The MCP server over stdio that Irie's own servers share: the handshake, ping and tools (§4.15, §4.16) | after M12 |
 | `internal/anon/` | Anonymous research (§4.16): compartments and their exits, Mullvad's relay list, the checks of an exit, Tor's config, SearXNG's install and settings, and the MCP server `irie anon mcp` | after M12 |
 | `internal/htmltext/` | A page's readable text and links, read by a tokenizer of Irie's own in linear time, for `irie anon mcp`'s fetch (§4.16) | after M12 |
-| `internal/ghostty/`, `internal/macapp/` | AppleScript driver, Irie.app bundle | M9 |
+| `mac/` | Irie.app, in Swift ([MAC.md](MAC.md)): its build (`mac/build.sh`), Ghostty's embedding library that draws its terminals (`mac/ghostty.sh`), and pictures of its views drawn with no window (`mac/snapshot.sh`) | M9 |
 | `internal/loginenv/` | The login shell's environment, for a server the Mac app starts (§7.2) | §2.7 |
 | `internal/ready/` | What a computer has of what Irie needs, and how to get the rest: `irie setup`, the first `irie`, the `ready` op | §2.7 |
 | `tools/release.sh`, `site/install.sh` | A release's downloads, and the one-line installer | §2.7 |
@@ -345,7 +345,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/plugins/` | Irie's plugins (§4.17): each plugin and its parts, how far each part is set up here, its switches, and the reasons a part that is off gives | Plugins |
 | `internal/vpn/` | A VPN through its own command line, as `vpn.provider` names it (§4.18): Mullvad VPN (the tunnel's state from `mullvad status --json` and `status --json listen`, lockdown, the account's expiry; [extensions.md](proposals/extensions.md) §4), Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and the person's own commands; the `:vpn` changes | Extensions, VPNs |
 | `internal/variorum/` | Variorum's door for the writing plugin: the two setups Irie keeps, told apart by their shape, in `<data>/variorum/door.json`; the checks on the program they name; one call over stdio for the Variorum tab; and `irie variorum door`, a writing session's own MCP server ([writers.md](proposals/writers.md)) | Plugins |
-| `e2e/` | Opt-in tests against the real Claude Code | M11 |
+| `e2e/` (planned) | Opt-in tests against the real Claude Code | M11 |
 
 ### 2.7 Install and first run
 
@@ -2739,7 +2739,7 @@ Releases still need three things: the test workflow passing on Linux and macOS, 
 **Build:**
 - **Control-mode client.** `tmux/control`: `tmux -u -C attach -t irie -f ignore-size,no-output`. It parses `%begin`/`%end`/`%error`, `%window-add`, `%window-close`, `%sessions-changed` and `%exit`, and subscribes to `pane_dead` with `refresh-client -B`. It reconnects with backoff.
 - **Polling.** Drops to a 10 s reconcile and stays as the fallback.
-- **E2E suite.** In `e2e/`, behind `IRIE_E2E_CLAUDE=1`: spawn, red on a question, the pause/resume note, freeze/thaw, a subagent mirror.
+- **E2E suite.** In `e2e/` (planned), behind `IRIE_E2E_CLAUDE=1`: spawn, red on a question, the pause/resume note, freeze/thaw, a subagent mirror.
 
 **Tests:** the parser on synthetic control-mode output, including octal escapes and invalid UTF-8; killing the control client brings polling back within 2 s; the e2e suite is skipped by default.
 
