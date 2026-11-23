@@ -69,6 +69,8 @@ var reaches = map[string]Reach{
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
 	// A council's session reads its tally, and a yes starts a plan's jot.
 	OpCouncil: ReachOutside,
+	// Every session's agent reads a kept lesson as it starts.
+	OpLessons: ReachOutside,
 	// A download fetches from a site and writes to the person's folder.
 	OpYoink: ReachOutside,
 	// A post goes to a channel of people, under the person's bot.

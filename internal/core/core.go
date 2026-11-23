@@ -76,6 +76,7 @@ type Core struct {
 	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 	ragu        raguelState  // Raguel's councils (raguel.go); it has a lock of its own, taken after mu
+	lessons     lessonsState // the user's lessons (lessons.go); it has a lock of its own, taken after mu
 	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
 	pad         notepad      // the person's notes for later (notepad.go); it has a lock of its own, never held with mu
 	vault       vaultNotes   // the notepad kept in the Obsidian vault too (obsidian.go); its lock is taken before pad's, never after
@@ -403,6 +404,7 @@ func Run(o Options) error {
 	c.loadTrodHand()
 	c.loadRaphael()
 	c.loadRaguel()
+	c.loadLessons()
 	c.loadNotepad()
 	c.startZen()
 
@@ -857,6 +859,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.councilOp(peer, a)
+	case ipc.OpLessons:
+		var a ipc.LessonsArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.lessonsOp(peer, a)
 	case ipc.OpVariorum:
 		var a ipc.VariorumArgs
 		if err := decode(raw, &a); err != nil {
@@ -961,6 +969,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpObsidian,
 			ipc.OpChain,
 			ipc.OpCouncil,
+			ipc.OpLessons,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -1320,6 +1329,17 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, ipc.Errorf(ipc.CodeBadArgs, "Ragu takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
 		}
 		return c.councilOp(0, a)
+	case ipc.OpLessons:
+		// Not from a socket, the lessons are only shown: what failed and
+		// the user's word are read and taken over the socket alone.
+		var a ipc.LessonsArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.Do != ipc.LessonsReport {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi reads what failed and takes your word on lessons only over "+brand.Name+"'s socket.")
+		}
+		return c.lessonsOp(0, a)
 	case ipc.OpGabriel:
 		var a ipc.GabrielArgs
 		if err := decode(raw, &a); err != nil {
