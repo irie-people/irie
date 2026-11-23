@@ -73,6 +73,7 @@ type track struct {
 	// What the user did to the session as a whole (freeze.go, priority.go,
 	// order.go).
 	frozen   *event.Event // freeze.on, until freeze.off
+	rest     *event.Event // rest.on, until rest.off: its agent ended to free memory, and its card stays (rest.go)
 	held     bool         // a frozen session's running agent came to a tool call, where the shim holds it
 	priority int          // the level of the last priority.set
 	parked   bool         // ui.parked, until ui.unparked
@@ -308,6 +309,20 @@ func (t *track) apply(e event.Event) {
 			t.woke(e, ipc.RebuildThaw, e.Str("by"))
 		}
 		t.frozen, t.held = nil, false
+	case event.RestOn:
+		t.rest = &e
+	case event.RestOff:
+		// Its agent starts again and carries the conversation on, so what
+		// ended it as it went to rest is over. Its last turn stays done
+		// and viewed, as the resumed agent waits at its prompt; the
+		// message that wakes it marks what the next turn costs.
+		t.rest = nil
+		t.exited, t.ended, t.failed, t.stalled = nil, nil, nil, nil
+		t.started, t.resumed, t.held = false, true, false
+		t.tools, t.subs = nil, nil
+		if t.activity == "" {
+			t.activity, t.viewed = done, true
+		}
 	case event.PrioritySet:
 		t.priority, _ = e.Int("level")
 	case event.UIParked:
@@ -451,6 +466,9 @@ func (t *track) state(dead bool) string {
 	switch {
 	case t.failed != nil:
 		return ipc.StateFailed
+	case t.rest != nil:
+		// Its pane is dead on purpose, its card kept (rest.go).
+		return ipc.StateResting
 	case t.exited != nil || dead || t.ended != nil:
 		return ipc.StateExited
 	case t.frozen != nil:
@@ -549,6 +567,14 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 		if t.waiting > 0 {
 			s.Detail = joinDetail("Waiting on its work in the background", t.waitingOn)
 		}
+	case ipc.StateResting:
+		freed, _ := t.rest.Int("freed")
+		s.Rest = &ipc.Rest{Since: t.rest.Time(), Why: t.rest.Str("why"), Freed: int64(freed)}
+		if t.frozen != nil {
+			at := t.frozen.Time()
+			s.Frozen = &at
+		}
+		s.Detail = restLine(s.Rest, t.frozen != nil)
 	}
 	if s.State == ipc.StateFrozen && t.frozen.Str("by") == trodBy {
 		s.Detail = joinDetail("Frozen by the trod bot: "+t.frozen.Str("reason"), s.Detail)

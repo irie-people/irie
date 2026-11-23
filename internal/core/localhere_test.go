@@ -19,6 +19,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ledger"
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/testutil/ollamafake"
@@ -88,7 +89,7 @@ func TestSideTasksDoWithoutAModelWhileLocalHereIsOff(t *testing.T) {
 	cfg.Materialize.Sessions = true
 	c := bareCore(t, cfg)
 
-	if _, err := c.embed(context.Background(), cfg.Route.Embed, []string{"fix the typo"}); !errors.Is(err, localmodel.ErrOffHere) {
+	if _, err := c.embed(context.Background(), cfg.Route.Embed, []string{"fix the typo"}, ledger.Route); !errors.Is(err, localmodel.ErrOffHere) {
 		t.Errorf("embed: %v; want it not asked, as local models are off here", err)
 	}
 	if cos, _, note := c.findMeaning("typo", []findDoc{{parts: []string{"fix the typo in the README"}}}); cos != nil || !strings.Contains(note, "words only") {
@@ -139,14 +140,14 @@ func TestASideTaskLoadsAModelOnlyWithRoomForIt(t *testing.T) {
 		t.Errorf("4 GiB free: %+v; want it not loaded", r)
 	}
 	t.Setenv(FakeMemoryEnv, "18/12")
-	t.Setenv(FakeDiskEnv, "8/926")
+	t.Setenv(FakeRoomEnv, "18/8/0")
 	if r := ask("b"); r.State != "cold" || !strings.Contains(r.Err, "floor") || !strings.Contains(r.Err, "qwen3:4b was not loaded") {
 		t.Errorf("8 GiB of disk free: %+v; want it not loaded", r)
 	}
 	if f.count() != 0 {
 		t.Fatalf("%d chats; want none while there is no room", f.count())
 	}
-	t.Setenv(FakeDiskEnv, "40/926")
+	t.Setenv(FakeRoomEnv, "18/40/0")
 	if r := ask("c"); r.State != "fresh" || f.count() != 1 {
 		t.Errorf("with room: %+v, %d chats; want the card made", r, f.count())
 	}

@@ -208,8 +208,8 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 }
 
 // sessionCosts is what the live sessions of a profile take on average: in
-// memory, and in dollars at list price as their status lines said. The
-// caller holds c.mu.
+// memory, and in dollars at list price as their ledgers say. The caller
+// holds c.mu.
 func (c *Core) sessionCosts(profile string) (memory int64, cost float64) {
 	var mems, costs int
 	for _, x := range c.sessions {
@@ -220,8 +220,8 @@ func (c *Core) sessionCosts(profile string) (memory int64, cost float64) {
 			memory += x.memory
 			mems++
 		}
-		if x.usage.CostUSD != nil && *x.usage.CostUSD > 0 && !x.local {
-			cost += *x.usage.CostUSD
+		if usd := x.costUSD(); usd != nil && *usd > 0 {
+			cost += *usd
 			costs++
 		}
 	}

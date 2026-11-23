@@ -307,6 +307,9 @@ func NewEnv(t *testing.T) *Env {
 	// Nor does it stop the Iries of other test runs and agents (DESIGN §2.9):
 	// the tests that run beside it are using theirs.
 	t.Setenv("IRIE_LEFTOVERS", "off")
+	// Nor does it rest its sessions when the machine it runs on is short of
+	// memory (DESIGN §4.3): the tests would find their agents gone.
+	t.Setenv(brand.Env("REST"), "off")
 	// Nor does it keep mail passwords in the user's Keychain: they go to
 	// files in its own state folder (docs/proposals/mail.md).
 	t.Setenv(brand.Env("KEYCHAIN"), "off")
@@ -314,9 +317,10 @@ func NewEnv(t *testing.T) *Env {
 	// pass or fail with what the user's other programs take. It sees a
 	// machine with room for the fake models (IRIE_FAKE_MEMORY, in GiB).
 	t.Setenv("IRIE_FAKE_MEMORY", "64/48")
-	// Nor its free disk, for the floor under which no model loads
-	// (IRIE_FAKE_DISK, free and total in GiB).
-	t.Setenv("IRIE_FAKE_DISK", "500/1000")
+	// Nor the disk's room for swap: on a full disk every spawn would wait
+	// (DESIGN §2.9). It sees 64 GiB of RAM, 500 GiB free and no swap
+	// (IRIE_FAKE_ROOM, in GiB).
+	t.Setenv("IRIE_FAKE_ROOM", "64/500/0")
 	for _, k := range []string{"TMUX", "TMUX_PANE", brand.Env("BIN")} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)

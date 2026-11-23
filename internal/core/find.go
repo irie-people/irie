@@ -32,6 +32,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ledger"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/search"
 )
@@ -337,7 +338,7 @@ func (c *Core) findMeaning(q string, docs []findDoc) ([]float64, int, string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), findWait)
 	defer cancel()
-	vs, err := c.embed(ctx, e, []string{findQuery(e.Model, q)})
+	vs, err := c.embed(ctx, e, []string{findQuery(e.Model, q)}, ledger.Find)
 	if err != nil {
 		return nil, 0, fmt.Sprintf("%s at %s did not answer: %v", e.Model, e.URL, err)
 	}
@@ -425,7 +426,7 @@ func (c *Core) fillFind(e config.RouteEmbed, texts []string) {
 		for rests := 0; len(texts) > 0; {
 			batch := texts[:min(findBatch, len(texts))]
 			ctx, cancel := context.WithTimeout(context.Background(), fillWait)
-			vs, err := c.embed(ctx, e, batch)
+			vs, err := c.embed(ctx, e, batch, ledger.Find)
 			cancel()
 			if errors.Is(err, errEmbedRests) && rests < findRests {
 				rests++

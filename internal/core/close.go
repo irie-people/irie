@@ -85,6 +85,10 @@ type closedRecord struct {
 	// brings it back pinned, parked or frozen, as it was.
 	Lost                   bool
 	Pinned, Parked, Frozen bool
+	// Working: a lost session that was at work when it was lost, or
+	// boosted. A restore starts its agent again, and brings back the rest
+	// resting (§4.5, rest.go).
+	Working bool
 	// Space and Group are the space and the group it was closed in, which
 	// reopen brings it back to (comeHome).
 	Space, Group string
@@ -135,6 +139,7 @@ func closedFrom(e event.Event) closedRecord {
 	r.Created, _ = time.Parse(time.RFC3339Nano, e.Str("created"))
 	r.Resume, _ = e.Data["resume"].(bool)
 	r.Lost, r.Pinned, r.Parked, r.Frozen = e.Data["lost"] == true, e.Data["pinned"] == true, e.Data["parked"] == true, e.Data["frozen"] == true
+	r.Working = e.Data["working"] == true
 	r.Space, r.Group = e.Str("space"), e.Str("group")
 	r.NotLive, _ = e.Int("not_live")
 	named, ok := e.Data["named"].(bool)
@@ -212,7 +217,7 @@ func (c *Core) closedList() []ipc.ClosedSession {
 	c.closes.cold = time.Time{}
 	for _, r := range c.closes.list {
 		if c.sessions[r.ID] == nil {
-			cs := ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto, Lost: r.Lost}
+			cs := ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto, Lost: r.Lost, Working: r.Working}
 			if w := r.Wake; c.cfg().Usage.Rebuilds && w.Priced && w.Tokens >= rebuild.MinTokens {
 				if w.IsCold(now) {
 					cs.Cold = coldOf(w)
@@ -342,7 +347,7 @@ func (c *Core) doneWith(x *session) bool {
 		return false
 	}
 	switch x.wire().State {
-	case ipc.StateDone, ipc.StateIdle, ipc.StateExited:
+	case ipc.StateDone, ipc.StateIdle, ipc.StateExited, ipc.StateResting:
 		return true
 	}
 	return false
@@ -408,6 +413,9 @@ func (c *Core) closeWith(id string, auto bool, notLive map[string]ipc.NotLive) e
 	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: data})
 	c.addClosed(r)
 	delete(c.sessions, id)
+	// Its ledger stays for the router and the costs report: once out of
+	// the registry, its tally is the writer's alone.
+	go c.keepSpent(x.id, &x.tally, slices.Clone(x.track.transcripts), x.local)
 	// A frozen agent's held tool calls go through, so it ends gently.
 	os.Remove(c.paths.FreezeFile(id))
 	c.end(*p)
@@ -678,6 +686,9 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	if err == nil && j.resume != "" {
 		err = c.freeConversation(r, j)
 	}
+	// A session comes back resting only with a conversation to carry on
+	// once it wakes; one whose task never started starts it again.
+	j.rest = a.Rest && j.resume != ""
 	if err != nil {
 		c.log.Warn("reopen", "session", r.ID, "err", err)
 		return ipc.Session{}, err
@@ -699,6 +710,9 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 		c.comeHome(x, r)
 		if r.Lost {
 			c.comeBack(x, r, placed)
+		}
+		if j.rest {
+			c.restBack(x, r)
 		}
 	}
 	frames := c.changes()
@@ -727,7 +741,9 @@ func (c *Core) freeConversation(r closedRecord, j job) error {
 		if current == "" {
 			current = x.vendorID
 		}
-		if !x.dead && current == j.resume {
+		// A resting session wakes in its own pane, once its agent ended
+		// (rest.go).
+		if !x.dead && current == j.resume && id != r.ID {
 			c.mu.Unlock()
 			return ipc.Errorf(ipc.CodeBusy, "%s carries on in %q now, so it cannot reopen as well", r.Name, x.name)
 		}

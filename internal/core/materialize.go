@@ -11,6 +11,7 @@ import (
 
 	"github.com/irie-people/irie/internal/genui"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ledger"
 	"github.com/irie-people/irie/internal/materialize"
 )
 
@@ -204,13 +205,14 @@ func (c *Core) remakeCard(s *materialize.Store, rm materialize.Remake) {
 
 // makeCard has a local model make the card r asks for: materialize.model,
 // else the best one for chat on this computer's Ollama, never one in the
-// cloud, so a card costs no tokens.
+// cloud, so a card costs no tokens. Its calls go into the ledger as Irie's
+// own.
 func (c *Core) makeCard(ctx context.Context, r materialize.Recipe) (json.RawMessage, string, error) {
 	cfg := c.cfg()
 	m, err := c.chatModel(ctx, cfg.Materialize.Model)
 	if err != nil {
 		return nil, "", err
 	}
-	spec, err := genui.Make(ctx, m, r.Kind, r.Prompt, r.Context)
+	spec, err := genui.Make(c.metered(ctx, ledger.Card), m, r.Kind, r.Prompt, r.Context)
 	return spec, m.Name, err
 }

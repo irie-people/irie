@@ -26,7 +26,7 @@ func bareCore(t *testing.T, cfg config.Config) *Core {
 	// It sees a machine with room for the fake models, as a test core
 	// started by testutil does, never the user's own memory and disk.
 	t.Setenv(FakeMemoryEnv, "64/48")
-	t.Setenv(FakeDiskEnv, "500/1000")
+	t.Setenv(FakeRoomEnv, "64/500/0")
 	home := t.TempDir()
 	p, err := paths.New(func(k string) string {
 		if k == "HOME" {

@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -86,7 +84,7 @@ func (c *Core) roomFor(ctx context.Context, m localmodel.ChatModel, ctxLen int) 
 			freed += l.Size
 		}
 	}
-	if why := loadWaits(); why != "" {
+	if why := c.loadWaits(); why != "" {
 		return fmt.Errorf("%s, so %s was not loaded", why, m.Name)
 	}
 	models, err := o.Models(ctx)
@@ -116,36 +114,11 @@ func (c *Core) roomFor(ctx context.Context, m localmodel.ChatModel, ctxLen int) 
 	return nil
 }
 
-// FakeDiskEnv names the free disk for a test core, as "FREE/TOTAL" in GiB,
-// such as "500/1000", so that the user's own disk never passes or fails
-// its loads (internal/testutil).
-const FakeDiskEnv = "IRIE_FAKE_DISK"
-
-// roomNow reads the room the swap has to grow into (sysload.ReadRoom), or
-// FakeDiskEnv's, with no memory of its own: its floor is then
-// sysload.MinFloor.
-func roomNow() (sysload.Room, error) {
-	if v := os.Getenv(FakeDiskEnv); v != "" {
-		free, total, ok := strings.Cut(v, "/")
-		f, err1 := strconv.ParseInt(free, 10, 64)
-		t, err2 := strconv.ParseInt(total, 10, 64)
-		if ok && err1 == nil && err2 == nil && 0 <= f && f <= t {
-			return sysload.Room{DiskFree: f * sysload.GiB, DiskTotal: t * sysload.GiB}, nil
-		}
-	}
-	return sysload.ReadRoom()
-}
-
 // loadWaits is why no model may be loaded now, in a sentence, or "" when
 // one may: the disk is under the floor that leaves the swap room to grow
-// (sysload.Room.HeavyWaits). A disk it cannot read holds nothing up.
-func loadWaits() string {
-	r, err := roomNow()
-	if err != nil {
-		return ""
-	}
-	return r.HeavyWaits()
-}
+// (sysload.Room.HeavyWaits), as the last memory sample read it. A disk it
+// cannot read holds nothing up.
+func (c *Core) loadWaits() string { return c.roomNow().HeavyWaits() }
 
 // easeGrace is how long one of Irie's own servers must have had no
 // session on it before it is stopped, so that a spawn that has just

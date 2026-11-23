@@ -14,6 +14,8 @@
 # through tools/test.sh, which splits every package's tests over the CPUs.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+# A turn among the machine's test and build runs, and room on the disk.
+sh tools/heavy.sh $$ check
 if [ $# -eq 0 ]; then set -- ./...; fi
 
 # Tracked files only: other checkouts can sit inside this one, as Claude

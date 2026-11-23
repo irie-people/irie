@@ -80,19 +80,68 @@ func (c *Core) sample() {
 	}
 	c.readMachine()
 	load, loadErr := sysload.Read()
+	room, roomErr := readRoom()
 	c.mu.Lock()
 	if loadErr == nil {
 		c.load = load
+	}
+	if roomErr == nil {
+		c.room = room
 	}
 	for id, x := range c.sessions {
 		x.memory, x.cpu = use[id].mem, use[id].cpu
 	}
 	c.localMem, c.llamaMem = local, llama
+	// While memory is short, Raffi rests idle cards (rest.go).
+	c.restUnderPressure(time.Now())
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()
 	c.easeModels() // what Irie's own model servers hold for nobody goes (localhere.go)
+}
+
+// readRoom reads the swap's room on disk, or FakeRoomEnv's for a test
+// core.
+func readRoom() (sysload.Room, error) {
+	if f, ok := fakeRoom(os.Getenv(FakeRoomEnv)); ok {
+		return f, nil
+	}
+	return sysload.ReadRoom()
+}
+
+// roomNow is the swap's room as the last sample read it, or as it is now
+// before the first sample. The caller holds no lock.
+func (c *Core) roomNow() sysload.Room {
+	c.mu.Lock()
+	room := c.room
+	c.mu.Unlock()
+	if !room.Known() {
+		room, _ = readRoom()
+	}
+	return room
+}
+
+// FakeRoomEnv names the swap's room for a test core, as
+// "RAM/FREE/SWAP", each in GiB, such as "18/8/1": 18 GiB of RAM, 8 GiB
+// free on the disk and 1 GiB of swap in use.
+const FakeRoomEnv = "IRIE_FAKE_ROOM"
+
+// fakeRoom reads FakeRoomEnv's value.
+func fakeRoom(v string) (sysload.Room, bool) {
+	f := strings.Split(v, "/")
+	if len(f) != 3 {
+		return sysload.Room{}, false
+	}
+	var n [3]int64
+	for i, s := range f {
+		x, err := strconv.ParseInt(s, 10, 64)
+		if err != nil || x < 0 {
+			return sysload.Room{}, false
+		}
+		n[i] = x * sysload.GiB
+	}
+	return sysload.Room{RAM: n[0], DiskFree: n[1], DiskTotal: max(n[1], 1000*sysload.GiB), SwapUsed: n[2], SwapTotal: n[2]}, true
 }
 
 // treeUse is what a process tree takes of the machine.

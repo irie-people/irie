@@ -482,7 +482,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 				problem("%s; close something first, pick a smaller model, or spawn with --force", msg)
 			}
 		}
-		if why := loadWaits(); why != "" {
+		if why := c.loadWaits(); why != "" {
 			problem("%s, so %s was not loaded", why, m.name)
 		}
 		if len(users) > 0 && !restart {

@@ -150,6 +150,8 @@ type Core struct {
 	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
 	zen        zenState              // your zen, and zen as the app shows it (zen.go)
 	closes     closes                // closed sessions, and agents still ending (close.go)
+	rest       restState             // rests under way, and whether memory is short (rest.go)
+	room       sysload.Room          // the swap's room on disk, last read (memory.go)
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
 	chain      orgChain              // the sidebar's chain, the organisation's versions (chain.go); a lock of its own, taken after mu
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
@@ -168,6 +170,7 @@ type Core struct {
 	lastThaw   time.Time             // when Irie last thawed a session, which a thaw in turn waits thawGap after: the trod bot's and a thaw of several (freeze.go)
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
+	own        ownCalls              // Irie's own calls to models, which ledger.jsonl keeps (ledger.go); its own lock
 	locks      lockState             // what the agent locks' checks found (locks.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
@@ -398,6 +401,7 @@ func Run(o Options) error {
 	c.loadClosed()
 	c.loadDrops()
 	c.loadMeter(time.Now())
+	c.loadLedger(time.Now())
 	c.loadLocks()
 	c.loadState()
 	c.loadTrodHand()
@@ -451,6 +455,7 @@ func Run(o Options) error {
 	go c.ctxSweep()
 	go c.leftoverSweep()
 	go c.lockSweep()
+	go c.ledgerSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -661,7 +666,7 @@ func (c *Core) sync(s tmux.Snapshot) {
 // does for every session, and replays the session's journal into its state.
 func (c *Core) adopt(p tmux.Pane) *session {
 	created, _ := time.Parse(time.RFC3339Nano, p.Created)
-	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession)}
+	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession), tally: tokenTally{since: created}}
 	if x.name == "" {
 		x.name = x.id
 	}
@@ -958,10 +963,10 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpFind, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpUnlanded, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
-			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
+			ipc.OpFreeze, ipc.OpThaw, ipc.OpRest, ipc.OpWake, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpChat, ipc.OpFounding, ipc.OpJammin, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpCosts, ipc.OpNotepad,
 			ipc.OpLock, ipc.OpMaterialize, ipc.FeatureExplain, ipc.OpZen,
 			ipc.OpWorktrees,
 			ipc.OpObsidian,
@@ -1063,6 +1068,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return c.dogList()
 	case ipc.OpRebuilds:
 		return c.rebuildsOp(), nil
+	case ipc.OpCosts:
+		return c.costsOp(), nil
 	case ipc.OpChain:
 		var a ipc.ChainArgs
 		if err := decode(raw, &a); err != nil {
@@ -1489,6 +1496,11 @@ func (c *Core) show(a ipc.ShowArgs) error {
 	// While Gabriel holds back, the session now on show comes out of the
 	// background before this returns (gabriel.go).
 	c.refocus()
+	// A resting session you open starts its agent again (rest.go); one
+	// that rests frozen waits for its thaw.
+	if rests, frozen := c.resting(a.Session); err == nil && rests && !frozen {
+		c.wakeLater(a.Session, "shown")
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

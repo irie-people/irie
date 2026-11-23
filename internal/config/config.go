@@ -412,6 +412,10 @@ type Raphael struct {
 	Core  time.Duration `toml:"core"`  // how long the core's own loop may stand still before he restarts the core; 0 = never
 	Every time.Duration `toml:"every"` // how often he looks over the computer by himself; 0 = only when asked
 	Known []string      `toml:"known"` // startup items you know, by label, plist or program, which he no longer flags
+	// Rest is whether he rests idle cards while memory is short: their
+	// agents end, and their cards stay, conversation and all, until they
+	// are opened or sent a message (DESIGN §4.3).
+	Rest bool `toml:"rest"`
 }
 
 // Raguel is the arch agent who holds the council. He tallies what the
@@ -1140,7 +1144,7 @@ func Default() Config {
 		Arch: Arch{
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
-			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
+			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}, Rest: true},
 			Raguel:  Raguel{On: true, Plans: 5},
 		},
 		Remote:   Remote{Port: DefaultRemotePort},

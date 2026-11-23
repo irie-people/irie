@@ -129,6 +129,12 @@ const (
 	// sessions and the causes that rebuilt their caches most today and in
 	// the last seven days, and what that cost. It answers a RebuildsResult.
 	OpRebuilds = "rebuilds"
+	// OpCosts is the ledger's report (DESIGN §6.3): what the model calls of
+	// Irie's sessions and of Irie itself cost at the list price of their
+	// day, today, in the last seven days and in the last 30, by purpose and
+	// model, with the calls that have no price counted apart. It answers a
+	// CostsResult.
+	OpCosts = "costs"
 )
 
 // FeatureTutor is in hello's features when spawn takes SpawnArgs.Tutor.
@@ -198,6 +204,11 @@ const (
 	StateIdle     = "idle"
 	StatePaused   = "paused"
 	StatePausing  = "pausing"
+	// StateResting is a session whose agent ended to free memory while its
+	// card stays, conversation and all: opening it or sending it a message
+	// starts its agent again (DESIGN §4.3). It comes after failed and
+	// before exited.
+	StateResting = "resting"
 )
 
 // Session is one row of the session list.
@@ -259,6 +270,9 @@ type Session struct {
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
+	// Rest is set while it rests: its agent ended to free memory, and its
+	// card stays, with its conversation (DESIGN §4.3).
+	Rest *Rest `json:"rest,omitempty"`
 
 	// Hue is which of the agents' colours it takes while it works, from 1
 	// to ui.AgentColors, the same for as long as it lives (internal/core,
@@ -354,6 +368,52 @@ type RebuildsSpan struct {
 	USD      float64        `json:"usd"`
 	Sessions []RebuildsPart `json:"sessions"`
 	Causes   []RebuildsPart `json:"causes"`
+}
+
+// CostsResult is the ledger's report (irie ctl costs).
+type CostsResult struct {
+	Spans []CostsSpan `json:"spans"` // today since midnight, the last seven days and the last 30, today included
+	// Sessions are those with calls in the last 30 days, what they cost
+	// first, then those with calls that have no price.
+	Sessions []CostsSession `json:"sessions"`
+}
+
+// CostsSpan is what the calls of a span of days came to.
+type CostsSpan struct {
+	Name     string      `json:"name"` // today, week or month
+	From     string      `json:"from"` // its first day, 2006-01-02
+	Total    CostsTally  `json:"total"`
+	Purposes []CostsPart `json:"purposes"` // what cost most first
+	Models   []CostsPart `json:"models"`
+}
+
+// CostsTally is what some calls came to.
+type CostsTally struct {
+	Calls    int     `json:"calls"`
+	USD      float64 `json:"usd"`                // what those with a price cost
+	Unpriced int     `json:"unpriced,omitempty"` // calls to a model with no price, whose cost is not known
+	Free     int     `json:"free,omitempty"`     // calls on this computer or a server of the owner's
+	Searches int64   `json:"searches,omitempty"` // web searches among them
+	Words    string  `json:"words"`              // "$12.40, plus 3 calls with no price"
+}
+
+// CostsPart is one purpose's or one model's share of a span.
+type CostsPart struct {
+	Name string `json:"name"`
+	CostsTally
+}
+
+// CostsSession is one session's calls since it began, and Claude Code's
+// own figure for it from its last status line, which a reopen starts
+// again at $0.
+type CostsSession struct {
+	ID      string     `json:"id"`
+	Name    string     `json:"name"`
+	Open    bool       `json:"open,omitempty"`
+	Profile string     `json:"profile,omitempty"`
+	Class   string     `json:"class,omitempty"`
+	Ledger  CostsTally `json:"ledger"`
+	Claude  *float64   `json:"claude_usd,omitempty"`
 }
 
 // RebuildsPart is one session's or one cause's share of a span's rebuilds.
@@ -903,6 +963,10 @@ type ClosedSession struct {
 	Closed time.Time `json:"closed"`
 	Auto   bool      `json:"auto,omitempty"`
 	Lost   bool      `json:"lost,omitempty"`
+	// Working says a lost session was at work when it was lost, or was
+	// boosted: a restore starts its agent again, and brings back the rest
+	// resting (DESIGN §4.5).
+	Working bool `json:"working,omitempty"`
 	// Cold is what its next turn would cost once reopened, now that its
 	// prompt cache has run out (DESIGN §6.3); nil while the cache is warm
 	// or when Irie cannot tell.
@@ -974,6 +1038,10 @@ func (n NotLive) Words() string {
 // Session is empty.
 type ReopenArgs struct {
 	Session string `json:"session,omitempty"`
+	// Rest brings it back resting: its card in its place, with no agent
+	// until it is opened or sent a message (DESIGN §4.3), as a restore
+	// brings back the sessions that were not at work.
+	Rest bool `json:"rest,omitempty"`
 }
 
 type ReopenResult struct {

@@ -514,7 +514,7 @@ func (c *Core) check(ctx context.Context, o localmodel.Ollama, own bool, model s
 	w := localmodel.Want{
 		MinContext: p.Local.MinContext, KVCache: c.serverKV(own), Parallel: c.parallel(), Own: own,
 		Budget: localmodel.Budget(c.cfg().Local.MemoryGiB, m), Machine: m, Force: force,
-		Waits: loadWaits(),
+		Waits: c.loadWaits(),
 	}
 	if own {
 		w.Context = c.cfg().Local.Context

@@ -16,6 +16,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"time"
+
+	"github.com/irie-people/irie/internal/ledger"
 )
 
 // MinTokens is the least a request must write again of its conversation's
@@ -62,14 +64,14 @@ func (r Request) TTL() time.Duration {
 	return 0
 }
 
-// rates are the prices the request paid, and false for a model whose
-// prices are not known.
+// rates are the prices the request paid, those of the day it was made, and
+// false for a model whose prices are not known.
 func (r Request) rates() (Rates, bool) {
-	p, ok := Price(r.Model, r.Prompt())
+	p, ok := ledger.At(r.Model, r.Prompt(), r.At)
 	if !ok {
 		return Rates{}, false
 	}
-	return p.scaled(r.Speed, r.Geo), true
+	return p.Scaled(r.Speed, r.Geo), true
 }
 
 // writeCost is what tokens of the request's writes into the cache cost, at
@@ -201,7 +203,7 @@ func (c *Chain) Wake() (Wake, bool) {
 	r, life := c.last, c.life()
 	w := Wake{Last: r.At, TTL: life, Cold: r.At.Add(life), Tokens: r.Prompt() + r.Output, Model: r.Model}
 	if p, ok := Price(r.Model, w.Tokens); ok {
-		p = p.scaled(r.Speed, r.Geo)
+		p = p.Scaled(r.Speed, r.Geo)
 		rate := p.Write5m
 		if life >= time.Hour {
 			rate = p.Write1h
@@ -218,12 +220,32 @@ type Transcript struct {
 	chains map[string]*Chain
 }
 
-// Line is what one transcript line tells the meter.
+// Line is what one transcript line tells the meter, and the ledger
+// (internal/ledger) what its request cost.
 type Line struct {
 	Request
 	Usage   bool   // an assistant reply's line, with its usage
 	Agent   string // the helper whose part of the transcript it is in; "" for the conversation's own
 	Compact bool   // a compaction boundary: what follows starts a new context
+	// Searches are the request's web searches, which cost on top of its
+	// tokens (usage.server_tool_use.web_search_requests).
+	Searches int64
+	// Parts are the sub-inferences of the request that its top-level usage
+	// leaves out and usage.iterations holds, as a compaction's summary or
+	// the advisor tool's answer: every iteration but the reply's own
+	// ("message"), which the top level sums.
+	Parts []Part
+}
+
+// Part is one sub-inference of a request that its top-level usage leaves
+// out, from usage.iterations.
+type Part struct {
+	Type  string // its iteration's type, such as compaction or advisor_message
+	Model string // the model it ran on; "" for the request's own
+	// Its tokens, as a request's: input after the last cache breakpoint,
+	// written into the cache (of which into the hour's), read from it, and
+	// its output.
+	Input, Write, Write1h, Read, Output int64
 }
 
 // sidechain stands for a helper's part of a transcript that names no agent,
@@ -256,8 +278,22 @@ func ParseLine(b []byte) (Line, bool) {
 					W5m int64 `json:"ephemeral_5m_input_tokens"`
 					W1h int64 `json:"ephemeral_1h_input_tokens"`
 				} `json:"cache_creation"`
-				Speed string `json:"speed"`
-				Geo   string `json:"inference_geo"`
+				Speed      string `json:"speed"`
+				Geo        string `json:"inference_geo"`
+				ServerTool *struct {
+					Searches int64 `json:"web_search_requests"`
+				} `json:"server_tool_use"`
+				Iterations []struct {
+					Type          string `json:"type"`
+					Model         string `json:"model"`
+					Input         int64  `json:"input_tokens"`
+					Output        int64  `json:"output_tokens"`
+					CacheWrite    int64  `json:"cache_creation_input_tokens"`
+					CacheRead     int64  `json:"cache_read_input_tokens"`
+					CacheCreation *struct {
+						W1h int64 `json:"ephemeral_1h_input_tokens"`
+					} `json:"cache_creation"`
+				} `json:"iterations"`
 			} `json:"usage"`
 		} `json:"message"`
 	}
@@ -288,6 +324,19 @@ func ParseLine(b []byte) (Line, bool) {
 	}
 	if cc := u.CacheCreation; cc != nil {
 		l.Write1h, l.Write5m = cc.W1h, cc.W5m
+	}
+	if st := u.ServerTool; st != nil {
+		l.Searches = st.Searches
+	}
+	for _, it := range u.Iterations {
+		if it.Type == "message" || it.Type == "" {
+			continue
+		}
+		p := Part{Type: it.Type, Model: it.Model, Input: it.Input, Write: it.CacheWrite, Read: it.CacheRead, Output: it.Output}
+		if cc := it.CacheCreation; cc != nil {
+			p.Write1h = cc.W1h
+		}
+		l.Parts = append(l.Parts, p)
 	}
 	return l, true
 }

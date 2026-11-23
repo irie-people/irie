@@ -6,7 +6,7 @@ import SwiftUI
 /// Every state has a glyph of its own, so colour never carries the meaning
 /// alone.
 enum Look: Equatable {
-    case failed, exited, exitedWithError, frozen, paused, needs, stalled, pausing, working, waiting, starting, done, idle
+    case failed, resting, exited, exitedWithError, frozen, paused, needs, stalled, pausing, working, waiting, starting, done, idle
 
     /// A finished turn whose helpers or teammates still work waits on them
     /// (the row's subs): it is not to verify yet.
@@ -21,6 +21,7 @@ enum Look: Equatable {
     init(state: String, exitCode: Int? = nil) {
         switch state {
         case "failed": self = .failed
+        case "resting": self = .resting
         case "exited": self = (exitCode ?? 0) == 0 ? .exited : .exitedWithError
         case "frozen": self = .frozen
         case "paused": self = .paused
@@ -39,6 +40,7 @@ enum Look: Equatable {
     var label: String {
         switch self {
         case .failed: return "Failed"
+        case .resting: return "Resting"
         case .exited: return "Exited"
         case .exitedWithError: return "Exited with an error"
         case .frozen: return "Frozen"
@@ -59,7 +61,7 @@ enum Look: Equatable {
     var loud: Bool { self == .failed || self == .needs || self == .stalled }
 
     /// Quiet: its name is drawn muted.
-    var quiet: Bool { self == .exited || self == .exitedWithError || self == .starting || self == .idle }
+    var quiet: Bool { self == .exited || self == .exitedWithError || self == .starting || self == .idle || self == .resting }
 
     /// ui.red_on_done, which the core sends: done is red instead of green.
     static var redOnDone = false
@@ -76,7 +78,7 @@ enum Look: Equatable {
         case .paused, .pausing: return Theme.paused
         case .working, .waiting: return Theme.ink
         case .done: return Look.doneColor
-        case .exited, .starting, .idle: return Theme.muted
+        case .exited, .starting, .idle, .resting: return Theme.muted
         }
     }
 
@@ -187,6 +189,10 @@ struct StateMark: View {
                 ctx.fill(circle(2.1), with: ink)
             case .frozen:
                 ctx.fill(line([(8, 2.6), (13.4, 8), (8, 13.4), (2.6, 8)]), with: ink)
+            case .resting:
+                // Frozen's diamond, empty: its agent ended, and its card
+                // stays (DESIGN §5.3).
+                stroke(line([(8, 3), (13, 8), (8, 13), (3, 8), (8, 3)]), 1.6)
             case .paused, .pausing:
                 stroke(line([(5.8, 3.5), (5.8, 12.5)], [(10.2, 3.5), (10.2, 12.5)]), 2.1)
             case .needs:
