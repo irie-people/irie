@@ -44,11 +44,17 @@ func TestUnderTheFloorFails(t *testing.T) {
 	if len(o.problems) != 1 || o.changed {
 		t.Fatalf("outcome %+v", o)
 	}
-	if want := "internal/core: its tests ran 60.8% of its statements (12150 of 20000), under its floor of 61%"; o.problems[0] != want {
+	if want := "internal/core: its tests ran 60.7% of its statements (12150 of 20000), under its floor of 61%"; o.problems[0] != want {
 		t.Errorf("problem %q, want %q", o.problems[0], want)
 	}
 	if fl.pkgs["internal/core"].pct != 61 {
 		t.Error("a floor is never lowered")
+	}
+	// 35.96% is under 36%, and says so.
+	fl = darwin(map[string]floor{"internal/paths": {36, 0}})
+	o = check(fl, []measure{m("internal/paths", 89, 32, 0)}, "darwin", everyFolder)
+	if want := "internal/paths: its tests ran 35.9% of its statements (32 of 89), under its floor of 36%"; len(o.problems) != 1 || o.problems[0] != want {
+		t.Errorf("problems %q, want %q", o.problems, want)
 	}
 }
 

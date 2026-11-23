@@ -70,6 +70,14 @@ func (r result) pct() float64 {
 	return 100 * float64(r.covered) / float64(r.statements)
 }
 
+// shown is a share as the check says it: cut, not rounded, to a tenth, so
+// that 35.96% under a floor of 36% reads 35.9%, not 36.0%.
+func shown(pct float64) string {
+	// The epsilon keeps a share that is exactly a tenth, such as 51.5,
+	// from falling to the tenth below it on a rounding error.
+	return strconv.FormatFloat(math.Floor(pct*10+1e-9)/10, 'f', 1, 64) + "%"
+}
+
 func main() {
 	if len(os.Args) != 2 || strings.HasPrefix(os.Args[1], "-") {
 		fmt.Fprintln(os.Stderr, "usage: tools/coverage.sh FILE (what tools/test.sh --coverout=FILE wrote)")
@@ -300,11 +308,11 @@ func check(fl *floors, ms []measure, goos string, tests func(string) (bool, bool
 			fl.pkgs[m.pkg] = floor{set(pct), m.skipped}
 			added = append(added, fmt.Sprintf("%s %d%%", m.pkg, set(pct)))
 		case pct < float64(f.pct) && m.skipped > f.skipped:
-			o.notes = append(o.notes, fmt.Sprintf("%s: %.1f%% of its statements ran, under its floor of %d%%, but %d of its tests skipped here, %d when the floor was set, so it isn't held to it",
-				m.pkg, pct, f.pct, m.skipped, f.skipped))
+			o.notes = append(o.notes, fmt.Sprintf("%s: %s of its statements ran, under its floor of %d%%, but %d of its tests skipped here, %d when the floor was set, so it isn't held to it",
+				m.pkg, shown(pct), f.pct, m.skipped, f.skipped))
 		case pct < float64(f.pct):
-			o.problems = append(o.problems, fmt.Sprintf("%s: its tests ran %.1f%% of its statements (%d of %d), under its floor of %d%%",
-				m.pkg, pct, m.result.covered, m.result.statements, f.pct))
+			o.problems = append(o.problems, fmt.Sprintf("%s: its tests ran %s of its statements (%d of %d), under its floor of %d%%",
+				m.pkg, shown(pct), m.result.covered, m.result.statements, f.pct))
 		case set(pct) > f.pct:
 			fl.pkgs[m.pkg] = floor{set(pct), m.skipped}
 			raised = append(raised, fmt.Sprintf("%s %d%% to %d%%", m.pkg, f.pct, set(pct)))
