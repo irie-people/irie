@@ -159,6 +159,12 @@ jobs:
   windows-wsl:
     runs-on: windows-2025
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # This checkout's irie inside Linux, and 1.5.0's, the first with irie bridge: the
+        # Windows installer updates the app but not Irie inside Linux, which can be older.
+        linux: [this, '1.5.0']
     env:
       WSL_UTF8: '1'
     defaults:
@@ -208,7 +214,9 @@ jobs:
           $out += Linux 'id; echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"; ls -ld "${XDG_RUNTIME_DIR:-/nonexistent}"; echo "pid 1: $(ps -p 1 -o comm=)"; loginctl list-sessions --no-pager 2>&1 | head -5' | Out-String
           $out
           Note 'Ubuntu' $out
-      - name: Irie in Ubuntu, from site/install.sh and this checkout's build
+      - name: Irie in Ubuntu, from site/install.sh
+        env:
+          LINUX: ${{ matrix.linux }}
         run: |
           . "$env:RUNNER_TEMP\linux.ps1"
           $dist = Join-Path $env:RUNNER_TEMP 'dist'
@@ -233,10 +241,20 @@ jobs:
           ~/.local/bin/irie version </dev/null
           ~/.local/bin/irie setup --check </dev/null || true
           '@
+          if ($env:LINUX -ne 'this') {
+            # A release's irie, as install.sh fetches it from GitHub.
+            $script = @'
+          set -e
+          t=$(mktemp -d); tr -d '\r' < 'SITE' > "$t/install.sh"
+          IRIE_VERSION='VERSION' IRIE_NO_SETUP=1 sh "$t/install.sh" </dev/null
+          ~/.local/bin/irie version </dev/null
+          '@
+            $script = $script.Replace('VERSION', $env:LINUX)
+          }
           $out = Linux $script.Replace('DIST', $d).Replace('SITE', $sh) | Out-String
           $code = $LASTEXITCODE
           $out
-          Note "install.sh exited $code (dist $d)" $out
+          Note "install.sh ($env:LINUX) exited $code" $out
           if ($code -ne 0) { throw 'install.sh failed' }
       - name: Irie.exe, from a cold start of Linux
         run: |
@@ -267,6 +285,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: irie-for-windows-on-wsl
+          name: irie-for-windows-on-wsl-${{ matrix.linux }}
           path: ${{ runner.temp }}/wsl-shots
           if-no-files-found: ignore
