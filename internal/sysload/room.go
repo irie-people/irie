@@ -1,6 +1,10 @@
 package sysload
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/irie-people/irie/internal/brand"
+)
 
 // Room is the machine's room to page: its memory, the swap in use and the
 // free disk where the swap files go. macOS keeps them on the startup
@@ -74,7 +78,7 @@ func (r Room) HeavyWaits() string {
 	if !r.Starved() {
 		return ""
 	}
-	return fmt.Sprintf("only %s of the disk is free, under the %s floor that leaves the swap room to grow, so new heavy work waits until there is more (Raffi clears caches; the biggest files are yours to clear)",
+	return fmt.Sprintf("only %s of the disk is free, under the %s floor that leaves the swap room to grow, so new heavy work waits until there is more ("+brand.Raffi+" clears caches; the biggest files are yours to clear)",
 		Size(r.DiskFree), Size(r.Floor()))
 }
 

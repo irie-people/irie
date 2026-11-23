@@ -213,7 +213,7 @@ func checkEdit(path, id string, want int64, senders int) error {
 		}
 	}
 	if n != senders || got != want {
-		return errors.New("the edited settings are not as they should be, so Raffi left macOS's as they were")
+		return errors.New("the edited settings are not as they should be, so " + brand.Raffi + " left macOS's as they were")
 	}
 	return nil
 }
@@ -312,7 +312,7 @@ func styleFindings(ctx context.Context, r Runner, in alertsInput) (fs []Finding,
 		}
 		f := Finding{ID: "alerts:style:" + n.ID, Area: AreaAlerts, Level: Note,
 			Text:   fmt.Sprintf("macOS’s %s notices (%s) stay on screen until you close each one.", n.Name, n.What),
-			Advice: "Raffi can have them go by themselves after a few seconds, as banners do; they still wait in Notification Center. System Settings › Notifications doesn’t list them, so this is the way to change it, and " + brand.Name + "’s Settings › Alerts keeps your choice.",
+			Advice: brand.Raffi + " can have them go by themselves after a few seconds, as banners do; they still wait in Notification Center. System Settings › Notifications doesn’t list them, so this is the way to change it, and " + brand.Name + "’s Settings › Alerts keeps your choice.",
 		}
 		f.Fix = &Fix{Label: "Let them go by themselves",
 			Run: []string{
@@ -381,7 +381,7 @@ func backgroundFinding(n map[string]int) (Finding, string) {
 		advice = append(advice, fmt.Sprintf("“%s” is %s’s lid check. Its launchd agent ran the %s command itself, which each install replaces, so macOS took every install for a new item. It runs a launcher now that no install replaces: macOS announces it once more, as “%s”, and then no more.", brand.Slug, brand.Name, brand.Slug, brand.Slug+"-lid"))
 	}
 	if others {
-		advice = append(advice, "Each of the others is a program set to start by itself: Raffi’s look at what starts by itself weighs each one, and System Settings › General › Login Items lists them.")
+		advice = append(advice, "Each of the others is a program set to start by itself: "+brand.Raffi+"’s look at what starts by itself weighs each one, and System Settings › General › Login Items lists them.")
 	}
 	f.Advice = strings.Join(advice, " ")
 	return f, ""

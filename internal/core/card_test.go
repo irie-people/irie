@@ -22,14 +22,21 @@ func TestTheCardOp(t *testing.T) {
 	c.mu.Lock()
 	c.sessions[x.id] = x
 	c.mu.Unlock()
-	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "fax"}); err == nil || !strings.Contains(err.Error(), "mail") {
+	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "fax"}); err == nil || !strings.Contains(err.Error(), "terminal, browser") {
 		t.Errorf("an unknown kind: %v", err)
 	}
-	if err := c.cardOp(ipc.CardArgs{Session: "s0000000000zz", Kind: "mail"}); err == nil || !strings.Contains(err.Error(), "No session") {
+	if err := c.cardOp(ipc.CardArgs{Session: "s0000000000zz", Kind: "terminal"}); err == nil || !strings.Contains(err.Error(), "No session") {
 		t.Errorf("an unknown session: %v", err)
 	}
-	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "markets"}); err == nil || !strings.Contains(err.Error(), "plugins on markets") {
-		t.Errorf("markets with its plugin off: %v", err)
+	// A plugin's card waits for its plugin, and a build without the plugin
+	// has no such card at all.
+	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "markets"}); err == nil || marketsBuilt && !strings.Contains(err.Error(), "plugins on markets") || !marketsBuilt && !strings.Contains(err.Error(), `No card is called "markets"`) {
+		t.Errorf("markets with its plugin off, or not built: %v", err)
+	}
+	if !mailBuilt {
+		if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "mail"}); err == nil || !strings.Contains(err.Error(), `No card is called "mail"`) {
+			t.Errorf("mail in a build without it: %v", err)
+		}
 	}
 	if obsidianBuilt {
 		cfg := *c.cfg()
@@ -44,7 +51,7 @@ func TestTheCardOp(t *testing.T) {
 			t.Errorf("the vault, no app open: %v", err)
 		}
 	}
-	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "mail"}); err == nil || !strings.Contains(err.Error(), "app is open") {
+	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "terminal"}); err == nil || !strings.Contains(err.Error(), "app is open") {
 		t.Errorf("no app open: %v", err)
 	}
 
@@ -54,7 +61,7 @@ func TestTheCardOp(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cancel()
-	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "mail"}); err != nil {
+	if err := c.cardOp(ipc.CardArgs{Session: x.id, Kind: "terminal"}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.After(5 * time.Second)
@@ -64,11 +71,11 @@ func TestTheCardOp(t *testing.T) {
 			if f.T != ipc.FrameCard {
 				continue
 			}
-			if f.ID != x.id || f.Kind != "mail" {
+			if f.ID != x.id || f.Kind != "terminal" {
 				t.Fatalf("card frame %+v", f)
 			}
 			b, _ := json.Marshal(f)
-			if string(b) != `{"t":"card","id":"s0000000000c1","kind":"mail"}` {
+			if string(b) != `{"t":"card","id":"s0000000000c1","kind":"terminal"}` {
 				t.Errorf("on the wire: %s", b)
 			}
 			return

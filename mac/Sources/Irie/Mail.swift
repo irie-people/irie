@@ -1,3 +1,4 @@
+#if !NOMAIL
 import AppKit
 import SwiftUI
 
@@ -545,3 +546,4 @@ extension Store {
 private extension Array {
     var nilIfEmpty: [Element]? { isEmpty ? nil : self }
 }
+#endif

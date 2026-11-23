@@ -595,7 +595,7 @@ func patience(t *testing.T, d time.Duration) time.Duration {
 func skipIfDemoted(t *testing.T) {
 	t.Helper()
 	if demoted(t) {
-		t.Skip("the test went into the background, as a session's processes do while another is promoted or Gabriel holds it back")
+		t.Skip("the test went into the background, as a session's processes do while another is promoted or " + brand.Gabriel + " holds it back")
 	}
 }
 

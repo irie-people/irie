@@ -312,7 +312,7 @@ func hotFindings(hot []Hot, o Owner, uid int, home string, left map[int]bool) []
 			if h.For >= time.Hour {
 				f.Level = Warn
 			}
-			f.Advice = "It may be stuck. If you don't know it or no longer need it, Raffi can stop it."
+			f.Advice = "It may be stuck. If you don't know it or no longer need it, " + brand.Raffi + " can stop it."
 			f.Fix = &Fix{
 				Label: "Stop " + filepath.Base(h.Path),
 				Run:   []string{command("kill", "-TERM", strconv.Itoa(h.PID))},

@@ -113,17 +113,22 @@ enum Snapshot {
             // Variorum's note in both modes and half set up, last, since
             // its tab shows only once Variorum is there.
             store.ownHelpers = Fixture.helpers
+            #if !NOWRITING
+            let variorum: [(String, SideTab, Bool)] = [("side-variorum", SideTab.variorum, false), ("side-variorum-dark", SideTab.variorum, true),
+                                                       ("side-variorum-setup", SideTab.variorum, false)]
+            #else
+            let variorum: [(String, SideTab, Bool)] = []
+            #endif
             for (base, tab, dark) in [("side-helpers", SideTab.helpers, false), ("side-helpers-dark", SideTab.helpers, true),
                                       ("side-review", SideTab.review, false),
                                       ("side-notices", SideTab.notices, false), ("side-notices-dark", SideTab.notices, true),
-                                      ("side-narrow", SideTab.review, false),
-                                      ("side-variorum", SideTab.variorum, false), ("side-variorum-dark", SideTab.variorum, true),
-                                      ("side-variorum-setup", SideTab.variorum, false)] {
+                                      ("side-narrow", SideTab.review, false)] + variorum {
                 // At its narrowest, with a count on every tab, the tabs
                 // draw tighter and × stays in sight.
                 let narrow = base == "side-narrow"
                 store.side = SideState(open: true, width: narrow ? SideState.minWidth : SideState.startWidth, tab: tab)
                 if narrow { store.noticesSeen = .distantPast }
+                #if !NOWRITING
                 if tab == .variorum {
                     // No notice on show, and none unseen.
                     store.notice = nil
@@ -131,6 +136,7 @@ enum Snapshot {
                     store.variorum.useFixture(base == "side-variorum-setup" ? VariorumFixture.setup : VariorumFixture.ready,
                                               session: Fixture.selected, fresh: VariorumFixture.fresh, opened: VariorumFixture.opened)
                 }
+                #endif
                 if tab == .notices || narrow {
                     // The notices kept, and an error on show at the top of
                     // the working area, clear of the task bar.
@@ -148,6 +154,7 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            #if !NOMAIL
             // Mail (MailViews.swift): its tab with the list and with a
             // message open, its window, and its two sheets.
             for (base, opening, dark) in [("side-mail", false, false), ("side-mail-dark", false, true), ("side-mail-reading", true, false)] {
@@ -180,6 +187,7 @@ enum Snapshot {
                 store.mail.composing = nil
                 store.mail.loadFixture()
             }
+            #endif
             // The question a close asks first when commits of a card's work
             // have not landed (Closing.swift): of one card, and of a close of
             // five, two of them not landed.
@@ -221,6 +229,7 @@ enum Snapshot {
             }
             PluginPaneFixture.down = []
             PluginPaneFixture.signIn = []
+            #if !NOYOINK
             // Yoink's tab (YoinkViews.swift): its downloads as they go, in
             // both modes, a link's sizes to pick from, and what it lacks
             // while it lacks it.
@@ -241,6 +250,7 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            #endif
             // The Chat tab (ChatViews.swift): the drafts waiting and each
             // account's channels in both modes, a channel open with the note
             // of text Discord hides, and the tab before any account.
@@ -256,6 +266,7 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            #if !NOFOUNDING
             // The Charters tab (Founding.swift): a search's passage in the
             // Constitution, found whatever its spelling, in both modes.
             let foundingPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.foundingPlugin.utf8))
@@ -269,6 +280,8 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            #endif
+            #if !NOJAMMIN
             // Jammin's tab (JamminViews.swift): Spotify playing and Apple
             // Music paused, then Spotify waiting to be linked, each in both
             // modes; then the sheet that links Spotify, with a plain page
@@ -299,6 +312,7 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            #endif
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -319,10 +333,15 @@ enum Snapshot {
             // kind with one in front, in both modes and a narrower window, a
             // blank card, the wheel folded down to its strip, and two turns
             // drawn still, forward and back.
-            let panes: [(String, PaneKind?, Bool, CGFloat, Bool)] = [
+            var panes: [(String, PaneKind?, Bool, CGFloat, Bool)] = [
                 ("panes", .terminal, false, 1500, false), ("panes-dark", .terminal, true, 1500, false),
                 ("panes-browser", .browser, false, 1500, false), ("panes-narrow", .terminal, false, 1100, false),
-                ("panes-blank", nil, false, 1500, false), ("panes-mail", .mail, false, 1500, false),
+                ("panes-blank", nil, false, 1500, false),
+            ]
+            #if !NOMAIL
+            panes.append(("panes-mail", .mail, false, 1500, false))
+            #endif
+            panes += [
                 ("panes-folded", .browser, false, 1500, true), ("panes-folded-dark", .browser, true, 1500, true),
                 // A session's own helpers and controls, once tabs of the right
                 // sidebar.
@@ -1211,6 +1230,7 @@ enum Fixture {
       ]}]}
     """#
 
+    #if !NOYOINK
     /// The Yoink plugin, on and ready, with its tab.
     static let yoinkPlugin = #"""
     {"name": "yoink", "title": "Yoink", "on": true,
@@ -1222,6 +1242,7 @@ enum Fixture {
        "pane": {"id": "yoink.yoink", "title": "Yoink", "icon": "arrow.down.circle", "kind": "yoink"}}
      ]}
     """#
+    #endif
 
     /// The chat plugin, on, with its tab on its Discord part.
     static let chatPlugin = #"""
@@ -1237,6 +1258,7 @@ enum Fixture {
      ]}
     """#
 
+    #if !NOFOUNDING
     /// The founding plugin, on and ready, with its tab.
     static let foundingPlugin = #"""
     {"name": "founding", "title": "Charters", "on": true,
@@ -1248,7 +1270,9 @@ enum Fixture {
        "pane": {"id": "founding.founding", "title": "Charters", "icon": "building.columns", "kind": "founding"}}
      ]}
     """#
+    #endif
 
+    #if !NOJAMMIN
     /// The Jammin plugin, on, its Spotify part ready, with its tab.
     static let jamminPlugin = #"""
     {"name": "jammin", "title": "Jammin", "on": true,
@@ -1263,6 +1287,7 @@ enum Fixture {
        "summary": "The Music app on this Mac."}
      ]}
     """#
+    #endif
 
     /// The config op's answer for a file with a profile, repos, the jot dog
     /// and Mikael's good of its own, as the core writes it (config.Tree).

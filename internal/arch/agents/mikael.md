@@ -1,5 +1,6 @@
 ---
 name: mikael
+called: Mikael
 icon: ⚔️🛡️
 rank: 1
 title: a helper against evil

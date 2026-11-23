@@ -1,3 +1,4 @@
+#if !NOMAIL
 import AppKit
 import SwiftUI
 import WebKit
@@ -938,3 +939,4 @@ struct MailWelcome: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+#endif

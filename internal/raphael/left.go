@@ -338,13 +338,13 @@ func leftFindings(ls []Left, hot []Hot, home string) []Finding {
 				whose = "a test's " + brand.Name
 			}
 			f.Text = fmt.Sprintf("%s was left running by %s, gone now (pid %d, for %s%s).", name, whose, l.Root.PID, For(l.For), runs)
-			f.Advice = "The " + brand.Name + " that started it no longer runs, so nothing needs it. Raffi can stop it and what it runs."
+			f.Advice = "The " + brand.Name + " that started it no longer runs, so nothing needs it. " + brand.Raffi + " can stop it and what it runs."
 		case !s.Open:
 			f.Text = fmt.Sprintf("%s was left running by the session %s, closed now (pid %d, for %s%s).", name, sessionName(s), l.Root.PID, For(l.For), runs)
-			f.Advice = "Its session is closed, so its agent no longer needs it. If you don't need it either, Raffi can stop it and what it runs."
+			f.Advice = "Its session is closed, so its agent no longer needs it. If you don't need it either, " + brand.Raffi + " can stop it and what it runs."
 		default:
 			f.Text = fmt.Sprintf("%s was left running by the session %s, quiet for %s (pid %d, for %s%s).", name, sessionName(s), For(l.Quiet), l.Root.PID, For(l.For), runs)
-			f.Advice = "Its agent started it and has been quiet since: it may be a server you still use. If you don't need it, Raffi can stop it and what it runs."
+			f.Advice = "Its agent started it and has been quiet since: it may be a server you still use. If you don't need it, " + brand.Raffi + " can stop it and what it runs."
 		}
 		f.Evidence = append(f.Evidence, l.How)
 		tree := append([]Seen{l.Root}, l.Kids...)

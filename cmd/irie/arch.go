@@ -82,8 +82,11 @@ const archItemsShown = 5
 // archName is how an arch agent is introduced: his icon, his name (and
 // nickname) and his work.
 func archName(a ipc.ArchAgent) string {
-	name := strings.ToUpper(a.Name[:1]) + a.Name[1:]
-	if a.Nickname != "" {
+	name := a.Called
+	if name == "" {
+		name = strings.ToUpper(a.Name[:1]) + a.Name[1:]
+	}
+	if a.Nickname != "" && a.Nickname != name {
 		name = a.Nickname + " (" + name + ")"
 	}
 	if a.Icon != "" {

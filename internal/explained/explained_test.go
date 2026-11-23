@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 var t0 = time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC)
@@ -56,7 +58,7 @@ func TestAnExplanationKeepsEveryVersion(t *testing.T) {
 		"# How do groups work?\n\n## Your groups\n\n1. **Pick** — cards with ⌘\n",
 		"*Made by bonsai-2:9b on this computer, version 2 of 2.*",
 		"## How it was made\n\n1. Asked: How do groups work?\n2. Then: add the keys\n",
-		"Every version, as Irie made it, is in how-do-groups-work-",
+		"Every version, as " + brand.Name + " made it, is in how-do-groups-work-",
 	} {
 		if !strings.Contains(string(text), want) {
 			t.Errorf("the Markdown lacks %q:\n%s", want, text)

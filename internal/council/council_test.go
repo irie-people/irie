@@ -2,6 +2,7 @@ package council
 
 import (
 	"encoding/json"
+	"github.com/irie-people/irie/internal/brand"
 	"reflect"
 	"strings"
 	"testing"
@@ -153,31 +154,31 @@ func same(a, b []Row) bool {
 func TestMarkdownGivesEachSeatItsSection(t *testing.T) {
 	tl := tally()
 	tl.Earlier = Earliers(tl, []Council{{Date: "2026-11-14", Plans: []Plan{
-		{N: 1, Seat: "gabriel", Title: "Fewer sleeps", Watch: "Gabriel: hand-written waits", Said: Yes, Jot: "s9", Then: "Hand-written waits: 9 calls (4), 12 min (3)"},
+		{N: 1, Seat: "gabriel", Title: "Fewer sleeps", Watch: brand.Gabriel + ": hand-written waits", Said: Yes, Jot: "s9", Then: "Hand-written waits: 9 calls (4), 12 min (3)"},
 		{N: 2, Seat: "raguel", Title: "A cheaper model", Watch: "cost", Said: No, Why: "not now"},
 	}}}, func(jot string) string { return "done" }, 5)
 	md := Markdown(tl)
 	for _, want := range []string{
-		"# Raguel's tally, 2026-11-14 to 2026-11-21\n",
-		"\n## Ragu 🤝: cost\n",
-		"\n## Gabriel 🪽: time\n",
-		"\n## Raffi ❤️‍🩹: what breaks\n",
-		"\n## Mikael ⚔️🛡️: what must not be traded\n",
+		"# " + brand.Raguel + "'s tally, 2026-11-14 to 2026-11-21\n",
+		"\n## " + brand.Ragu + " 🤝: cost\n",
+		"\n## " + brand.Gabriel + " 🪽: time\n",
+		"\n## " + brand.Raffi + " ❤️\u200d🩹: what breaks\n",
+		"\n## " + brand.Mikael + " ⚔️🛡️: what must not be traded\n",
 		"- What the sessions cost: $2.75 ($1.00)\n",
 		"- rate_limit: 1 turn (2)\n",
 		"- grep: 1 of 1, 100% (1 of 1, 100%)\n",
 		"- permission: 1 asked (0), 1 answered (0), 5 min waited in all (0), the longest 5 min (0)\n",
 		"- Hand-written waits: 1 call (0), 0.5 min (0). E.g. `sleep 30; irie ctl list`\n",
 		"- fix-parser: $2.50, ~/irie · +fake\n",
-		"- 2026-11-14, plan 1, Gabriel 🪽: Fewer sleeps. Yes; its jot s9 is done. Watch: Gabriel: hand-written waits. Then: Hand-written waits: 9 calls (4), 12 min (3). Now: Hand-written waits: 1 call (0), 0.5 min (0). E.g. `sleep 30; irie ctl list`.\n",
-		"- 2026-11-14, plan 2, Ragu 🤝: A cheaper model. No: not now. Watch: cost.\n",
+		"- 2026-11-14, plan 1, " + brand.Gabriel + " 🪽: Fewer sleeps. Yes; its jot s9 is done. Watch: " + brand.Gabriel + ": hand-written waits. Then: Hand-written waits: 9 calls (4), 12 min (3). Now: Hand-written waits: 1 call (0), 0.5 min (0). E.g. `sleep 30; irie ctl list`.\n",
+		"- 2026-11-14, plan 2, " + brand.Ragu + " 🤝: A cheaper model. No: not now. Watch: cost.\n",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("no %q in\n%s", want, md)
 		}
 	}
 	// The seats come in their order, the earlier plans last.
-	order := []string{"Ragu 🤝: cost", "Gabriel 🪽: time", "Raffi ❤️‍🩹: what breaks", "Mikael ⚔️🛡️", "Earlier councils' plans"}
+	order := []string{brand.Ragu + " 🤝: cost", brand.Gabriel + " 🪽: time", brand.Raffi + " ❤️\u200d🩹: what breaks", brand.Mikael + " ⚔️🛡️", "Earlier councils' plans"}
 	for i := 1; i < len(order); i++ {
 		if strings.Index(md, order[i-1]) > strings.Index(md, order[i]) {
 			t.Errorf("%q comes after %q", order[i-1], order[i])
@@ -188,7 +189,7 @@ func TestMarkdownGivesEachSeatItsSection(t *testing.T) {
 func TestLineFindsTheLineAWatchNames(t *testing.T) {
 	tl := tally()
 	for watch, want := range map[string]string{
-		"Gabriel's hand-written waits, in calls":           "Hand-written waits: 1 call (0), 0.5 min (0). E.g. `sleep 30; irie ctl list`",
+		brand.Gabriel + "'s hand-written waits, in calls":  "Hand-written waits: 1 call (0), 0.5 min (0). E.g. `sleep 30; irie ctl list`",
 		"grep in Searches, then a read of what they found": "grep: 1 of 1, 100% (1 of 1, 100%)",
 		"go test in Calls that failed, by kind":            "go test: 1 of 1, 100% (0 of 0, 0%)",
 		"something the tally lacks":                        "",
@@ -250,7 +251,7 @@ func TestMinutesEscapeHTMLAndListEveryPlan(t *testing.T) {
 	for _, want := range []string{
 		"<!doctype html>", `name="viewport"`, "prefers-color-scheme:dark",
 		"A calm week &amp; cheaper.", "1. Stop &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt; sleeps", "2. Fewer failed test runs",
-		"Ragu 🤝", "Raffi ❤️‍🩹", "Saves 3,700 calls a week · Effort: small", "<details><summary>The tally</summary>", "$3.13",
+		brand.Ragu + " 🤝", brand.Raffi + " ❤️\u200d🩹", "Saves 3,700 calls a week · Effort: small", "<details><summary>The tally</summary>", "$3.13",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("no %q in the page", want)
@@ -265,7 +266,7 @@ func TestMinutesEscapeHTMLAndListEveryPlan(t *testing.T) {
 		t.Errorf("the page is out of order")
 	}
 	m := string(md)
-	for _, want := range []string{"# Raguel's council, 2026-11-21\n", "### 1. Stop <script>", "### 2. Fewer failed test runs\n", "> Build it.\n", "## Raguel's tally, ", "### Ragu 🤝: cost", "## What the council cost\n\n$3.13"} {
+	for _, want := range []string{"# " + brand.Raguel + "'s council, 2026-11-21\n", "### 1. Stop <script>", "### 2. Fewer failed test runs\n", "> Build it.\n", "## " + brand.Raguel + "'s tally, ", "### " + brand.Ragu + " 🤝: cost", "## What the council cost\n\n$3.13"} {
 		if !strings.Contains(m, want) {
 			t.Errorf("no %q in the Markdown:\n%s", want, m)
 		}
@@ -277,7 +278,7 @@ func TestMinutesEscapeHTMLAndListEveryPlan(t *testing.T) {
 // commands it runs.
 func TestTheChargeNamesThePlansFields(t *testing.T) {
 	a, ok := arch.Get("raguel")
-	if !ok || a.Nickname != "Ragu" || a.Icon != "🤝" || a.Rank != 5 || !a.Call || a.Door != nil {
+	if !ok || a.Nickname != brand.Ragu || a.Icon != "🤝" || a.Rank != 5 || !a.Call || a.Door != nil {
 		t.Fatalf("raguel = %+v, %v", a, ok)
 	}
 	for _, s := range append(Seats, Efforts...) {
