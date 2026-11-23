@@ -121,6 +121,12 @@ func run(args []string) int {
 			return 2
 		}
 		return host.Run(*spec)
+	case "rested":
+		// A resting session's pane (DESIGN §4.3): it says so, and ends, and
+		// tmux keeps it, dead, with the card, until a wake runs the host in
+		// it. --spec is the spec the wake runs.
+		fmt.Println(brand.Name + ": this session rests, with no agent running, to keep memory free. Opening it, or a message to it, starts its agent again, carrying its conversation on.")
+		return 0
 	case "placeholder":
 		// The slot's own pane: the shown session's conversation, or the keys.
 		cfg, p, _ := load()

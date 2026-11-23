@@ -306,8 +306,14 @@ if [ -n "$live" ] && git diff --quiet "$live" HEAD -- . ':(exclude)docs' ':(excl
 fi
 
 if [ -n "$code" ]; then
+	# Under the floor of free disk the swap needs, no test or build starts
+	# (tools/heavy.sh): say so now, rather than fail in the tests.
+	sh tools/heavy.sh --room live
 	phase slot
 	take_slot
+	# The tests and builds take a turn among the machine's test and build
+	# runs too, as many at once as its free memory makes room for.
+	sh tools/heavy.sh $$ live
 fi
 
 # Irie.app builds while the tests run, not after them.
@@ -401,6 +407,7 @@ if [ -n "$slot" ]; then
 	rm -f "$slot/pid"
 	rmdir "$slot" 2>/dev/null || true
 	slot=
+	sh tools/heavy.sh --done $$
 fi
 # IRIE_LIVE_WAIT, in seconds, bounds the wait: an hour, as an install that
 # holds the lock for its whole run, as before this script, takes half that.

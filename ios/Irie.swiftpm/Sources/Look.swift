@@ -314,11 +314,12 @@ enum AgentColor {
 
 /// A row's state as DESIGN §5.3 draws it (States.swift's Look).
 enum Look: Equatable {
-    case failed, exited, exitedWithError, frozen, paused, needs, stalled, pausing, working, starting, done, idle
+    case failed, resting, exited, exitedWithError, frozen, paused, needs, stalled, pausing, working, starting, done, idle
 
     init(_ s: Session) {
         switch s.state {
         case "failed": self = .failed
+        case "resting": self = .resting
         case "exited": self = (s.exitCode ?? 0) == 0 ? .exited : .exitedWithError
         case "frozen": self = .frozen
         case "paused": self = .paused
@@ -336,6 +337,7 @@ enum Look: Equatable {
     var label: String {
         switch self {
         case .failed: return "Failed"
+        case .resting: return "Resting"
         case .exited: return "Exited"
         case .exitedWithError: return "Exited with an error"
         case .frozen: return "Frozen"
@@ -353,7 +355,7 @@ enum Look: Equatable {
     /// Red: it needs you.
     var loud: Bool { self == .failed || self == .needs || self == .stalled }
     /// Its name is drawn muted.
-    var quiet: Bool { self == .exited || self == .exitedWithError || self == .starting || self == .idle }
+    var quiet: Bool { self == .exited || self == .exitedWithError || self == .starting || self == .idle || self == .resting }
     /// Pausing is dim yellow, an exit with an error code dim red.
     var dimmed: Bool { self == .pausing || self == .exitedWithError }
     var ended: Bool { self == .exited || self == .exitedWithError || self == .failed }
@@ -366,7 +368,7 @@ enum Look: Equatable {
         case .paused, .pausing: return Theme.paused
         case .working: return AgentColor.colors(session).mark
         case .done: return redOnDone ? Theme.needs : Theme.done
-        case .exited, .starting, .idle: return Theme.muted
+        case .exited, .starting, .idle, .resting: return Theme.muted
         }
     }
 
@@ -382,7 +384,7 @@ enum Look: Equatable {
     }
 }
 
-/// A state's glyph from DESIGN §5.3: ✕ failed, · exited, ◆ frozen, ‖ paused,
+/// A state's glyph from DESIGN §5.3: ✕ failed, ◇ resting, · exited, ◆ frozen, ‖ paused,
 /// ● needs you, ! stalled, ◐ working, ◌ starting, ✓ done and ○ idle.
 @MainActor struct StateMark: View {
     let look: Look
@@ -415,6 +417,8 @@ enum Look: Equatable {
                 ctx.fill(circle(2.1), with: ink)
             case .frozen:
                 ctx.fill(line([(8, 2.6), (13.4, 8), (8, 13.4), (2.6, 8)]), with: ink)
+            case .resting:
+                stroke(line([(8, 3), (13, 8), (8, 13), (3, 8), (8, 3)]), 1.6)
             case .paused, .pausing:
                 stroke(line([(5.8, 3.5), (5.8, 12.5)], [(10.2, 3.5), (10.2, 12.5)]), 2.1)
             case .needs:

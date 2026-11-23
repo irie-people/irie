@@ -31,6 +31,10 @@ func (c *Core) send(a ipc.SendArgs) error {
 	if strings.TrimSpace(text) == "" {
 		return ipc.Errorf(ipc.CodeBadArgs, "there is nothing to send")
 	}
+	// A resting session's agent starts again first (rest.go).
+	if err := c.wakeFor(a.Session, "message"); err != nil {
+		return err
+	}
 	return c.typeTo(a.Session, text, c.sendable, nil)
 }
 
@@ -123,6 +127,9 @@ const (
 // it takes a message (sendable). Enter waits until the prompt shows the
 // word.
 func (c *Core) continueAgent(a ipc.ContinueArgs) error {
+	if err := c.wakeFor(a.Session, "message"); err != nil {
+		return err
+	}
 	return c.typeTo(a.Session, continueWord, c.continuable, c.promptHolds)
 }
 
@@ -221,6 +228,8 @@ func (c *Core) sendable(x *session, text string) error {
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended", x.name)
 	case ipc.StateFrozen:
 		return ipc.Errorf(ipc.CodeBusy, "%s is paused: resume it first", x.name)
+	case ipc.StateResting:
+		return ipc.Errorf(ipc.CodeBusy, "%s rests: open it to start its agent again", x.name)
 	}
 	if x.dead {
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended", x.name)

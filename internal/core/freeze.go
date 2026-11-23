@@ -96,6 +96,14 @@ func (c *Core) freezeOp(a ipc.FreezeArgs, on bool) (r ipc.FreezeResult, changed 
 		if was != on {
 			changed = append(changed, id)
 		}
+		// Your thaw of one resting session starts its agent again
+		// (rest.go); a thaw of them all leaves them resting, so that it
+		// never starts every agent at once.
+		if !on && !a.All {
+			if rests, _ := c.resting(id); rests {
+				c.wakeLater(id, "thaw")
+			}
+		}
 	}
 	frames := c.changes()
 	c.mu.Unlock()
@@ -142,7 +150,7 @@ func checkFreeze(on bool) func(c *Core, a action) []problem {
 		if c.frozenNow(x) == on {
 			return []problem{alreadyDone(fmt.Sprintf("%q %s.", x.name, already))}
 		}
-		if st := x.track.state(x.dead); on && (st == ipc.StateExited || st == ipc.StateFailed) {
+		if st := x.track.state(x.dead); on && (st == ipc.StateExited || st == ipc.StateFailed || st == ipc.StateResting) {
 			return []problem{{code: "ended", question: fmt.Sprintf("%q has ended, so there is nothing to freeze.", x.name), recommend: ipc.ChoiceSkip}}
 		}
 		if !on {
@@ -210,7 +218,7 @@ func (c *Core) allTargets(on bool) []string {
 		if x == nil {
 			continue
 		}
-		if c.frozenNow(x) != on && (!on || s.State != ipc.StateExited && s.State != ipc.StateFailed) {
+		if c.frozenNow(x) != on && (!on || s.State != ipc.StateExited && s.State != ipc.StateFailed && s.State != ipc.StateResting) {
 			ids = append(ids, s.ID)
 		}
 	}
@@ -224,8 +232,11 @@ func (c *Core) allTargets(on bool) []string {
 func (c *Core) freezeLocked(x *session, why string) error {
 	// Frozen now, it waits for no thaw in turn.
 	c.unqueue(x.id)
-	if st := x.track.state(x.dead); st == ipc.StateExited || st == ipc.StateFailed {
+	switch x.track.state(x.dead) {
+	case ipc.StateExited, ipc.StateFailed:
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended, so there is nothing to freeze", x.name)
+	case ipc.StateResting:
+		return ipc.Errorf(ipc.CodeBusy, "%s rests, so nothing of it runs to freeze", x.name)
 	}
 	p := c.snap.Pane(x.pane)
 	if p == nil || p.Dead || p.PID <= 1 {
@@ -325,7 +336,9 @@ func (c *Core) hostFreezes(x *session, hostPID int) bool {
 func (c *Core) keepFrozen() {
 	for _, x := range c.sessions {
 		f := x.track.frozen
-		if f == nil {
+		// A frozen session that rests is ending, or has ended: nothing of
+		// it is to stop again (rest.go).
+		if f == nil || x.track.rest != nil {
 			continue
 		}
 		p := c.snap.Pane(x.pane)
