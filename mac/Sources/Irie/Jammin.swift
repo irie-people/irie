@@ -1,3 +1,4 @@
+#if !NOJAMMIN
 import AppKit
 import SwiftUI
 
@@ -735,3 +736,4 @@ extension Store {
         Task { await jammin.refresh() }
     }
 }
+#endif

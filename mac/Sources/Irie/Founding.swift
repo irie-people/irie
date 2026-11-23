@@ -1,3 +1,4 @@
+#if !NOFOUNDING
 import AppKit
 import SwiftUI
 
@@ -578,3 +579,4 @@ private struct FoundingPrint: View {
         }
     }
 }
+#endif

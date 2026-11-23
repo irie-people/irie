@@ -130,22 +130,32 @@ final class Store {
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
+    #if !NOWRITING
     /// The core serves the variorum op: its build has the Writing plugin,
     /// whose Variorum tab shows only then (VariorumTab.swift).
     private(set) var canVariorum = false
+    #endif
     /// The core's hello is in, so the features above are its own.
     private(set) var knowsFeatures = false
+    #if !NOWRITING
     /// The Variorum tab's state, kept while the app runs.
     let variorum = VariorumModel()
+    #endif
+    #if !NOMAIL
     /// The core serves the mail op: its build has the mail plugin
     /// (docs/proposals/mail.md), whose Mail tab and window show only then.
     private(set) var canMail = false
+    #endif
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
+    #if !NOWRITING
     var plugins: [PluginInfo] = [] {
         // The Variorum tab shows only while the Writing plugin can answer it.
         didSet { if Self.writing(plugins) != Self.writing(oldValue) { variorum.check() } }
     }
+    #else
+    var plugins: [PluginInfo] = []
+    #endif
     /// Your bundles (PluginPanes.swift); empty from a core from before them.
     var bundles: [BundleInfo] = []
     /// Reads the plugins once a minute (keepPlugins).
@@ -379,18 +389,26 @@ final class Store {
     /// What the menu bar shows, which changes far less often than the
     /// store does (MenuBar.swift).
     let menu = MenuState()
+    #if !NOMAIL
     /// The mail plugin's accounts and list, which the Mail tab and window
     /// share (Mail.swift).
     let mail: MailModel
+    #endif
+    #if !NOYOINK
     /// The Yoink plugin's downloads, which its tab draws (Yoink.swift).
     let yoink: YoinkModel
+    #endif
     /// The chat plugin's accounts, drafts and channels, which its tab
     /// draws (Chat.swift).
     let chat: ChatModel
+    #if !NOFOUNDING
     /// The charters, which the Charters tab draws (Founding.swift).
     let founding: FoundingModel
+    #endif
+    #if !NOJAMMIN
     /// The Jammin plugin's music, which its tab draws (Jammin.swift).
     let jammin: JamminModel
+    #endif
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
     /// The Obsidian vault, for its cards and the notepad (Vault.swift).
@@ -404,18 +422,28 @@ final class Store {
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
+        #if !NOMAIL
         mail = MailModel(client: client)
+        #endif
+        #if !NOYOINK
         yoink = YoinkModel(client: client)
+        #endif
         chat = ChatModel(client: client)
+        #if !NOFOUNDING
         founding = FoundingModel(client: client)
+        #endif
+        #if !NOJAMMIN
         jammin = JamminModel(client: client)
+        #endif
         notes.store = self
         vault.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
             self?.loadPluginsSoon()
         }
+        #if !NOWRITING
         variorum.store = self
+        #endif
         watchMenu()
     }
 
@@ -500,11 +528,17 @@ final class Store {
                 sizesSoon()
                 notes.connected(serves: hello.features.contains("notepad"))
                 vault.served = hello.features.contains("obsidian")
+                #if !NOWRITING
                 canVariorum = hello.features.contains("variorum")
+                #endif
                 knowsFeatures = true
                 keepSideTab()
+                #if !NOWRITING
                 variorum.check()
+                #endif
+                #if !NOMAIL
                 canMail = hello.features.contains("mail")
+                #endif
                 loadPluginsSoon()
                 keepPlugins()
                 if hello.features.contains("theme") { sendTheme(Palette.chosen) }
@@ -546,12 +580,14 @@ final class Store {
         Task { _ = try? await client.call("theme", args, timeout: 2, as: Empty.self) }
     }
 
+    #if !NOWRITING
     /// The Writing plugin as the Variorum tab cares for it: whether it and
     /// each part is on, and how far each is set up.
     private static func writing(_ all: [PluginInfo]) -> [String] {
         guard let p = all.first(where: { $0.name == "writing" }) else { return [] }
         return ["\(p.on)"] + p.parts.map { "\($0.name) \($0.on) \($0.state)" }
     }
+    #endif
 
     private static func describe(_ error: Error) -> String {
         if notRunning(error) {
@@ -879,11 +915,17 @@ final class Store {
         canBoost = true
         canBoostAlways = true
         canArch = true
+        #if !NOWRITING
         canVariorum = true
+        #endif
         knowsFeatures = true
+        #if !NOMAIL
         canMail = true
         mail.loadFixture()
+        #endif
+        #if !NOFOUNDING
         founding.loadFixture()
+        #endif
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
@@ -1437,30 +1479,40 @@ final class Store {
             switch r.did {
             case "asked":
                 if let c = r.choice, let op = r.op { await answer(op, c) }
+            #if !NOMARKETS
             case "answered" where r.op == "markets":
                 // :markets: the Markets window says how the map stands.
                 NotificationCenter.default.post(name: .irieMarkets, object: nil)
+            #endif
             case _ where r.op == "chat" && chatPane != nil:
                 // :chat opens the Chat tab, where the drafts wait to be
                 // sent.
                 showChat()
+            #if !NOYOINK
             case _ where r.op == "yoink" && yoinkPane != nil:
                 // :yoink opens the Yoink tab, where the download shows as it
                 // goes; a start says so too.
                 showYoink()
                 if r.did != "answered" { say(r.text, error: false, seconds: 5) }
+            #endif
+            #if !NOJAMMIN
             case _ where r.op == "jammin" && jamminPane != nil:
                 // :jammin opens the Jammin tab, which shows what plays on
                 // each source; a control says what it did too.
                 showJammin()
                 if r.did != "answered" { say(r.text, error: false, seconds: 5) }
+            #endif
             case "answered":
+                #if !NOMAIL
                 // :mail opens the Mail tab, which says more than words can.
                 if r.op == "mail", mailShown {
                     openSide(.mail)
                 } else {
                     say(r.text, error: false, seconds: 8)
                 }
+                #else
+                say(r.text, error: false, seconds: 8)
+                #endif
             case "added":
                 // It went to the agent of the task just before, which gets
                 // it once the delay is over; until then New task takes it

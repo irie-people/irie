@@ -1,3 +1,4 @@
+#if !NOMARKETS
 import AppKit
 import SwiftUI
 import WebKit
@@ -438,3 +439,4 @@ extension Store {
         }
     }
 }
+#endif

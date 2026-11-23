@@ -894,6 +894,7 @@ struct RenameResult: Decodable {
     var session: Session
 }
 
+#if !NOWRITING
 /// The variorum op (internal/core/variorum.go), which only a core whose
 /// hello lists variorum serves: the Writing plugin's tab asks where things
 /// stand, keeps one of Variorum's setups, lists the notes shared with
@@ -999,6 +1000,7 @@ extension VariorumBlock {
         comments = try c.decodeIfPresent([VariorumComment].self, forKey: .comments)
     }
 }
+#endif
 
 struct Empty: Codable {}
 
