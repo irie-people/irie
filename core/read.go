@@ -14,11 +14,46 @@ import (
 	"unicode/utf8"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 )
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
 const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :jammin [spotify|music|files] [play|pause|next|previous], :open FILE[:LINE]"
+
+// builtCommands are Commands without the commands and :setup guides of
+// the plugins this build leaves out (DESIGN §4.17), as the error for an
+// unknown command lists them, so that a copy without a plugin never
+// offers it. IsCommand still reserves every name.
+func builtCommands() string {
+	privacy := !config.PrivacyBuilt
+	out := map[string]bool{
+		"write": !config.WritingBuilt, "markets": !config.MarketsBuilt, "mail": !config.MailBuilt,
+		"chat": !config.ChatBuilt, "yoink": !config.YoinkBuilt, "jammin": !config.JamminBuilt,
+		"vpn": !config.VPNBuilt,
+		// :setup's guides of the privacy plugin, the dead man's switch's
+		// among them.
+		"switch": privacy, "anon": privacy, "browser": privacy, "privacy": privacy,
+	}
+	var keep []string
+	for _, c := range strings.Split(Commands, ", ") {
+		name, rest, _ := strings.Cut(strings.TrimPrefix(c, ":"), " ")
+		if out[name] {
+			continue
+		}
+		if name == "setup" {
+			var guides []string
+			for _, g := range strings.Split(strings.Trim(rest, "[]"), "|") {
+				if !out[g] {
+					guides = append(guides, g)
+				}
+			}
+			c = ":setup [" + strings.Join(guides, "|") + "]"
+		}
+		keep = append(keep, c)
+	}
+	return strings.Join(keep, ", ")
+}
 
 // commandName finds each command's name in Commands.
 var commandName = regexp.MustCompile(`(?:^|, ):([a-z]+)`)
@@ -404,7 +439,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return wordStep(w, arg, in, v)
 		}
 	}
-	all := Commands
+	all := builtCommands()
 	for _, w := range v.Words {
 		if w.Off == "" {
 			all += ", :" + w.Name + " [TASK]"

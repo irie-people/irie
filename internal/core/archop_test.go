@@ -80,7 +80,7 @@ func TestArchListShowsEveryArchAgent(t *testing.T) {
 	// Gabriel off is said so, with nothing to do.
 	t.Setenv(brand.Env("GABRIEL"), "off")
 	if g := c.archList().Agents[1]; g.On || len(g.Actions) != 0 || !strings.HasPrefix(g.Status, "Off") {
-		t.Errorf("Gabriel off: %+v", g)
+		t.Errorf(brand.Gabriel+" off: %+v", g)
 	}
 }
 

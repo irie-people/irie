@@ -29,6 +29,16 @@ repo=$(get Repo)
 env=$(get EnvPrefix)
 tagline=$(get Tagline)
 bar=$(get Bar)
+# The arch agents' names as a person reads them, and how texts speak of one.
+mikael=$(get Mikael)
+gabriel=$(get Gabriel)
+raphael=$(get Raphael)
+raffi=$(get Raffi)
+raguel=$(get Raguel)
+ragu=$(get Ragu)
+he=$(get He)
+him=$(get Him)
+his=$(get His)
 # Tags may be empty, so it is read without get's check.
 tags=$(sed -n 's/^[[:space:]]*Tags[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$src" | head -n 1)
 # The Mac app's executable, as brand.Exe makes it: Name's ASCII letters and
@@ -78,6 +88,19 @@ enum Brand {
     static let repo = $(s "$repo")
     /// The line under the name on the welcome.
     static let tagline = $(s "$tagline")
+    /// The arch agents' names as a person reads them; raffi and ragu are
+    /// Raphael's and Raguel's short names.
+    static let mikael = $(s "$mikael")
+    static let gabriel = $(s "$gabriel")
+    static let raphael = $(s "$raphael")
+    static let raffi = $(s "$raffi")
+    static let raguel = $(s "$raguel")
+    static let ragu = $(s "$ragu")
+    /// How the texts speak of an arch agent: he, him and his, or it, it and
+    /// its in a copy whose agents are tools.
+    static let he = $(s "$he")
+    static let him = $(s "$him")
+    static let his = $(s "$his")
 
     /// The environment variable called name, such as env("CORE_SOCKET").
     static func env(_ name: String) -> String { envPrefix + "_" + name }

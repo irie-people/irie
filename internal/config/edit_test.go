@@ -314,7 +314,7 @@ func TestMailSettingsAreChecked(t *testing.T) {
 		}
 	}
 	c, err := Parse([]byte("[mail.accounts.fm]\nkind = \"imap\"\naddress = \"a@example.com\"\nimap = \"imap.example.com:993\"\nsmtp = \"starttls://smtp.example.com:587\"\n"), "config.toml")
-	if err != nil || c.Mail.Fetch != 50 || c.Mail.Fresh != time.Minute || !c.MailOn() {
+	if err != nil || c.Mail.Fetch != 50 || c.Mail.Fresh != time.Minute || c.MailOn() != MailBuilt {
 		t.Errorf("an imap account: %v, %+v", err, c.Mail)
 	}
 	for s, want := range map[string]bool{"imap.gmail.com:993": true, "127.0.0.1:1143": false, "tls://127.0.0.1:1143": true, "starttls://smtp.gmail.com:465": false} {

@@ -33,7 +33,8 @@ import (
 //
 // His look (internal/raphael) says what slows the computer down, fills it
 // up or may have got in, with advice. Every minute he samples the
-// processes, the memory and the disk; every arch.raphael.every, when the
+// processes, with what agents left running (leftrunning.go), the memory
+// and the disk; every arch.raphael.every, when the
 // disk is nearly full, or when asked, he weighs the caches, what starts by
 // itself and macOS's protections too. A fix runs only on the person's OK,
 // one at a time, and never from inside an agent.
@@ -67,7 +68,8 @@ const (
 type raphState struct {
 	mu        sync.Mutex
 	sampler   raphael.Sampler
-	quick     []raphael.Finding // the last sample's: what runs hot, memory and disk
+	left      leftState         // what each process an agent may have left running showed (leftrunning.go)
+	quick     []raphael.Finding // the last sample's: what agents left running, what runs hot, memory and disk
 	quickFine []string
 	slow      []raphael.Finding // the last look's: caches, startup, protection
 	slowFine  []string
@@ -185,6 +187,7 @@ func (c *Core) raphaelSweep() {
 	hot := r.sampler.Hot(ps)
 	r.mu.Unlock()
 	in := c.raphaelInput(ps, hot, t, now)
+	in.Left = c.leftRunning(ctx, ps, t, now)
 	disk, _ := raphael.ReadDisk()
 	quick, fine := raphael.Quick(in, raphael.ReadMemory(), disk)
 	r.mu.Lock()
@@ -279,17 +282,17 @@ func (c *Core) raphaelOp(peer int, a ipc.RaphaelArgs) (ipc.RaphaelResult, error)
 		f, ok := c.raphaelFinding(a.Fix)
 		switch {
 		case c.fromAgent(peer):
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say OK to Raffi's fixes: they are your user's to say OK to, in Settings > Arch Agents or with `"+brand.Slug+" ctl raphael fix` in their own terminal.")
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say OK to "+brand.Raffi+"'s fixes: they are your user's to say OK to, in Settings > Arch Agents or with `"+brand.Slug+" ctl raphael fix` in their own terminal.")
 		case !ok || f.Fix == nil:
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeNotFound, "Raffi has nothing to fix by %q now: ask him to look again.", a.Fix)
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeNotFound, brand.Raffi+" has nothing to fix by %q now: ask "+brand.Him+" to look again.", a.Fix)
 		case !a.OK:
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "Raffi runs a fix only once you say OK to what it runs: %s.", strings.Join(f.Fix.Run, "; "))
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, brand.Raffi+" runs a fix only once you say OK to what it runs: %s.", strings.Join(f.Fix.Run, "; "))
 		}
 		r.mu.Lock()
 		if r.fixing != nil {
 			busy := r.fixing.Fix.Label
 			r.mu.Unlock()
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "Raffi is still on one fix (%s): one at a time.", busy)
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, brand.Raffi+" is still on one fix (%s): one at a time.", busy)
 		}
 		fix := f
 		r.fixing, r.fixed = &fix, make(chan struct{})
@@ -314,7 +317,7 @@ func (c *Core) raphaelOp(peer int, a ipc.RaphaelArgs) (ipc.RaphaelResult, error)
 		}
 		f, ok := c.raphaelFinding(a.Mine)
 		if !ok || f.Key == "" {
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeNotFound, "Raffi has no startup item by %q now.", a.Mine)
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeNotFound, brand.Raffi+" has no startup item by %q now.", a.Mine)
 		}
 		known := slices.Clone(c.cfg().Arch.Raphael.Known)
 		if !slices.Contains(known, f.Key) {
@@ -507,7 +510,7 @@ func (c *Core) raphaelNow() archNow {
 		n.status += " " + rep.Fixes[0].Said
 	}
 	if !rep.Checking {
-		n.actions = []ipc.ArchAction{{Label: "Look over my Mac now", Op: ipc.OpRaphael, Args: json.RawMessage(`{"check":true}`), Done: "Raffi is looking over your Mac: what he finds shows here in a minute or two."}}
+		n.actions = []ipc.ArchAction{{Label: "Look over my Mac now", Op: ipc.OpRaphael, Args: json.RawMessage(`{"check":true}`), Done: brand.Raffi + " is looking over your Mac: what " + brand.He + " finds shows here in a minute or two."}}
 	}
 	for _, f := range rep.Findings {
 		it := ipc.ArchItem{Text: f.Text, Level: f.Level}
@@ -523,7 +526,7 @@ func (c *Core) raphaelNow() archNow {
 		if f.Fix != nil {
 			id, _ := json.Marshal(ipc.RaphaelArgs{Fix: f.ID})
 			x := ipc.ArchAction{Label: f.Fix.Label, Op: ipc.OpRaphael, Args: id, Ask: raphaelAsk(f.Fix),
-				Done: "Raffi is on it: what came of it shows here once he is done."}
+				Done: brand.Raffi + " is on it: what came of it shows here once " + brand.He + " is done."}
 			if rep.Fixing == f.ID {
 				x.Label = "Working on it…"
 			}
@@ -531,7 +534,7 @@ func (c *Core) raphaelNow() archNow {
 		}
 		if f.Mine {
 			id, _ := json.Marshal(ipc.RaphaelArgs{Mine: f.ID})
-			it.Actions = append(it.Actions, ipc.ArchAction{Label: "It's mine", Op: ipc.OpRaphael, Args: id, Done: "Raffi no longer flags it."})
+			it.Actions = append(it.Actions, ipc.ArchAction{Label: "It's mine", Op: ipc.OpRaphael, Args: id, Done: brand.Raffi + " no longer flags it."})
 		}
 		n.items = append(n.items, it)
 	}
@@ -542,7 +545,7 @@ func (c *Core) raphaelNow() archNow {
 // runs, what it does, and how to undo it.
 func raphaelAsk(f *ipc.RaphaelFix) string {
 	var b strings.Builder
-	b.WriteString("Raffi will run:\n")
+	b.WriteString(brand.Raffi + " will run:\n")
 	for _, line := range f.Run {
 		b.WriteString("    " + line + "\n")
 	}
@@ -643,7 +646,7 @@ func (c *Core) coreReport(still time.Duration) string {
 	buf := make([]byte, 16<<20)
 	n := runtime.Stack(buf, true)
 	file := filepath.Join(dir, time.Now().UTC().Format("2006-01-02T15-04-05Z")+"-core.txt")
-	head := fmt.Sprintf("Raphael restarted the core (pid %d, %s): its loop had stood still for %v.\n\n", os.Getpid(), c.version, still.Round(time.Second))
+	head := fmt.Sprintf(brand.Raphael+" restarted the core (pid %d, %s): its loop had stood still for %v.\n\n", os.Getpid(), c.version, still.Round(time.Second))
 	if err := os.WriteFile(file, append([]byte(head), buf[:n]...), 0o600); err != nil {
 		return ""
 	}

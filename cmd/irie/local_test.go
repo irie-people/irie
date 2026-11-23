@@ -2,8 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/brand"
 
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
@@ -60,5 +65,24 @@ func TestTheModelTableSaysWhatPlusLocalRuns(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("no %q in\n%s", want, out)
 		}
+	}
+}
+
+func TestSetupLocalPullsNothingWhileModelsAreOffHere(t *testing.T) {
+	home := t.TempDir()
+	for k, v := range map[string]string{"HOME": home, "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_CONFIG_HOME": filepath.Join(home, "config"), "XDG_DATA_HOME": filepath.Join(home, "data")} {
+		t.Setenv(k, v)
+	}
+	dir := filepath.Join(home, "config", brand.Slug)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[local]\nhere = false\nollama = \"/nonexistent/ollama\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	err := setupLocal([]string{"--yes"}, strings.NewReader(""), &out)
+	if !errors.Is(err, localmodel.ErrOffHere) || !strings.Contains(err.Error(), "local.here true") || out.Len() != 0 {
+		t.Errorf("%v, printed %q; want it refused before installing or pulling, saying how to undo it", err, out.String())
 	}
 }

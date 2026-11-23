@@ -706,6 +706,9 @@ var Runtimes = []string{"ollama", "llama-server"}
 // own, which it runs in its tmux server with the settings below, or one the
 // user runs at url.
 type Local struct {
+	// Here is whether Irie loads models on this computer. False keeps its
+	// own servers stopped and every model off it (here.go, DESIGN §6.3).
+	Here      bool              `toml:"here"`
 	Ollama    string            `toml:"ollama"`     // the ollama binary; "" = PATH, then the usual install places
 	URL       string            `toml:"url"`        // a server you run instead, such as "http://127.0.0.1:11434"; "" = Irie runs its own
 	Port      int               `toml:"port"`       // Irie's own server listens on 127.0.0.1 at this port
@@ -1118,7 +1121,7 @@ func Default() Config {
 				Skill:          "chaos",
 			},
 		},
-		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
+		Local: Local{Here: true, Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
 		Bench: Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30, Close: true},
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
@@ -1849,7 +1852,7 @@ func (c Config) Validate() error {
 	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
-	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session Mikael is with hears")
+	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session "+brand.Mikael+" is with hears")
 	g := c.Arch.Gabriel
 	if g.Away < 0 || g.Word < 0 {
 		bad("arch.gabriel.away and arch.gabriel.word must not be negative")
@@ -1860,7 +1863,7 @@ func (c Config) Validate() error {
 	if g.Boost < time.Minute || g.Boost > MaxBoost {
 		bad("arch.gabriel.boost = %v: must be from 1m to %v", g.Boost, MaxBoost)
 	}
-	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
+	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps "+brand.Gabriel+" never slows")
 	ra := c.Arch.Raphael
 	if ra.Core != 0 && ra.Core < MinRaphaelCore {
 		bad("arch.raphael.core = %v: must be 0s, for never, or at least %v", ra.Core, MinRaphaelCore)
@@ -1868,7 +1871,7 @@ func (c Config) Validate() error {
 	if ra.Every != 0 && ra.Every < 10*time.Minute {
 		bad("arch.raphael.every = %v: must be 0s, for only when asked, or at least 10m", ra.Every)
 	}
-	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items Raphael no longer flags")
+	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items "+brand.Raphael+" no longer flags")
 	rg := c.Arch.Raguel
 	if rg.Every < 0 {
 		bad("arch.raguel.every = %v: must not be negative; 0s for only when asked", rg.Every)

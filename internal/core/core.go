@@ -73,6 +73,7 @@ type Core struct {
 	sampling    atomic.Bool  // a memory sample is running
 	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	ease        easeState    // what Irie's own model servers let go of (localhere.go)
 	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 	ragu        raguelState  // Raguel's councils (raguel.go); it has a lock of its own, taken after mu
@@ -1348,7 +1349,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Fix != "" || a.Mine != "" {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, brand.Raffi+" takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
 		}
 		return c.raphaelOp(0, a)
 	case ipc.OpCouncil:
@@ -1359,7 +1360,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Do != ipc.CouncilReport && a.Do != ipc.CouncilTally {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Ragu takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, brand.Ragu+" takes a council, a plan or an answer only over "+brand.Name+"'s socket.")
 		}
 		return c.councilOp(0, a)
 	case ipc.OpLessons:
@@ -1370,7 +1371,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Do != ipc.LessonsReport {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi reads what failed and takes your word on lessons only over "+brand.Name+"'s socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, brand.Raffi+" reads what failed and takes your word on lessons only over "+brand.Name+"'s socket.")
 		}
 		return c.lessonsOp(0, a)
 	case ipc.OpGabriel:

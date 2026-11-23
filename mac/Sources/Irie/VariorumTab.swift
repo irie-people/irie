@@ -1,3 +1,4 @@
+#if !NOWRITING
 import AppKit
 import SwiftUI
 
@@ -1024,3 +1025,4 @@ private struct VariorumProblem: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+#endif

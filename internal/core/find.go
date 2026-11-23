@@ -309,6 +309,9 @@ func (c *Core) findMeaning(q string, docs []findDoc) ([]float64, int, string) {
 	if e.Model == "" {
 		return nil, 0, "route.embed.model is empty"
 	}
+	if err := c.modelsOff(e.URL); err != nil {
+		return nil, 0, "words only: " + err.Error()
+	}
 	f := &c.finds
 	f.mu.Lock()
 	c.loadFindVectors(e.Model)

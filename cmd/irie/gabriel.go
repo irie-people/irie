@@ -99,20 +99,20 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 	}
 	switch {
 	case !r.On:
-		fmt.Fprintf(w, "Gabriel: off. `"+brand.Slug+" ctl gabriel on` turns him on.\n")
+		fmt.Fprintf(w, brand.Gabriel+": off. `"+brand.Slug+" ctl gabriel on` turns "+brand.Him+" on.\n")
 		return nil
 	case !r.Present:
-		fmt.Fprintf(w, "Gabriel: you are away (no keyboard or mouse for %s), so nothing is held back.\n", r.Idle)
+		fmt.Fprintf(w, brand.Gabriel+": you are away (no keyboard or mouse for %s), so nothing is held back.\n", r.Idle)
 	case !r.Busy && (r.BoostUntil != nil || r.Always):
-		fmt.Fprintf(w, "Gabriel: you are at the computer and boosting, so what is out of your focus steps back (%s).\n", machine)
+		fmt.Fprintf(w, brand.Gabriel+": you are at the computer and boosting, so what is out of your focus steps back (%s).\n", machine)
 	case !r.Busy:
-		fmt.Fprintf(w, "Gabriel: you are at the computer and it has room to spare (%s), so nothing is held back.\n", machine)
+		fmt.Fprintf(w, brand.Gabriel+": you are at the computer and it has room to spare (%s), so nothing is held back.\n", machine)
 	default:
 		front := ""
 		if r.Front != "" {
 			front = ", with " + r.Front + " in front"
 		}
-		fmt.Fprintf(w, "Gabriel: you are at the computer%s and it is busy (%s), so what is out of your focus steps back.\n", front, machine)
+		fmt.Fprintf(w, brand.Gabriel+": you are at the computer%s and it is busy (%s), so what is out of your focus steps back.\n", front, machine)
 	}
 	if r.Always {
 		fmt.Fprintf(w, "Boost: always, while you are at the computer (arch.gabriel.always); your focus gets the machine first whether it is busy or not, and the rest runs on the efficiency cores, slower even when the machine has room to spare. `"+brand.Slug+" ctl gabriel boost off` ends it.\n")

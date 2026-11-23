@@ -221,6 +221,9 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if !cfg.Local.LoadsAt(cfg.Local.URL) {
+		return fmt.Errorf("%w: nothing is installed or pulled; `%s config set local.here true` turns them back on", localmodel.ErrOffHere, brand.Slug)
+	}
 	in := bufio.NewReader(stdin)
 	ask := func(q string) bool {
 		if *yes {

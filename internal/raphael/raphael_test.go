@@ -104,7 +104,7 @@ func TestHotFindingsAdviseAndOfferAStopOnlyForAPlainProgram(t *testing.T) {
 		{Proc: Proc{PID: 14, UID: 501, Path: "/Users/alice/.local/share/irie/bin/irie"}, Start: 5, Share: 1, For: time.Hour},
 	}
 	o := Owner{Session: map[int]string{13: "fix-login"}, Irie: map[int]bool{14: true}}
-	fs := hotFindings(hot, o, 501, "/Users/alice")
+	fs := hotFindings(hot, o, 501, "/Users/alice", nil)
 	if len(fs) != 4 {
 		t.Fatalf("findings = %+v; want the session's own work left out", fs)
 	}

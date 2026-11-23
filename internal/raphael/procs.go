@@ -279,10 +279,14 @@ func progName(path string) string {
 
 // hotFindings says what runs hot for a long time: a program of the
 // person's own, which he can stop on their OK when it is not an app, one
-// of an Irie session's, and one of macOS's own, with advice.
-func hotFindings(hot []Hot, o Owner, uid int, home string) []Finding {
+// of an Irie session's, and one of macOS's own, with advice. What an agent
+// left running, left, has a finding of its own (leftFindings).
+func hotFindings(hot []Hot, o Owner, uid int, home string, left map[int]bool) []Finding {
 	var fs []Finding
 	for _, h := range hot {
+		if left[h.PID] {
+			continue
+		}
 		name := procName(h.Proc)
 		f := Finding{
 			ID: fmt.Sprintf("proc:%d:%d", h.PID, h.Start), Area: AreaProcesses, Level: Note,
@@ -308,7 +312,7 @@ func hotFindings(hot []Hot, o Owner, uid int, home string) []Finding {
 			if h.For >= time.Hour {
 				f.Level = Warn
 			}
-			f.Advice = "It may be stuck. If you don't know it or no longer need it, Raffi can stop it."
+			f.Advice = "It may be stuck. If you don't know it or no longer need it, " + brand.Raffi + " can stop it."
 			f.Fix = &Fix{
 				Label: "Stop " + filepath.Base(h.Path),
 				Run:   []string{command("kill", "-TERM", strconv.Itoa(h.PID))},
