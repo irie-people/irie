@@ -236,7 +236,7 @@ func (c *Core) restUnderPressure(now time.Time) {
 	if short != c.rest.short {
 		c.rest.short, c.rest.shortSince = short, now
 		if short {
-			c.log.Info("rest: memory is short, so Raffi rests idle cards", "available", c.machine.Available, "total", c.machine.Total, "pressure", c.load.Pressure, "disk_free", c.room.DiskFree, "swap", c.room.SwapUsed)
+			c.log.Info("rest: memory is short, so "+brand.Raffi+" rests idle cards", "available", c.machine.Available, "total", c.machine.Total, "pressure", c.load.Pressure, "disk_free", c.room.DiskFree, "swap", c.room.SwapUsed)
 		} else {
 			c.log.Info("rest: memory has room again", "available", c.machine.Available, "total", c.machine.Total)
 		}

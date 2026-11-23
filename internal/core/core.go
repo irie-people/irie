@@ -1339,7 +1339,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Do != ipc.LessonsReport {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi reads what failed and takes your word on lessons only over "+brand.Name+"'s socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, brand.Raffi+" reads what failed and takes your word on lessons only over "+brand.Name+"'s socket.")
 		}
 		return c.lessonsOp(0, a)
 	case ipc.OpGabriel:

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/irie-people/irie/internal/brand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,14 +49,14 @@ func bash(cmd string) map[string]any { return map[string]any{"command": cmd} }
 func TestByNamesWhoStoppedACall(t *testing.T) {
 	for err, want := range map[string]string{
 		"exit 1: FAIL": ByCommand,
-		"File has not been read yet. Read it first before writing to it.":                                                 ByTool,
-		"PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: it would bring a window to the front.":         ByHarness,
-		"PreToolUse:Bash hook error: [You are Mikael, the arch agent who stands with the user against evil. An agent":     ByHarness,
-		`PreToolUse:Read hook error: [/home/alice/bin/guard "$CLAUDE_PROJECT_DIR/x"]: off-limits in this repo.`:           ByHook,
-		"PreToolUse:Edit hook error: Skills are not edited in place.":                                                     ByHook,
-		"Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Undermining Oversight].": ByPermission,
-		"The server-side auto mode classifier gave no verdict (the request timed out).":                                   ByNoVerdict,
-		"The user doesn't want to proceed with this tool use. The tool use was rejected.":                                 ByUser,
+		"File has not been read yet. Read it first before writing to it.":                                                                     ByTool,
+		"PreToolUse:Bash hook error: [" + brand.Name + "] " + brand.Gabriel + " turned this call away: it would bring a window to the front.": ByHarness,
+		"PreToolUse:Bash hook error: [You are " + brand.Mikael + ", the arch agent who stands with the user against evil. An agent":           ByHarness,
+		`PreToolUse:Read hook error: [/home/alice/bin/guard "$CLAUDE_PROJECT_DIR/x"]: off-limits in this repo.`:                               ByHook,
+		"PreToolUse:Edit hook error: Skills are not edited in place.":                                                                         ByHook,
+		"Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Undermining Oversight].":                     ByPermission,
+		"The server-side auto mode classifier gave no verdict (the request timed out).":                                                       ByNoVerdict,
+		"The user doesn't want to proceed with this tool use. The tool use was rejected.":                                                     ByUser,
 	} {
 		if got := By("Bash", err); got != want {
 			t.Errorf("By(%q) = %s, want %s", err, got, want)
@@ -73,7 +74,7 @@ func TestATranscriptGivesEachCallAndWhatItsErrorSaid(t *testing.T) {
 		result(21, "t2", true, "<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>") +
 		use(30, "t3", "Read", map[string]any{"file_path": "/home/alice/a.go"}) + result(31, "t3", false, []any{map[string]any{"type": "text", "text": "package a"}}) +
 		use(40, "t4", "Bash", bash("open -a Safari")) +
-		result(41, "t4", true, []any{map[string]any{"type": "text", "text": "PreToolUse:Bash hook error: [Irie] Gabriel turned this call away."}}) +
+		result(41, "t4", true, []any{map[string]any{"type": "text", "text": "PreToolUse:Bash hook error: [" + brand.Name + "] " + brand.Gabriel + " turned this call away."}}) +
 		use(50, "t5", "Bash", bash("sleep 100")) + result(51, "t5", true, "[Request interrupted by user for tool use]") +
 		line(map[string]any{"type": "assistant", "isSidechain": true, "timestamp": stamp(60), "message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "id": "t6", "name": "Grep", "input": map[string]any{}}}}}) +
 		"not json\n" + use(70, "t7", "Bash", bash("make"))
@@ -92,7 +93,7 @@ func TestATranscriptGivesEachCallAndWhatItsErrorSaid(t *testing.T) {
 		"go test|go test ./...|true|exit 1: FAIL",
 		"Edit||true|<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>",
 		"Read||false|",
-		"open|open -a Safari|true|PreToolUse:Bash hook error: [Irie] Gabriel turned this call away.",
+		"open|open -a Safari|true|PreToolUse:Bash hook error: [" + brand.Name + "] " + brand.Gabriel + " turned this call away.",
 		"sleep|sleep 100|true|",
 		"make|make|false|",
 	}
@@ -142,10 +143,10 @@ func TestEvidenceRanksWhatSessionsShareWithWhatWorkedNext(t *testing.T) {
 		// A hiccup of the auto mode's service is no one's.
 		failed("s3", "Bash", "ls", "The server-side auto mode classifier gave no verdict (error)."),
 		// Two sessions that ran a window into Gabriel, and then went round it.
-		failed("s1", "Bash", "open -a Safari https://example.com", "PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: use irie away."),
-		worked("s1", "Bash", "irie away -- open -a Safari https://example.com"),
-		failed("s3", "Bash", "open -a Preview a.pdf", "PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: use irie away."),
-		worked("s3", "Bash", "irie away -- open -a Preview a.pdf"),
+		failed("s1", "Bash", "open -a Safari https://example.com", "PreToolUse:Bash hook error: ["+brand.Name+"] "+brand.Gabriel+" turned this call away: use irie away."),
+		worked("s1", "Bash", brand.Slug+" away -- open -a Safari https://example.com"),
+		failed("s3", "Bash", "open -a Preview a.pdf", "PreToolUse:Bash hook error: ["+brand.Name+"] "+brand.Gabriel+" turned this call away: use irie away."),
+		worked("s3", "Bash", brand.Slug+" away -- open -a Preview a.pdf"),
 		// Cut short by the user: failed, with no error to learn from.
 		habits.Call{Session: "s3", Agent: event.Main, Tool: "Bash", Family: "sleep", Failed: true},
 	)
@@ -159,7 +160,7 @@ func TestEvidenceRanksWhatSessionsShareWithWhatWorkedNext(t *testing.T) {
 	}
 	want := []string{
 		"1 tool 3/3 Edit: File has not been read yet. Read it first before writing to it. then Read",
-		"2 harness 2/2 open: PreToolUse:Bash hook error: [Irie] Gabriel turned this call away: use irie away. then irie away",
+		"2 harness 2/2 open: PreToolUse:Bash hook error: [" + brand.Name + "] " + brand.Gabriel + " turned this call away: use irie away. then " + brand.Slug + " away",
 		"3 user 1/1 git push: The user doesn't want to proceed with this tool use. then ",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -169,7 +170,7 @@ func TestEvidenceRanksWhatSessionsShareWithWhatWorkedNext(t *testing.T) {
 		t.Errorf("yours: %d, %+v; want both refusals as one kind, its quoted words left out", ev.YoursCalls, ev.Yours)
 	}
 	// What a call said goes to the model alone: it can name any repository's files.
-	if ev.Kinds[1].example == "" || ev.Kinds[1].thenEx != "irie away -- open -a Preview a.pdf" {
+	if ev.Kinds[1].example == "" || ev.Kinds[1].thenEx != brand.Slug+" away -- open -a Preview a.pdf" {
 		t.Errorf("examples: %q, then %q", ev.Kinds[1].example, ev.Kinds[1].thenEx)
 	}
 	if b, _ := json.Marshal(ev); strings.Contains(string(b), "Safari") || strings.Contains(string(b), "secret-project") {
@@ -213,7 +214,7 @@ func TestGatherReadsTheTranscriptsOfIriesSessionsElseTheJournal(t *testing.T) {
 		// A hook's refusal, which the journal never hears of, and the
 		// read that worked next.
 		tr: line(map[string]any{"type": "assistant", "timestamp": recent(1), "message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "id": "t1", "name": "Bash", "input": bash("open -a Safari")}}}}) +
-			line(map[string]any{"type": "user", "timestamp": recent(2), "message": map[string]any{"content": []any{map[string]any{"type": "tool_result", "tool_use_id": "t1", "is_error": true, "content": "PreToolUse:Bash hook error: [Irie] Gabriel turned this call away."}}}}),
+			line(map[string]any{"type": "user", "timestamp": recent(2), "message": map[string]any{"content": []any{map[string]any{"type": "tool_result", "tool_use_id": "t1", "is_error": true, "content": "PreToolUse:Bash hook error: [" + brand.Name + "] " + brand.Gabriel + " turned this call away."}}}}),
 		sub: line(map[string]any{"type": "assistant", "isSidechain": true, "timestamp": recent(3), "message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "id": "t2", "name": "Grep", "input": map[string]any{}}}}}) +
 			line(map[string]any{"type": "user", "isSidechain": true, "timestamp": recent(4), "message": map[string]any{"content": []any{map[string]any{"type": "tool_result", "tool_use_id": "t2", "is_error": true, "content": "Error: No such tool available: Grep."}}}}),
 	} {
@@ -407,7 +408,7 @@ func TestOnlyWhatTheUserKeepsIsHeard(t *testing.T) {
 	if err := b.Keep([]int{3}, time.Time{}, t0); err != nil {
 		t.Fatal(err)
 	}
-	want := "[Irie] Lessons from what agents got wrong most often, which your user picked; follow them:\n- Read before you edit.\n- Retry a lookup once."
+	want := "[" + brand.Name + "] Lessons from what agents got wrong most often, which your user picked; follow them:\n- Read before you edit.\n- Retry a lookup once."
 	if got := Note(b.Kept); got != want {
 		t.Errorf("note:\n%s\nwant:\n%s", got, want)
 	}
