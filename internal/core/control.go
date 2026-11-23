@@ -9,7 +9,7 @@ import (
 // controlOps are the ops of what the user does to a session as a whole and
 // to its place in the list (ipc/control.go): freeze.go, priority.go and
 // order.go.
-var controlOps = []string{ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin}
+var controlOps = []string{ipc.OpFreeze, ipc.OpThaw, ipc.OpRest, ipc.OpWake, ipc.OpPriority, ipc.OpReorder, ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin}
 
 // control serves the control ops; ok is false for any other op.
 func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err error) {
@@ -32,6 +32,22 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 			}
 			c.recordSteps(kind, changed, nil)
 		}
+		return r, true, err
+	case ipc.OpRest, ipc.OpWake:
+		// A rest or a wake is no step of the history: the conversation
+		// stays either way (rest.go).
+		var a ipc.RestArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, true, err
+		}
+		if op == ipc.OpWake {
+			r, err := c.wakeOp(a)
+			return r, true, err
+		}
+		if a.Session == "" && !a.Idle {
+			return nil, true, ipc.Errorf(ipc.CodeBadArgs, "rest needs a session, or idle")
+		}
+		r, err := c.restOp(a)
 		return r, true, err
 	case ipc.OpPriority:
 		var a ipc.PriorityArgs

@@ -307,6 +307,9 @@ func NewEnv(t *testing.T) *Env {
 	// Nor does it stop the Iries of other test runs and agents (DESIGN §2.9):
 	// the tests that run beside it are using theirs.
 	t.Setenv("IRIE_LEFTOVERS", "off")
+	// Nor does it rest its sessions when the machine it runs on is short of
+	// memory (DESIGN §4.3): the tests would find their agents gone.
+	t.Setenv(brand.Env("REST"), "off")
 	// Nor does it keep mail passwords in the user's Keychain: they go to
 	// files in its own state folder (docs/proposals/mail.md).
 	t.Setenv(brand.Env("KEYCHAIN"), "off")

@@ -138,6 +138,8 @@ func stateLabel(s ipc.Session) string {
 		return "Exited"
 	case ipc.StateFrozen:
 		return "Frozen"
+	case ipc.StateResting:
+		return "Resting"
 	case ipc.StatePaused:
 		return "Paused"
 	case ipc.StateNeedsYou:
