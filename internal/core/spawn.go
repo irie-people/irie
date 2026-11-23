@@ -469,6 +469,7 @@ func (c *Core) launch(j job) (*session, error) {
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
 		vendorID: vendorID, warnings: warnings,
 		model: profile.Model, local: profile.Local != nil, tutor: j.tutor, out: c.outcome(id),
+		tally: tokenTally{since: created},
 	}
 
 	if err := os.MkdirAll(c.paths.Session(id), 0o700); err != nil {

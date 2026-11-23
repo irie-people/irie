@@ -413,6 +413,9 @@ func (c *Core) closeWith(id string, auto bool, notLive map[string]ipc.NotLive) e
 	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: data})
 	c.addClosed(r)
 	delete(c.sessions, id)
+	// Its ledger stays for the router and the costs report: once out of
+	// the registry, its tally is the writer's alone.
+	go c.keepSpent(x.id, &x.tally, slices.Clone(x.track.transcripts), x.local)
 	// A frozen agent's held tool calls go through, so it ends gently.
 	os.Remove(c.paths.FreezeFile(id))
 	c.end(*p)

@@ -85,6 +85,8 @@ type (
 	JamItem           = ipc.JamItem
 	JamDevice         = ipc.JamDevice
 	JamLink           = ipc.JamLink
+	LessonsArgs       = ipc.LessonsArgs
+	LessonsResult     = ipc.LessonsResult
 	LinkArgs          = ipc.LinkArgs
 	LinkResult        = ipc.LinkResult
 	Lock              = ipc.Lock
@@ -132,6 +134,11 @@ type (
 	Cold              = ipc.Cold
 	RebuildsResult    = ipc.RebuildsResult
 	RebuildsSpan      = ipc.RebuildsSpan
+	CostsResult       = ipc.CostsResult
+	CostsSpan         = ipc.CostsSpan
+	CostsTally        = ipc.CostsTally
+	CostsPart         = ipc.CostsPart
+	CostsSession      = ipc.CostsSession
 	RebuildsPart      = ipc.RebuildsPart
 	TrodRow           = ipc.TrodRow
 	TrodShift         = ipc.TrodShift
@@ -438,6 +445,13 @@ const (
 	JamCanLists          = ipc.JamCanLists
 	JamCanSearch         = ipc.JamCanSearch
 	JamCanDevices        = ipc.JamCanDevices
+	OpLessons            = ipc.OpLessons
+	LessonsReport        = ipc.LessonsReport
+	LessonsEvidence      = ipc.LessonsEvidence
+	LessonsDraft         = ipc.LessonsDraft
+	LessonsKeep          = ipc.LessonsKeep
+	LessonsNo            = ipc.LessonsNo
+	LessonsDrop          = ipc.LessonsDrop
 	OpLink               = ipc.OpLink
 	LinkMax              = ipc.LinkMax
 	LinkInCard           = ipc.LinkInCard
@@ -549,6 +563,7 @@ const (
 	OpLearn              = ipc.OpLearn
 	OpVariorum           = ipc.OpVariorum
 	OpRebuilds           = ipc.OpRebuilds
+	OpCosts              = ipc.OpCosts
 	FeatureTutor         = ipc.FeatureTutor
 	FeatureSpawnModel    = ipc.FeatureSpawnModel
 	FeatureSpawnTop      = ipc.FeatureSpawnTop

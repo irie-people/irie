@@ -188,7 +188,7 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
-			reply.Context = joinNotes(word, c.startNote(x))
+			reply.Context = c.withLessons(joinNotes(word, c.startNote(x)))
 		case e.Kind == event.SubagentStarted:
 			reply.Context = joinNotes(reply.Context, word)
 		case e.Kind == event.TurnFailed:

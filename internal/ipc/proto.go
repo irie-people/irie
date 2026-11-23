@@ -129,6 +129,12 @@ const (
 	// sessions and the causes that rebuilt their caches most today and in
 	// the last seven days, and what that cost. It answers a RebuildsResult.
 	OpRebuilds = "rebuilds"
+	// OpCosts is the ledger's report (DESIGN §6.3): what the model calls of
+	// Irie's sessions and of Irie itself cost at the list price of their
+	// day, today, in the last seven days and in the last 30, by purpose and
+	// model, with the calls that have no price counted apart. It answers a
+	// CostsResult.
+	OpCosts = "costs"
 )
 
 // FeatureTutor is in hello's features when spawn takes SpawnArgs.Tutor.
@@ -362,6 +368,52 @@ type RebuildsSpan struct {
 	USD      float64        `json:"usd"`
 	Sessions []RebuildsPart `json:"sessions"`
 	Causes   []RebuildsPart `json:"causes"`
+}
+
+// CostsResult is the ledger's report (irie ctl costs).
+type CostsResult struct {
+	Spans []CostsSpan `json:"spans"` // today since midnight, the last seven days and the last 30, today included
+	// Sessions are those with calls in the last 30 days, what they cost
+	// first, then those with calls that have no price.
+	Sessions []CostsSession `json:"sessions"`
+}
+
+// CostsSpan is what the calls of a span of days came to.
+type CostsSpan struct {
+	Name     string      `json:"name"` // today, week or month
+	From     string      `json:"from"` // its first day, 2006-01-02
+	Total    CostsTally  `json:"total"`
+	Purposes []CostsPart `json:"purposes"` // what cost most first
+	Models   []CostsPart `json:"models"`
+}
+
+// CostsTally is what some calls came to.
+type CostsTally struct {
+	Calls    int     `json:"calls"`
+	USD      float64 `json:"usd"`                // what those with a price cost
+	Unpriced int     `json:"unpriced,omitempty"` // calls to a model with no price, whose cost is not known
+	Free     int     `json:"free,omitempty"`     // calls on this computer or a server of the owner's
+	Searches int64   `json:"searches,omitempty"` // web searches among them
+	Words    string  `json:"words"`              // "$12.40, plus 3 calls with no price"
+}
+
+// CostsPart is one purpose's or one model's share of a span.
+type CostsPart struct {
+	Name string `json:"name"`
+	CostsTally
+}
+
+// CostsSession is one session's calls since it began, and Claude Code's
+// own figure for it from its last status line, which a reopen starts
+// again at $0.
+type CostsSession struct {
+	ID      string     `json:"id"`
+	Name    string     `json:"name"`
+	Open    bool       `json:"open,omitempty"`
+	Profile string     `json:"profile,omitempty"`
+	Class   string     `json:"class,omitempty"`
+	Ledger  CostsTally `json:"ledger"`
+	Claude  *float64   `json:"claude_usd,omitempty"`
 }
 
 // RebuildsPart is one session's or one cause's share of a span's rebuilds.
