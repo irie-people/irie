@@ -186,7 +186,8 @@ func TestRaphaelsArchRow(t *testing.T) {
 	if row.Nickname != brand.Raffi || row.Icon != "❤️‍🩹" || !row.On || !strings.Contains(row.Status, "2 are worth a look") && !strings.Contains(row.Status, "2 things are worth a look") {
 		t.Fatalf("row = %+v", row)
 	}
-	if len(row.Actions) != 1 || row.Actions[0].Op != ipc.OpRaphael || !strings.Contains(string(row.Actions[0].Args), `"check":true`) {
+	// His look, then a draft of lessons from what agents failed at (lessons.go).
+	if len(row.Actions) != 2 || row.Actions[0].Op != ipc.OpRaphael || !strings.Contains(string(row.Actions[0].Args), `"check":true`) || row.Actions[1].Op != ipc.OpLessons {
 		t.Errorf("actions = %+v", row.Actions)
 	}
 	if len(row.Items) != 2 {

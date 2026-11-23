@@ -97,6 +97,8 @@ func (p Paths) HostFile(id string) string     { return filepath.Join(p.Session(i
 func (p Paths) FreezeFile(id string) string   { return filepath.Join(p.Session(id), "freeze.json") }
 func (p Paths) FollowUpFile(id string) string { return filepath.Join(p.Session(id), "followups.json") }
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
+func (p Paths) CostsFile(id string) string    { return filepath.Join(p.Session(id), "costs.json") } // the session's ledger totals (DESIGN §6.3)
+func (p Paths) Ledger() string                { return filepath.Join(p.State, "ledger.jsonl") }     // Irie's own model calls (DESIGN §6.3)
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
 func (p Paths) Benches() string               { return filepath.Join(p.State, "benches") }
 func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }

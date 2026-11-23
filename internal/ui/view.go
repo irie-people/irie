@@ -86,6 +86,9 @@ func (m Model) look(s ipc.Session) look {
 		return look{"·", p.muted, p.muted, false}
 	case ipc.StateFrozen:
 		return look{"◆", p.frozen, p.ink, false}
+	case ipc.StateResting:
+		// Frozen's diamond, empty: its agent ended, and its card stays.
+		return look{"◇", p.muted, p.muted, false}
 	case ipc.StatePaused:
 		return look{"‖", p.paused, p.ink, false}
 	case ipc.StateNeedsYou:

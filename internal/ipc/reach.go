@@ -35,7 +35,7 @@ var reaches = map[string]Reach{
 	// What only reads.
 	OpHello: ReachRead, OpList: ReachRead, OpSubscribe: ReachRead, OpComplete: ReachRead,
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
-	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
+	OpRebuilds: ReachRead, OpCosts: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
 	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
 	OpObsidian: ReachRead, OpFind: ReachRead,
 	// What of the work of the sessions a close would close has not landed.
@@ -52,6 +52,9 @@ var reaches = map[string]Reach{
 	// Steps whose agents carry on and sign in again, and undo and redo,
 	// which take them.
 	OpThaw: ReachInsideOut, OpReopen: ReachInsideOut, OpUndo: ReachInsideOut, OpRedo: ReachInsideOut,
+	// A rest ends an idle agent, whose conversation stays; a wake starts
+	// it again, as a reopen does. Neither is a step of the history.
+	OpRest: ReachInside, OpWake: ReachInsideOut,
 
 	// Irie's own settings, views and files, and the agents' own channel
 	// into Irie.
@@ -69,6 +72,8 @@ var reaches = map[string]Reach{
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
 	// A council's session reads its tally, and a yes starts a plan's jot.
 	OpCouncil: ReachOutside,
+	// Every session's agent reads a kept lesson as it starts.
+	OpLessons: ReachOutside,
 	// A download fetches from a site and writes to the person's folder.
 	OpYoink: ReachOutside,
 	// A post goes to a channel of people, under the person's bot.

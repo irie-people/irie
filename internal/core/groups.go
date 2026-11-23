@@ -24,9 +24,10 @@ package core
 // A boost moves none (priority.go).
 //
 // The groups live in the @irie_groups option of the agents' session, as
-// JSON; a session's group is in the journal (ui.grouped), as its space is,
-// so a restarted core keeps both, and a closed session keeps its group for
-// its reopen. A group goes when no session is in it or in a group inside
+// JSON, with a copy in the state folder for a new tmux server (layout.go);
+// a session's group is in the journal (ui.grouped), as its space is, so a
+// restarted core keeps both, and a closed session keeps its group for its
+// reopen, a lost one too. A group goes when no session is in it or in a group inside
 // it, open or closed, or when you remove it. Joining, leaving, moving and
 // removing a group are steps of the history; making one is what it holds
 // joining it, and renaming one is not a step. Moving a session to another
@@ -57,8 +58,8 @@ const maxGroupName = 40
 
 // loadGroups reads the groups a previous core kept.
 func (c *Core) loadGroups() {
-	out, err := c.tmux.Run("show-options", "-qv", "-t", agentsTarget, optGroups)
-	if err != nil || strings.TrimSpace(out) == "" {
+	out, err := c.layoutOption(optGroups)
+	if err != nil || out == "" {
 		return
 	}
 	var saved []ipc.Group
@@ -107,7 +108,7 @@ func (c *Core) saveGroups() {
 	if c.groups == nil {
 		b = []byte("[]")
 	}
-	if _, err := c.tmux.Run("set-option", "-t", agentsTarget, optGroups, string(b)); err != nil {
+	if err := c.setLayoutOption(optGroups, string(b)); err != nil {
 		c.log.Warn("groups", "err", err)
 	}
 }

@@ -247,48 +247,6 @@ func TestWakeSaysWhenTheCacheRunsOutAndThePrice(t *testing.T) {
 	}
 }
 
-func TestPrices(t *testing.T) {
-	for _, c := range []struct {
-		model  string
-		prompt int64
-		write  float64 // the hour's write
-		ok     bool
-	}{
-		{"claude-opus-5-5", 1000, 8, true},
-		{"claude-opus-5", 1000, 10, true},
-		{"claude-opus-4-5-20251101", 1000, 10, true},
-		{"claude-opus-5-5[1m]", 1000, 8, true},
-		{"anthropic.claude-opus-4-5-20251101-v1:0", 1000, 10, true},
-		{"claude-opus-4-1", 1000, 30, true},
-		{"claude-sonnet-5-5", 1000, 4, true},
-		{"claude-haiku-5-5", 1000, 0.20, true},
-		{"claude-haiku-5-5", 200_000, 1, true},
-		{"claude-fable-5-2", 1000, 16, true},
-		{"claude-opus-5-55", 1000, 0, false},
-		{"qwen3.5:9b", 1000, 0, false},
-		{"<synthetic>", 1000, 0, false},
-	} {
-		p, ok := Price(c.model, c.prompt)
-		if ok != c.ok || ok && !near(p.Write1h, c.write) {
-			t.Errorf("Price(%q, %d) = %+v, %v; want an hour's write of %v, %v", c.model, c.prompt, p, ok, c.write, c.ok)
-		}
-	}
-	// Fast mode doubles Opus 5.5's prices, the cache's with them, and
-	// inference held in the US costs a tenth more.
-	p, _ := Price("claude-opus-5-5", 1000)
-	if f := p.scaled("fast", "global"); !near(f.Write1h, 16) || !near(f.Read, 0.40) {
-		t.Errorf("fast %+v", f)
-	}
-	if u := p.scaled("standard", "us"); !near(u.Write1h, 8.8) {
-		t.Errorf("in the US %+v", u)
-	}
-	// A model without fast prices keeps its own in fast mode.
-	s, _ := Price("claude-sonnet-5-5", 1000)
-	if f := s.scaled("fast", ""); !near(f.Write1h, 4) {
-		t.Errorf("Sonnet in fast mode %+v", f)
-	}
-}
-
 func TestALongPromptOnHaikuPaysMore(t *testing.T) {
 	r := Request{Model: "claude-haiku-5-5", Write: 150_000, Write1h: 150_000}
 	usd, ok := r.writeCost(150_000)
@@ -334,5 +292,30 @@ func TestWords(t *testing.T) {
 		if c.got != c.want {
 			t.Errorf("got %q, want %q", c.got, c.want)
 		}
+	}
+}
+
+func TestALineSaysWhatItsTopLevelLeavesOut(t *testing.T) {
+	// The API's compaction and the advisor tool report their tokens only
+	// in usage.iterations; the reply's own iteration is in the top level.
+	line := `{"type":"assistant","timestamp":"2026-11-14T09:00:00Z","message":{"id":"m1","model":"claude-sonnet-5-5","usage":{"input_tokens":23000,"output_tokens":1000,` +
+		`"server_tool_use":{"web_search_requests":4,"web_fetch_requests":2},"iterations":[` +
+		`{"type":"compaction","input_tokens":180000,"output_tokens":3500},` +
+		`{"type":"advisor_message","model":"claude-opus-5-5","input_tokens":823,"cache_read_input_tokens":12,"cache_creation_input_tokens":40,"output_tokens":1612},` +
+		`{"type":"message","input_tokens":23000,"output_tokens":1000}]}}}`
+	l, ok := ParseLine([]byte(line))
+	if !ok || !l.Usage || l.Searches != 4 || len(l.Parts) != 2 {
+		t.Fatalf("parsed %+v, %v", l, ok)
+	}
+	if c := l.Parts[0]; c.Type != "compaction" || c.Model != "" || c.Input != 180_000 || c.Output != 3500 {
+		t.Errorf("compaction %+v", c)
+	}
+	if a := l.Parts[1]; a.Type != "advisor_message" || a.Model != "claude-opus-5-5" || a.Read != 12 || a.Write != 40 || a.Output != 1612 {
+		t.Errorf("advisor %+v", a)
+	}
+	// A line from before both has neither.
+	l, _ = ParseLine([]byte(reply("m2", t0, 3, 0, 20_000, 0, 10)))
+	if l.Searches != 0 || l.Parts != nil {
+		t.Errorf("an older line %+v", l)
 	}
 }

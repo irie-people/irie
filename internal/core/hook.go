@@ -188,7 +188,7 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
-			reply.Context = joinNotes(word, c.startNote(x))
+			reply.Context = c.withLessons(joinNotes(word, c.startNote(x)))
 		case e.Kind == event.SubagentStarted:
 			reply.Context = joinNotes(reply.Context, word)
 		case e.Kind == event.TurnFailed:
@@ -292,7 +292,8 @@ func (c *Core) observe(now time.Time) {
 		}
 		switch {
 		case x.dead && t.exited == nil:
-			waiting := t.awaiting()
+			// A session brought back resting ran no agent (rest.go).
+			waiting := t.awaiting() && t.rest == nil
 			exit := event.Event{Source: event.SourceTmux, Kind: event.PaneExited, Data: map[string]any{"code": x.exitCode}}
 			if ex, err := host.ReadExit(c.paths.ExitFile(x.id)); err == nil {
 				exit.Source, exit.Data["code"] = event.SourceHost, ex.Code

@@ -629,6 +629,11 @@ func (a *agent) run() int {
 	if a.o.resume != "" {
 		source = "resume"
 	}
+	// IRIE_FAKE_BOX draws Claude Code's prompt box from the start, as a
+	// resumed agent's shows ("in", or "away" for a cursor elsewhere).
+	if b := os.Getenv("IRIE_FAKE_BOX"); b != "" {
+		a.box = b
+	}
 	a.fire("SessionStart", source, map[string]any{"source": source, "model": a.model})
 
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")

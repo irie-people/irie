@@ -631,7 +631,7 @@ private struct SessionCard: View, Equatable {
         switch look {
         case .starting: return "Starting…"
         case .frozen where session.freezing == true: return "Freezing…"
-        case .done, .idle, .waiting: return detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
+        case .done, .idle, .waiting, .resting: return detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
         case .frozen, .paused, .pausing: return look.label
         default: return detail ?? look.label
         }

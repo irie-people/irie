@@ -16,6 +16,7 @@ import (
 	irie "github.com/irie-people/irie/core"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/rebuild"
@@ -70,7 +71,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          own in the last day. A jot you close is
                                          done, listed only for a week after, when
                                          you closed it with commits not landed
-` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + costsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -97,7 +98,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          it on your OK; mine N tells him a startup
                                          item is yours; on and off turn him on or
                                          off (arch.raphael.on)
-` + councilUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
+` + councilUsage + lessonsUsage + `  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
                                          agent it sends on, and what it did
@@ -114,12 +115,18 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          be. history lists it and reopen
                                          brings it back. It never waits: what
                                          of its work has not landed it says
-  ` + brand.Slug + ` ctl reopen [--lost | SESSION]     bring a closed session back, by id or name
+  ` + brand.Slug + ` ctl reopen [--rest] [--lost [--awake] | SESSION]
+                                         bring a closed session back, by id or name
                                          (the one closed last with none), carrying
                                          on its conversation; prints its new id.
-                                         --lost brings back every session the last
-                                         restart lost, one at a time, pinned,
-                                         parked or frozen as it was
+                                         --rest brings it back resting: its card,
+                                         with no agent until it is opened or sent a
+                                         message. --lost brings back every session
+                                         the last restart lost, in its place,
+                                         pinned, parked or frozen as it was: those
+                                         at work, or boosted, with their agents,
+                                         one at a time, and the rest resting;
+                                         --awake starts every one's agent
 ` + worktreesUsage + `  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
   ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, code,
                                          or a plugin's: ` + brand.Slug + ` ctl card lists them) beside
@@ -193,7 +200,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
                                          reports one window of them
-` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
+` + controlUsage + spacesUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -223,6 +230,8 @@ func ctl(args []string) error {
 		return ctlDog(args[1:])
 	case "rebuilds":
 		return ctlRebuilds(args[1:])
+	case "costs":
+		return ctlCosts(args[1:])
 	case "materialize":
 		return ctlMaterialize(args[1:])
 	case "zen":
@@ -237,6 +246,8 @@ func ctl(args []string) error {
 		return ctlRaphael(args[1:])
 	case "council", "ragu", "raguel":
 		return ctlCouncil(args[1:])
+	case "lessons", "lesson":
+		return ctlLessons(args[1:])
 	case "arch":
 		return ctlArch(args[1:])
 	case "show":
@@ -271,6 +282,8 @@ func ctl(args []string) error {
 		return ctlPerf(args[1:])
 	case "freeze", "thaw":
 		return ctlFreeze(args[1:], args[0] == "freeze")
+	case "rest", "wake":
+		return ctlRest(args[1:], args[0] == "rest")
 	case "boost", "unboost", "promote", "unpromote":
 		return ctlPromote(args[0], args[1:])
 	case "reorder":
@@ -285,6 +298,10 @@ func ctl(args []string) error {
 		return ctlUngroup(args[1:])
 	case "nest":
 		return ctlNest(args[1:])
+	case "spaces":
+		return ctlSpaces(args[1:])
+	case "space":
+		return ctlSpace(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -900,20 +917,22 @@ func ctlHistory(args []string) error {
 // lost.
 func ctlReopen(args []string) error {
 	fs := flag.NewFlagSet("ctl reopen", flag.ContinueOnError)
-	lost := fs.Bool("lost", false, "bring back every session the last restart lost, one at a time")
+	lost := fs.Bool("lost", false, "bring back every session the last restart lost: those at work with their agents, one at a time, the rest resting")
+	awake := fs.Bool("awake", false, "with --lost, start every lost session's agent, not only those that were at work")
+	rest := fs.Bool("rest", false, "bring it back resting, with no agent until it is opened or sent a message")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	args = fs.Args()
-	if len(args) > 1 || *lost && len(args) > 0 {
-		return errors.New("usage: " + brand.Slug + " ctl reopen [--lost | SESSION]")
+	if len(args) > 1 || *lost && (len(args) > 0 || *rest) || *awake && !*lost {
+		return errors.New("usage: " + brand.Slug + " ctl reopen [--rest] [--lost [--awake] | SESSION]")
 	}
 	sock, err := socket()
 	if err != nil {
 		return err
 	}
 	if *lost {
-		return reopenLost(sock)
+		return reopenLost(sock, *awake)
 	}
 	// The closed list finds a session by name, and says what its next turn
 	// will cost; with none named, reopen needs it only for the price.
@@ -938,7 +957,7 @@ func ctlReopen(args []string) error {
 		}
 	}
 	var r ipc.ReopenResult
-	if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: id}, &r); err != nil {
+	if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: id, Rest: *rest}, &r); err != nil {
 		return err
 	}
 	fmt.Println(r.Session.ID)
@@ -952,13 +971,18 @@ func ctlReopen(args []string) error {
 
 // lostGap is how long reopenLost waits after one agent has started before
 // it brings back the next.
-const lostGap = 5 * time.Second
+var lostGap = 5 * time.Second
 
 // reopenLost brings back the sessions the last restart lost, the one that
-// started first first, one at a time: each agent starts before the next
-// comes back, so that if their sign-in to Claude Code needs renewing, the
-// first renews it and the rest find it renewed (DESIGN §4.5, §4.10).
-func reopenLost(sock string) error {
+// started first first, each in its place. Those that were at work when
+// they were lost, or boosted, come back with their agents, or all with
+// awake: one at a time, each agent started before the next comes back,
+// so that if their sign-in to Claude Code needs renewing, the first renews
+// it and the rest find it renewed (DESIGN §4.5, §4.10), and only while a
+// quarter of the memory is free. The rest come back resting, with no
+// agent until they are opened or sent a message (§4.3): on 2026-11-23, 53
+// cards started at once would have taken about 20 GB of an 18 GB Mac.
+func reopenLost(sock string, awake bool) error {
 	var l ipc.ListResult
 	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
 		return err
@@ -968,24 +992,76 @@ func reopenLost(sock string) error {
 		fmt.Println("no lost sessions to bring back")
 		return nil
 	}
-	failed := 0
+	failed, resting, started := 0, 0, 0
 	for i, c := range batch {
+		rest := !awake && !c.Working
+		if !rest && !roomForOne(os.Stderr) {
+			return fmt.Errorf("%d of %d lost sessions wait for memory: run `%s ctl reopen --lost` again once there is more", len(batch)-i, len(batch), brand.Slug)
+		}
 		var r ipc.ReopenResult
-		if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: c.ID}, &r); err != nil {
+		if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: c.ID, Rest: rest}, &r); err != nil {
 			fmt.Fprintf(os.Stderr, brand.Slug+": %s did not come back: %v\n", c.Name, err)
 			failed++
 			continue
 		}
-		fmt.Printf("%s\t%s\n", r.Session.ID, r.Session.Name)
-		if i < len(batch)-1 {
+		how := "started"
+		if r.Session.State == ipc.StateResting {
+			how = "resting"
+			resting++
+		} else {
+			started++
+		}
+		fmt.Printf("%s\t%s\t%s\n", r.Session.ID, how, r.Session.Name)
+		if how == "started" && i < len(batch)-1 {
 			waitStarted(sock, r.Session.ID, time.Minute)
 			time.Sleep(lostGap)
 		}
+	}
+	if resting > 0 {
+		fmt.Fprintf(os.Stderr, "%d came back with their agents and %d resting: a resting card starts its agent when you open it or send it a message\n", started, resting)
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d lost sessions did not come back", failed, len(batch))
 	}
 	return nil
+}
+
+// lostFreeFloor is the share of the machine's memory, in percent, that
+// must be free before reopenLost brings back another session: each agent
+// takes some, and a machine short of it swaps, which slows every agent and
+// the person's own work. lostMemoryWait is the longest it waits for that
+// memory, looking every lostMemoryPoll, before it stops.
+const lostFreeFloor = 25
+
+var (
+	lostMemoryWait = 10 * time.Minute
+	lostMemoryPoll = 5 * time.Second
+	readMemory     = localmodel.ReadMachine
+)
+
+// roomForOne waits while less than lostFreeFloor percent of the machine's
+// memory is free, saying so to w once, and says whether there is room now.
+// A machine whose memory can't be read has room.
+func roomForOne(w io.Writer) bool {
+	said := false
+	for end := time.Now().Add(lostMemoryWait); ; {
+		m, err := readMemory()
+		if err != nil || m.Total <= 0 {
+			return true
+		}
+		free := int(m.Available * 100 / m.Total)
+		if free >= lostFreeFloor {
+			return true
+		}
+		if !time.Now().Before(end) {
+			return false
+		}
+		if !said {
+			fmt.Fprintf(w, "%s: waiting for memory: %d%% is free, and the next session comes back at %d%%\n", brand.Slug, free, lostFreeFloor)
+			said = true
+		}
+		time.Sleep(lostMemoryPoll)
+	}
 }
 
 // lastLost are the closed sessions the last restart lost, the one that

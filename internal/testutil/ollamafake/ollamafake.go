@@ -170,11 +170,14 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 		out := make([][]float64, len(in))
+		words := 0
 		for i, t := range in {
 			out[i] = Embedding(t)
+			words += len(strings.Fields(t))
 		}
 		s.Embeds += len(in)
-		reply(w, map[string]any{"model": req.Model, "embeddings": out})
+		// Its tokens read are its words, as prompt_eval_count counts them.
+		reply(w, map[string]any{"model": req.Model, "embeddings": out, "prompt_eval_count": words})
 	})
 	mux.HandleFunc("GET /api/ps", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()

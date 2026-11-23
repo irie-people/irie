@@ -37,6 +37,9 @@ type (
 	ForkResult        = ipc.ForkResult
 	StopSubArgs       = ipc.StopSubArgs
 	FreezeArgs        = ipc.FreezeArgs
+	RestArgs          = ipc.RestArgs
+	RestResult        = ipc.RestResult
+	Rest              = ipc.Rest
 	FreezeResult      = ipc.FreezeResult
 	PriorityArgs      = ipc.PriorityArgs
 	ReorderArgs       = ipc.ReorderArgs
@@ -82,6 +85,8 @@ type (
 	JamItem           = ipc.JamItem
 	JamDevice         = ipc.JamDevice
 	JamLink           = ipc.JamLink
+	LessonsArgs       = ipc.LessonsArgs
+	LessonsResult     = ipc.LessonsResult
 	LinkArgs          = ipc.LinkArgs
 	LinkResult        = ipc.LinkResult
 	Lock              = ipc.Lock
@@ -129,6 +134,11 @@ type (
 	Cold              = ipc.Cold
 	RebuildsResult    = ipc.RebuildsResult
 	RebuildsSpan      = ipc.RebuildsSpan
+	CostsResult       = ipc.CostsResult
+	CostsSpan         = ipc.CostsSpan
+	CostsTally        = ipc.CostsTally
+	CostsPart         = ipc.CostsPart
+	CostsSession      = ipc.CostsSession
 	RebuildsPart      = ipc.RebuildsPart
 	TrodRow           = ipc.TrodRow
 	TrodShift         = ipc.TrodShift
@@ -335,6 +345,8 @@ const (
 	ContextClean         = ipc.ContextClean
 	OpFreeze             = ipc.OpFreeze
 	OpThaw               = ipc.OpThaw
+	OpRest               = ipc.OpRest
+	OpWake               = ipc.OpWake
 	OpPriority           = ipc.OpPriority
 	OpReorder            = ipc.OpReorder
 	OpPark               = ipc.OpPark
@@ -343,6 +355,9 @@ const (
 	OpUnpin              = ipc.OpUnpin
 	OpStopSub            = ipc.OpStopSub
 	StateFrozen          = ipc.StateFrozen
+	RestMemory           = ipc.RestMemory
+	RestYou              = ipc.RestYou
+	RestRestore          = ipc.RestRestore
 	OpConversation       = ipc.OpConversation
 	FrameConversation    = ipc.FrameConversation
 	ItemUser             = ipc.ItemUser
@@ -430,6 +445,13 @@ const (
 	JamCanLists          = ipc.JamCanLists
 	JamCanSearch         = ipc.JamCanSearch
 	JamCanDevices        = ipc.JamCanDevices
+	OpLessons            = ipc.OpLessons
+	LessonsReport        = ipc.LessonsReport
+	LessonsEvidence      = ipc.LessonsEvidence
+	LessonsDraft         = ipc.LessonsDraft
+	LessonsKeep          = ipc.LessonsKeep
+	LessonsNo            = ipc.LessonsNo
+	LessonsDrop          = ipc.LessonsDrop
 	OpLink               = ipc.OpLink
 	LinkMax              = ipc.LinkMax
 	LinkInCard           = ipc.LinkInCard
@@ -541,6 +563,7 @@ const (
 	OpLearn              = ipc.OpLearn
 	OpVariorum           = ipc.OpVariorum
 	OpRebuilds           = ipc.OpRebuilds
+	OpCosts              = ipc.OpCosts
 	FeatureTutor         = ipc.FeatureTutor
 	FeatureSpawnModel    = ipc.FeatureSpawnModel
 	FeatureSpawnTop      = ipc.FeatureSpawnTop
@@ -569,6 +592,7 @@ const (
 	StateIdle            = ipc.StateIdle
 	StatePaused          = ipc.StatePaused
 	StatePausing         = ipc.StatePausing
+	StateResting         = ipc.StateResting
 	RebuildYou           = ipc.RebuildYou
 	RebuildTrod          = ipc.RebuildTrod
 	RebuildDog           = ipc.RebuildDog
