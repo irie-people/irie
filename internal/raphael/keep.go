@@ -466,6 +466,10 @@ func (k *keeper) tools(ctx context.Context) []Cleared {
 		if !realDir(dir, k.in.Home) || !strings.HasPrefix(dir, k.in.Home+"/") {
 			continue
 		}
+		if !cacheLike(dir, t.id) {
+			k.leave("%s is where %s says its cache is, but its name is no cache's, so %s left it be", tildePath(dir, k.in.Home), t.id, brand.He)
+			continue
+		}
 		ps, _, err := k.procs(ctx)
 		if err != nil {
 			return out
@@ -500,6 +504,15 @@ func (k *keeper) tools(ctx context.Context) []Cleared {
 	return out
 }
 
+// cacheLike reports whether a tool's cache folder is named as a cache is:
+// the tool's name, as Yarn's and pip's are by default, or a name that says
+// cache, as npm's _cacache does. A folder a setting names otherwise, such
+// as ~/Documents, is never emptied.
+func cacheLike(dir, tool string) bool {
+	name := strings.ToLower(filepath.Base(dir))
+	return name == tool || strings.Contains(name, "cache")
+}
+
 // errNoTool says the tool that clears its own cache is not here.
 var errNoTool = errors.New("the tool is not here")
 
@@ -510,7 +523,7 @@ func (k *keeper) toolClean(ctx context.Context, dir string, cmd []string) (int64
 		return 0, errNoTool
 	}
 	before := treeSize(dir)
-	if k.in.DryRun {
+	if k.in.DryRun || before == 0 {
 		return before, nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Minute)

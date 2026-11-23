@@ -250,6 +250,14 @@ func TestKeepClearsEachToolsCacheWhileTheToolIsIdle(t *testing.T) {
 	if len(res.Left) != 1 || !strings.Contains(res.Left[0], "yarn is at work (node, pid 9)") {
 		t.Errorf("left %v", res.Left)
 	}
+	// A folder a setting names that is no cache's is never emptied.
+	docs := filepath.Join(home, "Documents")
+	blob(t, filepath.Join(docs, "thesis.txt"), time.Hour)
+	places.Pip = docs
+	res, _ = Keep(context.Background(), r, KeepInput{Home: home, Places: places, Room: shortBy(home, 10<<20)})
+	if !exists(filepath.Join(docs, "thesis.txt")) || !strings.Contains(strings.Join(res.Left, "\n"), "its name is no cache's") {
+		t.Errorf("emptied %s: left %v", docs, res.Left)
+	}
 	// uv's cache is cleared by uv alone, which keeps its folder.
 	if r.clean != 1 || !exists(places.UV) {
 		t.Errorf("uv asked %d times; its folder there %v", r.clean, exists(places.UV))
