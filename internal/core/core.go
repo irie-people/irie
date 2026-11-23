@@ -405,6 +405,7 @@ func Run(o Options) error {
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
+	c.loadKeep()
 	c.loadRaguel()
 	c.loadLessons()
 	c.loadNotepad()
@@ -491,6 +492,9 @@ func Run(o Options) error {
 			c.beat()
 			if n%raphaelEvery == 0 {
 				go c.raphaelSweep()
+			}
+			if n%keepEvery == 0 {
+				go c.keepSweep()
 			}
 			if n%raguelEvery == 0 {
 				go c.raguelSweep()

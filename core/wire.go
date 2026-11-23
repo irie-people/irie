@@ -155,6 +155,8 @@ type (
 	RaphaelFix        = ipc.RaphaelFix
 	RaphaelDone       = ipc.RaphaelDone
 	RaphaelRestart    = ipc.RaphaelRestart
+	RaphaelCleared    = ipc.RaphaelCleared
+	Tell              = ipc.Tell
 	GabrielArgs       = ipc.GabrielArgs
 	GabrielResult     = ipc.GabrielResult
 	GabrielSession    = ipc.GabrielSession

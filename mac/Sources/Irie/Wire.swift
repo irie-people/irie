@@ -305,14 +305,32 @@ struct Header: Decodable {
     /// Your zen, whether an app shows it, and what it offers now, from a
     /// core that keeps your zen (Zen.swift).
     var zen: ZenState?
+    /// What the arch agents tell you once that no client has shown yet,
+    /// such as Raffi's news of a kernel panic (Tell).
+    var tells: [Tell]?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
         case terminalLinks = "terminal_links"
-        case trod, vpn, boost, load, spaces, groups, zen
+        case trod, vpn, boost, load, spaces, groups, zen, tells
     }
+}
+
+/// News an arch agent tells you once (DESIGN §4.11), such as Raffi's after
+/// a kernel panic, or when the disk is short of the room he keeps for swap.
+/// The app shows it as a notice, which the Notices tab keeps, and tells the
+/// core it did, so that no client shows it again.
+struct Tell: Decodable, Equatable {
+    var id: String
+    var from: String
+    var level: String
+    var text: String
+    var lines: [String]?
+
+    /// The point, then its lines, as the notice shows it.
+    var words: String { ([text] + (lines ?? [])).joined(separator: "\n") }
 }
 
 /// Your zen's settings, as the core keeps them (docs/proposals/zen.md §3).

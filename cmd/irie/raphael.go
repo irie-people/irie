@@ -14,6 +14,7 @@ import (
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/raphael"
 )
 
 const raphaelUsage = "usage: " + brand.Slug + " ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]"
@@ -180,6 +181,9 @@ func printRaphael(w io.Writer, r ipc.RaphaelResult) error {
 		head += fmt.Sprintf(": looked over your Mac at %s, in %s.", r.Checked.Local().Format("15:04 on 2 Jan"), r.Took)
 	}
 	fmt.Fprintln(w, head)
+	if r.Room != "" {
+		fmt.Fprintln(w, r.Room)
+	}
 	levels := []struct{ level, title string }{{"warn", "Needs care"}, {"note", "Worth a look"}}
 	for _, l := range levels {
 		first := true
@@ -233,6 +237,25 @@ func printRaphael(w io.Writer, r ipc.RaphaelResult) error {
 		fmt.Fprintln(w, "\nFixes you said OK to:")
 		for _, d := range r.Fixes {
 			fmt.Fprintf(w, "  - %s %s\n", d.At.Local().Format("15:04 on 2 Jan"), d.Said)
+		}
+	}
+	if len(r.Cleared) > 0 {
+		fmt.Fprintln(w, "\nCleared by himself, to keep room for swap:")
+		for _, x := range r.Cleared {
+			line := fmt.Sprintf("  - %s %s: %s, in %s", x.At.Local().Format("15:04 on 2 Jan"), x.What, raphael.Size(x.Size), x.Path)
+			if x.Error != "" {
+				line += " (it stopped short: " + x.Error + ")"
+			}
+			fmt.Fprintln(w, line)
+		}
+	}
+	if len(r.Told) > 0 {
+		fmt.Fprintln(w, "\nTold you:")
+		for _, t := range r.Told {
+			fmt.Fprintf(w, "  - %s %s\n", t.At.Local().Format("15:04 on 2 Jan"), t.Text)
+			for _, l := range t.Lines {
+				fmt.Fprintf(w, "      %s\n", l)
+			}
 		}
 	}
 	if r.Next != nil && !r.Checking {
