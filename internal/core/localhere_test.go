@@ -256,25 +256,33 @@ func TestIriesOwnServersStopWhileLocalHereIsOff(t *testing.T) {
 	cfg.Local.Here = false
 	c, ran := easeCore(t, cfg)
 	c.snap = tmux.Snapshot{Panes: []tmux.Pane{{ID: "%7", Role: tmux.RoleRuntime}, {ID: "%8", Role: tmux.RoleLlama, Name: "bonsai-2:27b"}}}
-	x := &session{id: "s1", name: "big work", local: true, model: "bonsai-2:27b", profile: "big"}
-	c.sessions["s1"] = x
+	small := &session{id: "s1", name: "Qwen local", local: true, model: "bonsai-2:9b", profile: "ollama:bonsai-2:9b"}
+	big := &session{id: "s2", name: "big work", local: true, model: "bonsai-2:27b", profile: "big"}
+	small.track.activity, big.track.activity = working, working
+	c.sessions["s1"], c.sessions["s2"] = small, big
 
-	// The first look finds Ollama with no session on it; the next stops it
-	// after the grace. The llama-server stays while a live session runs on
-	// it, idle or not.
+	ease(c)
+	ease(c)
+	if s := ran(); s != "" {
+		t.Fatalf("tmux ran %q; want both servers kept while sessions work on them", s)
+	}
+	// Its turn over, a session keeps no server, as on 2026-11-23 an idle
+	// card kept Irie's own Ollama up for a model the Mac no longer had: the
+	// first look starts the grace, and the next stops the server.
+	small.track.activity = done
 	ease(c)
 	if s := ran(); s != "" {
 		t.Fatalf("tmux ran %q at the first look; want nothing yet", s)
 	}
 	ease(c)
 	if s := ran(); strings.Count(s, "kill-pane -t %7\n") != 1 || strings.Contains(s, "%8") {
-		t.Fatalf("tmux ran %q; want Irie's own Ollama stopped, and the llama-server kept", s)
+		t.Fatalf("tmux ran %q; want Irie's own Ollama stopped, and the llama-server kept for its session at work", s)
 	}
 	c.snap.Panes = c.snap.Panes[1:] // the core's next look at tmux
-	x.dead = true
+	big.track.activity = done
 	ease(c)
 	ease(c)
 	if s := ran(); strings.Count(s, "kill-pane") != 2 || !strings.HasSuffix(s, "kill-pane -t %8\n") {
-		t.Errorf("tmux ran %q; want the llama-server stopped once its session ended", s)
+		t.Errorf("tmux ran %q; want the llama-server stopped once its session's turn was over", s)
 	}
 }
