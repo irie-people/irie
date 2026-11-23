@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -24,7 +25,11 @@ var (
 func TestMain(m *testing.M) {
 	switch {
 	case filepath.Base(os.Args[0]) == Program:
-		os.Exit(standIn())
+		// Not os.Exit: the stand-in is another program, and a test binary
+		// built with -cover would add, on its way out, a warning that it
+		// has nowhere to write its coverage to the words on stderr that
+		// these tests read as the door's own.
+		syscall.Exit(standIn())
 	case os.Getenv("IRIE_TEST_DOOR") != "":
 		Folders = filepath.SplitList(os.Getenv("IRIE_TEST_FOLDERS"))
 		os.Exit(Door(os.Getenv("IRIE_TEST_DOOR"), os.Stdin, os.Stdout))
