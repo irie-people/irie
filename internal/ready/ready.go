@@ -6,6 +6,7 @@ package ready
 
 import (
 	"context"
+	"debug/buildinfo"
 	"encoding/json"
 	"errors"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -337,6 +339,19 @@ func checkGit(o Options) Item {
 	return it
 }
 
+// sameProgram says whether the program at path is a build of this one: a Go
+// program of the same main module, as its build information says, read
+// without running it. Another program may have the command's name, as
+// Fedora's passt has one called pesto.
+func sameProgram(path string) bool {
+	other, err := buildinfo.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	self, ok := debug.ReadBuildInfo()
+	return ok && self.Main.Path != "" && other.Main.Path == self.Main.Path
+}
+
 func checkPath(o Options) Item {
 	it := Item{ID: PathID, Name: brand.Slug + " on your PATH", For: "lets you type " + brand.Slug + " in any terminal"}
 	self, err := os.Stat(o.Self)
@@ -351,7 +366,11 @@ func checkPath(o Options) Item {
 			return it
 		}
 		it.Status, it.Path = Warn, found
-		it.Problem = "`" + brand.Slug + "` in a terminal runs " + tilde(found, o.Home) + ", another build"
+		what := "another program of that name"
+		if sameProgram(found) {
+			what = "another build"
+		}
+		it.Problem = "`" + brand.Slug + "` in a terminal runs " + tilde(found, o.Home) + ", " + what
 		return it
 	}
 	// The installer's link in ~/.local/bin is the folder to add, when it

@@ -217,9 +217,25 @@ func TestPathCheck(t *testing.T) {
 		t.Errorf("irie on PATH = %+v", it)
 	}
 
+	// Another program of the name first, as Fedora's passt has a pesto.
 	other := fake(t, bin, brand.Slug, "")
-	if it, _ := Check(o).Item(PathID); it.Status != Warn || it.Path != other {
-		t.Errorf("another irie first = %+v", it)
+	if it, _ := Check(o).Item(PathID); it.Status != Warn || it.Path != other || !strings.HasSuffix(it.Problem, "another program of that name") {
+		t.Errorf("another program first = %+v", it)
+	}
+	// Another build first: this test's own binary is one, a Go program of
+	// the same module.
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(other); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(exe, other); err != nil {
+		t.Fatal(err)
+	}
+	if it, _ := Check(o).Item(PathID); it.Status != Warn || it.Path != other || !strings.HasSuffix(it.Problem, "another build") {
+		t.Errorf("another build first = %+v", it)
 	}
 }
 
