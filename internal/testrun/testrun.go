@@ -9,8 +9,15 @@ package testrun
 import (
 	"regexp"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
+
+// compiled is a pattern compiled on its first use rather than as any irie
+// starts: these took 318 KB in every process, each hook call among them.
+func compiled(p string) func() *regexp.Regexp {
+	return sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(p) })
+}
 
 // Outcomes of a test run.
 const (
@@ -25,25 +32,25 @@ const (
 // runner is a command that runs tests, at the head of a segment of a shell
 // command. Its exit code is its run's outcome, unless what follows it in
 // the command hides that code.
-var runner = regexp.MustCompile(`^(?:go\s+test|cargo\s+(?:test|nextest)|swift\s+test|xcodebuild\s.*\btest\b|(?:python3?\s+-m\s+)?pytest|python3?\s+-m\s+unittest|(?:npm|pnpm|yarn)\s+(?:run\s+)?test|bun\s+test|deno\s+test|node\s+--test|(?:npx\s+|bunx\s+)?(?:jest|vitest|mocha)|(?:bundle\s+exec\s+)?rspec|mix\s+test|(?:\./gradlew|gradle)\s+test|mvn\s+test|dotnet\s+test|zig\s+build\s+test|forge\s+test|ctest|tox|make\s+(?:test|check))\b`)
+var runner = compiled(`^(?:go\s+test|cargo\s+(?:test|nextest)|swift\s+test|xcodebuild\s.*\btest\b|(?:python3?\s+-m\s+)?pytest|python3?\s+-m\s+unittest|(?:npm|pnpm|yarn)\s+(?:run\s+)?test|bun\s+test|deno\s+test|node\s+--test|(?:npx\s+|bunx\s+)?(?:jest|vitest|mocha)|(?:bundle\s+exec\s+)?rspec|mix\s+test|(?:\./gradlew|gradle)\s+test|mvn\s+test|dotnet\s+test|zig\s+build\s+test|forge\s+test|ctest|tox|make\s+(?:test|check))\b`)
 
 // wrapper is a script that runs tests among other work, such as a repo's
 // own check or install script. It counts as a run, but its exit code says
 // nothing sure of its tests: an install can fail for want of a lock.
-var wrapper = regexp.MustCompile(`^(?:(?:sh|bash|zsh)\s+)?(?:\S*/)?(?:live|[\w.-]*(?:test|check|smoke)[\w.-]*)\.sh(?:\s|$)`)
+var wrapper = compiled(`^(?:(?:sh|bash|zsh)\s+)?(?:\S*/)?(?:live|[\w.-]*(?:test|check|smoke)[\w.-]*)\.sh(?:\s|$)`)
 
 // lead is what may come before a command at the head of a segment: a
 // subshell or group, a negation, a shell keyword, timing or an environment.
-var lead = regexp.MustCompile(`^(?:[({!]\s*|(?:if|then|else|elif|do|while|until)\s+|time\s+|timeout\s+\S+\s+|nice\s+(?:-n\s*\S+\s+)?|command\s+|exec\s+|env\s+|caffeinate\s+(?:-\w+\s+)*|[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)+`)
+var lead = compiled(`^(?:[({!]\s*|(?:if|then|else|elif|do|while|until)\s+|time\s+|timeout\s+\S+\s+|nice\s+(?:-n\s*\S+\s+)?|command\s+|exec\s+|env\s+|caffeinate\s+(?:-\w+\s+)*|[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)+`)
 
 // harmless is a command that cannot fail, which may follow a test runner
 // without taking its exit code's place.
-var harmless = regexp.MustCompile(`^(?:echo|printf|true|:)(?:\s|$)`)
+var harmless = compiled(`^(?:echo|printf|true|:)(?:\s|$)`)
 
 // Runs reports whether a shell command runs tests or checks.
 func Runs(command string) bool {
 	for _, s := range segments(command) {
-		if runner.MatchString(s.cmd) || wrapper.MatchString(s.cmd) {
+		if runner().MatchString(s.cmd) || wrapper().MatchString(s.cmd) {
 			return true
 		}
 	}
@@ -53,14 +60,14 @@ func Runs(command string) bool {
 // failMark is a line of output that shows tests failing: Go's, cargo's,
 // pytest's, Jest's and Vitest's, Bun's, XCTest's, npm's and make's, and
 // this repo's tools/check.sh's.
-var failMark = regexp.MustCompile(`(?m)^(?:--- FAIL: .*|FAIL(?:\s.*)?|panic: .*|test result: FAILED.*|error: test failed.*|FAILED .*|=+ .*\b[1-9]\d* (?:failed|errors?)\b.*|\s*Tests?:?\s+[1-9]\d* failed.*|\s*Test Files\s+[1-9]\d* failed.*|\s*[1-9]\d* fail(?:ed)?\s*|.*Executed \d+ tests?, with [1-9]\d* failures?.*|npm (?:ERR!|error) .*[Tt]est.*|make(?:\[\d+\])?: \*\*\* .*Error \d+.*|check: gofmt would change.*)$`)
+var failMark = compiled(`(?m)^(?:--- FAIL: .*|FAIL(?:\s.*)?|panic: .*|test result: FAILED.*|error: test failed.*|FAILED .*|=+ .*\b[1-9]\d* (?:failed|errors?)\b.*|\s*Tests?:?\s+[1-9]\d* failed.*|\s*Test Files\s+[1-9]\d* failed.*|\s*[1-9]\d* fail(?:ed)?\s*|.*Executed \d+ tests?, with [1-9]\d* failures?.*|npm (?:ERR!|error) .*[Tt]est.*|make(?:\[\d+\])?: \*\*\* .*Error \d+.*|check: gofmt would change.*)$`)
 
 // passMark is a line that shows tests passing.
-var passMark = regexp.MustCompile(`(?m)^(?:ok\s+\S+.*|PASS|test result: ok\..*|=+ .*\b\d+ passed\b.*|\s*Tests?:?\s+\d+ passed.*|\s*\d+ pass\s*|.*Executed \d+ tests?, with 0 failures.*)$`)
+var passMark = compiled(`(?m)^(?:ok\s+\S+.*|PASS|test result: ok\..*|=+ .*\b\d+ passed\b.*|\s*Tests?:?\s+\d+ passed.*|\s*\d+ pass\s*|.*Executed \d+ tests?, with 0 failures.*)$`)
 
 // firstMark names the failing test itself, in Go's and pytest's words,
 // before a package's or a summary's line.
-var firstMark = regexp.MustCompile(`(?m)^(?:--- FAIL: .*|panic: .*|FAILED .*)$`)
+var firstMark = compiled(`(?m)^(?:--- FAIL: .*|panic: .*|FAILED .*)$`)
 
 // lineMax is how much of the line that shows a failure is kept, in bytes.
 const lineMax = 120
@@ -76,26 +83,26 @@ func Read(command, output string, exit int) (outcome, line string) {
 	runs, sure := false, false
 	for i, s := range segs {
 		switch {
-		case runner.MatchString(s.cmd):
+		case runner().MatchString(s.cmd):
 			runs = true
 			sure = sure || exitsWith(segs, i)
-		case wrapper.MatchString(s.cmd):
+		case wrapper().MatchString(s.cmd):
 			runs = true
 		}
 	}
 	if !runs {
 		return "", ""
 	}
-	if m := firstMark.FindString(output); m != "" {
+	if m := firstMark().FindString(output); m != "" {
 		return Failed, cut(m)
 	}
-	if m := failMark.FindString(output); m != "" {
+	if m := failMark().FindString(output); m != "" {
 		return Failed, cut(m)
 	}
 	switch {
 	case exit > 0 && sure:
 		return Failed, ""
-	case passMark.MatchString(output):
+	case passMark().MatchString(output):
 		return Passed, ""
 	}
 	return Ran, ""
@@ -108,7 +115,7 @@ func Read(command, output string, exit int) (outcome, line string) {
 // `go test; echo done` do.
 func exitsWith(segs []segment, i int) bool {
 	for j := i; j < len(segs); j++ {
-		if j > i && !harmless.MatchString(segs[j].cmd) {
+		if j > i && !harmless().MatchString(segs[j].cmd) {
 			return false
 		}
 		if segs[j].then != "" && segs[j].then != "&&" {
@@ -153,7 +160,7 @@ func segments(command string) []segment {
 			}
 			return
 		}
-		out = append(out, segment{cmd: strings.TrimSpace(lead.ReplaceAllString(s, "")), then: then})
+		out = append(out, segment{cmd: strings.TrimSpace(lead().ReplaceAllString(s, "")), then: then})
 	}
 	quote := byte(0)
 	for i := 0; i < len(command); i++ {
@@ -272,27 +279,27 @@ func skipBody(command string, from int, delim string) int {
 }
 
 // passClaim is a sentence that says tests or checks pass.
-var passClaim = regexp.MustCompile(`(?i)\b(?:tests?|test suite|suites?|checks?|specs?)\b[^.;\n]{0,40}?\b(?:pass|passes|passed|passing|green|succeed|succeeds|succeeded)\b|\bpass(?:es|ed|ing)?\s+(?:all\s+)?(?:of\s+)?(?:the\s+|its\s+|their\s+|my\s+|every\s+)?(?:\w+\s+){0,2}?(?:tests?|checks?)\b|\b(?:check\.sh|go test|cargo test|pytest|npm test|bun test|swift test)\b[^.;\n]{0,40}?\b(?:pass|passes|passed|passing|green|clean|ok)\b`)
+var passClaim = compiled(`(?i)\b(?:tests?|test suite|suites?|checks?|specs?)\b[^.;\n]{0,40}?\b(?:pass|passes|passed|passing|green|succeed|succeeds|succeeded)\b|\bpass(?:es|ed|ing)?\s+(?:all\s+)?(?:of\s+)?(?:the\s+|its\s+|their\s+|my\s+|every\s+)?(?:\w+\s+){0,2}?(?:tests?|checks?)\b|\b(?:check\.sh|go test|cargo test|pytest|npm test|bun test|swift test)\b[^.;\n]{0,40}?\b(?:pass|passes|passed|passing|green|clean|ok)\b`)
 
 // hedge is a word that takes a sentence's claim back, makes it partial or
 // puts it off: one that names a failure, a negation, a condition or the
 // future, an exception, or a count of some but not all.
-var hedge = regexp.MustCompile(`(?i)\b(?:not|no|never|none|nothing|without|cannot|fail\w*|skip\w*|flak\w*|broke\w*|until|unless|once|if|when|whether|would|will|should|could|might|may|before|except|but|apart|besides|other than|yet|expected to|hope\w*)\b|n't\b|\d+\s+(?:of|out of)\s+\d+`)
+var hedge = compiled(`(?i)\b(?:not|no|never|none|nothing|without|cannot|fail\w*|skip\w*|flak\w*|broke\w*|until|unless|once|if|when|whether|would|will|should|could|might|may|before|except|but|apart|besides|other than|yet|expected to|hope\w*)\b|n't\b|\d+\s+(?:of|out of)\s+\d+`)
 
 // sentence splits a message into its sentences and lines.
-var sentence = regexp.MustCompile(`[.!?](?:\s|$)|[;\n]`)
+var sentence = compiled(`[.!?](?:\s|$)|[;\n]`)
 
 // SaysPassed reports whether a message says, plainly and in full, that tests
 // or checks pass: a sentence that claims it with no word that takes it back.
-func SaysPassed(msg string) bool { return Says(msg, passClaim) }
+func SaysPassed(msg string) bool { return Says(msg, passClaim()) }
 
 // Says reports whether a message says, plainly and in full, what claim
 // matches: a sentence that claims it with no word that takes it back, such
 // as a negation, a condition, the future or an exception (hedge).
 func Says(msg string, claim *regexp.Regexp) bool {
 	msg = strings.ReplaceAll(msg, "’", "'")
-	for _, s := range sentence.Split(msg, -1) {
-		if claim.MatchString(s) && !hedge.MatchString(s) {
+	for _, s := range sentence().Split(msg, -1) {
+		if claim.MatchString(s) && !hedge().MatchString(s) {
 			return true
 		}
 	}

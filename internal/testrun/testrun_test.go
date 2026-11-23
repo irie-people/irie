@@ -1,6 +1,7 @@
 package testrun
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -112,6 +113,16 @@ func TestSaysPassed(t *testing.T) {
 	} {
 		if got := SaysPassed(msg); got != want {
 			t.Errorf("SaysPassed(%q) = %v, want %v", msg, got, want)
+		}
+	}
+}
+
+// TestEveryPatternCompiles: the patterns compile on their first use, so a
+// bad one would fail only then; this compiles each.
+func TestEveryPatternCompiles(t *testing.T) {
+	for _, p := range []func() *regexp.Regexp{runner, wrapper, lead, harmless, failMark, passMark, firstMark, passClaim, hedge, sentence} {
+		if p() == nil {
+			t.Error("a pattern did not compile")
 		}
 	}
 }

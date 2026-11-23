@@ -116,6 +116,7 @@ const (
 // running is one browser and its BiDi session.
 type running struct {
 	cmd     *exec.Cmd
+	group   int // its process group, when it has one of its own; else 0
 	profile string
 	exited  chan struct{}
 	conn    *bidi
@@ -152,8 +153,14 @@ func start(ctx context.Context, o Options, exe, dir string) (*running, error) {
 	}}
 	// The browser's own children may hold stderr open after it exits.
 	cmd.WaitDelay = 2 * time.Second
+	if o.group {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, err
+	}
+	if o.group {
+		r.group = cmd.Process.Pid
 	}
 	os.WriteFile(filepath.Join(dir, pidFile), []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0o600)
 	go func() {
@@ -243,6 +250,10 @@ func serverFile(dir string) string {
 	return net.JoinHostPort(f.Host, strconv.Itoa(f.Port))
 }
 
+// quitWait is how long a browser has to exit after browser.close; tests
+// shorten it.
+var quitWait = 10 * time.Second
+
 // quit closes the browser and waits for it to exit: browser.close first,
 // then SIGTERM, then SIGKILL.
 func (r *running) quit() {
@@ -254,12 +265,13 @@ func (r *running) quit() {
 	}
 	select {
 	case <-r.exited:
-	case <-time.After(10 * time.Second):
+	case <-time.After(quitWait):
 		r.kill()
 	}
 }
 
-// kill stops the browser now, if it still runs.
+// kill stops the browser now, if it still runs: in a group of its own,
+// the whole group, its content processes too.
 func (r *running) kill() {
 	if r.conn != nil {
 		r.conn.close()
@@ -269,11 +281,18 @@ func (r *running) kill() {
 		return
 	default:
 	}
-	r.cmd.Process.Signal(syscall.SIGTERM)
+	signal := func(sig syscall.Signal) {
+		if r.group > 1 {
+			syscall.Kill(-r.group, sig)
+			return
+		}
+		r.cmd.Process.Signal(sig)
+	}
+	signal(syscall.SIGTERM)
 	select {
 	case <-r.exited:
 	case <-time.After(5 * time.Second):
-		r.cmd.Process.Kill()
+		signal(syscall.SIGKILL)
 		<-r.exited
 	}
 }

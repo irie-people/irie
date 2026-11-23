@@ -9,8 +9,8 @@ import (
 )
 
 func TestTheFileLoads(t *testing.T) {
-	if setErr != nil {
-		t.Fatal(setErr)
+	if _, err := parsed(); err != nil {
+		t.Fatal(err)
 	}
 	s := Get()
 	if len(s.Tips) == 0 || len(s.Resources) == 0 || len(s.Glossary) == 0 {

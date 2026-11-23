@@ -148,12 +148,44 @@ func (s *conn) serve(ctx context.Context, in io.Reader) error {
 func (s *conn) handle(ctx context.Context, line []byte, calls *sync.WaitGroup) {
 	var req rpcRequest
 	if err := json.Unmarshal(line, &req); err != nil {
-		s.reply(json.RawMessage("null"), nil, &rpcError{CodeParse, "parse error: " + err.Error()})
+		s.write(encode(json.RawMessage("null"), nil, &rpcError{CodeParse, "parse error: " + err.Error()}))
 		return
 	}
 	if len(req.ID) == 0 || string(req.ID) == "null" {
 		return // a notification, such as notifications/initialized: nothing to answer
 	}
+	if req.Method == "tools/call" {
+		calls.Add(1)
+		go func() {
+			defer calls.Done()
+			s.write(s.respond(ctx, req))
+		}()
+		return
+	}
+	s.write(s.respond(ctx, req))
+}
+
+// Reply answers one message: the reply to a request, or nil for a
+// notification, which takes none. A tool call runs to its end first.
+func (s Server) Reply(ctx context.Context, msg []byte) []byte {
+	var req rpcRequest
+	if err := json.Unmarshal(msg, &req); err != nil {
+		return encode(json.RawMessage("null"), nil, &rpcError{CodeParse, "parse error: " + err.Error()})
+	}
+	if len(req.ID) == 0 || string(req.ID) == "null" {
+		return nil
+	}
+	return s.respond(ctx, req)
+}
+
+// respond is the reply to a request.
+func (s Server) respond(ctx context.Context, req rpcRequest) []byte {
+	result, e := s.answer(ctx, req)
+	return encode(req.ID, result, e)
+}
+
+// answer is a request's result, or its error.
+func (s Server) answer(ctx context.Context, req rpcRequest) (any, *rpcError) {
 	switch req.Method {
 	case "initialize":
 		var p struct {
@@ -164,43 +196,35 @@ func (s *conn) handle(ctx context.Context, line []byte, calls *sync.WaitGroup) {
 		if slices.Contains(ProtocolVersions, p.ProtocolVersion) {
 			v = p.ProtocolVersion
 		}
-		s.reply(req.ID, map[string]any{
+		return map[string]any{
 			"protocolVersion": v,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": s.Name, "version": s.Version},
 			"instructions":    s.Instructions,
-		}, nil)
+		}, nil
 	case "ping":
-		s.reply(req.ID, struct{}{}, nil)
+		return struct{}{}, nil
 	case "tools/list":
 		tools := s.Tools
 		if tools == nil {
 			tools = []Tool{}
 		}
-		s.reply(req.ID, map[string]any{"tools": tools}, nil)
+		return map[string]any{"tools": tools}, nil
 	case "tools/call":
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
-			s.reply(req.ID, nil, &rpcError{CodeInvalidParams, "invalid params: " + err.Error()})
-			return
+			return nil, &rpcError{CodeInvalidParams, "invalid params: " + err.Error()}
 		}
 		i := slices.IndexFunc(s.Tools, func(t Tool) bool { return t.Name == p.Name })
 		if i < 0 {
-			s.reply(req.ID, nil, &rpcError{CodeInvalidParams, "unknown tool: " + p.Name})
-			return
+			return nil, &rpcError{CodeInvalidParams, "unknown tool: " + p.Name}
 		}
-		t := s.Tools[i]
-		calls.Add(1)
-		go func() {
-			defer calls.Done()
-			s.reply(req.ID, Run(ctx, t, p.Arguments), nil)
-		}()
-	default:
-		s.reply(req.ID, nil, &rpcError{CodeMethodNotFound, "method not found: " + req.Method})
+		return Run(ctx, s.Tools[i], p.Arguments), nil
 	}
+	return nil, &rpcError{CodeMethodNotFound, "method not found: " + req.Method}
 }
 
 // Run calls a tool, turning a panic into an error result.
@@ -216,11 +240,17 @@ func Run(ctx context.Context, t Tool, args json.RawMessage) (r Result) {
 	return t.Call(ctx, args)
 }
 
-func (s *conn) reply(id json.RawMessage, result any, e *rpcError) {
+// encode is a JSON-RPC response with result, or with e when it is set.
+func encode(id json.RawMessage, result any, e *rpcError) []byte {
 	b, err := json.Marshal(rpcResponse{JSONRPC: "2.0", ID: id, Result: result, Error: e})
 	if err != nil {
 		b, _ = json.Marshal(rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{-32603, err.Error()}})
 	}
+	return b
+}
+
+// write sends one message, a line of its own.
+func (s *conn) write(b []byte) {
 	s.wmu.Lock()
 	defer s.wmu.Unlock()
 	s.out.Write(append(b, '\n'))

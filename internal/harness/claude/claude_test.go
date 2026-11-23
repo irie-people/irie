@@ -687,6 +687,34 @@ func TestMCPServersGoInAFileOfTheSessions(t *testing.T) {
 // TestAnonymousResearchRunsInASandbox: an anonymous session's shell runs
 // in Claude Code's sandbox, out only through its forwarder, with no retry
 // outside it, or the session doesn't start (DESIGN §4.16).
+// TestAServerOverHTTPGoesInTheFileAsClaudeCodeReadsIt: Irie's shared
+// browser server is an entry of type http, with its address, its token's
+// header and a time limit on each call, beside a stdio server written as
+// before.
+func TestAServerOverHTTPGoesInTheFileAsClaudeCodeReadsIt(t *testing.T) {
+	s := spawnOf("x")
+	s.MCP = map[string]harness.MCPServer{
+		"irie-browser": {Type: harness.MCPHTTP, URL: "http://127.0.0.1:7440/mcp", Headers: map[string]string{"Authorization": "Bearer s1alice.0a1b"}, Timeout: 600000},
+		"grants":       {Command: "/home/alice/bin/grants", Args: []string{"mcp"}},
+	}
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--mcp-config": true}}
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	var f struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(files[harness.MCPFile], &f); err != nil {
+		t.Fatal(err)
+	}
+	b := f.MCPServers["irie-browser"]
+	h, _ := b["headers"].(map[string]any)
+	if b["type"] != "http" || b["url"] != "http://127.0.0.1:7440/mcp" || h["Authorization"] != "Bearer s1alice.0a1b" || b["timeout"] != float64(600000) || b["command"] != nil || b["args"] != nil {
+		t.Errorf("the HTTP server's entry: %v", b)
+	}
+	if g := f.MCPServers["grants"]; len(g) != 2 || g["command"] != "/home/alice/bin/grants" || g["type"] != nil {
+		t.Errorf("a stdio server's entry: %v", g)
+	}
+}
+
 func TestAnonymousResearchRunsInASandbox(t *testing.T) {
 	home := t.TempDir()
 	managed := filepath.Join(t.TempDir(), "managed-settings.json")

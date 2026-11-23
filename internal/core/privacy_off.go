@@ -36,4 +36,8 @@ func (c *Core) anonOp(ipc.AnonArgs) (ipc.AnonResult, error) {
 	return ipc.AnonResult{}, notBuilt("Anonymous research")
 }
 
-func (c *Core) browserMCP(string) (map[string]harness.MCPServer, string) { return nil, "" }
+func (c *Core) browserMCP(string, []string) (map[string]harness.MCPServer, string) {
+	return nil, ""
+}
+
+func (c *Core) keepBrowser() {}

@@ -2,7 +2,6 @@ package terms
 
 import (
 	"github.com/irie-people/irie/internal/brand"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,9 +34,9 @@ const (
 // A match that skip matches doesn't count, such as "you may close your
 // account" for a pattern of what the company may do.
 type rx struct {
-	re   *regexp.Regexp
+	re   *pattern
 	w    float64
-	skip *regexp.Regexp
+	skip *pattern
 }
 
 // matches says whether text shows the pattern.
@@ -64,12 +63,12 @@ type topic struct {
 	need float64
 	// head matches the headings of sections on the topic: a clause under
 	// one counts one more.
-	head *regexp.Regexp
+	head *pattern
 	// not matches clauses that look like the topic but aren't.
-	not *regexp.Regexp
+	not *pattern
 	// neg matches a clause that says the opposite, such as "we do not sell
 	// your data": the point then takes flip's words.
-	neg  *regexp.Regexp
+	neg  *pattern
 	flip *variant
 	// says is the point in plain words, made from what the clauses say;
 	// it may change the match's verdict.
@@ -77,7 +76,7 @@ type topic struct {
 	// ask matches the words of a question about the topic, and lead those
 	// that make it the first topic of the answer, as "who owns" does
 	// ownership.
-	ask, lead *regexp.Regexp
+	ask, lead *pattern
 	// about is what the topic is about, for "nothing about X".
 	about string
 	// expect says whether terms like d should say something on the topic,
@@ -102,9 +101,6 @@ type match struct {
 
 // all is every clause on the topic as one text, for the details.
 func (m *match) all() string { return strings.Join(m.texts, " ") }
-
-// re compiles a pattern that ignores case.
-func re(p string) *regexp.Regexp { return regexp.MustCompile(`(?i)` + p) }
 
 // near is a pattern of a, then b within n words.
 func near(a, b string, n int) string {
@@ -1137,7 +1133,7 @@ func topicByID(id string) *topic {
 const days = `\b(?:\d{1,3}|one|two|three|five|seven|ten|fourteen|fifteen|twenty|thirty|forty[ -]five|sixty|ninety)\b(?:\s*\(\d{1,3}\))?\s*(?:calendar |business |working )?days?\b`
 
 // find is the first text p matches in s, or "".
-func find(s string, p *regexp.Regexp) string { return p.FindString(s) }
+func find(s string, p *pattern) string { return p.FindString(s) }
 
 // numberWords are the numbers terms write out.
 var numberWords = map[string]string{
@@ -1314,7 +1310,7 @@ var placeKinds = map[string]bool{"state": true, "county": true, "city": true, "d
 
 // theNames are places whose names take "the": the United States, the
 // Netherlands.
-var theNames = regexp.MustCompile(`^(?:United|Netherlands|Philippines|Bahamas|Czech Republic|Republic|Kingdom|Commonwealth|Federal|People's|Russian Federation|Dominican|Gambia|Maldives|Seychelles|Isle of|Grand Duchy)`)
+var theNames = lazy(`^(?:United|Netherlands|Philippines|Bahamas|Czech Republic|Republic|Kingdom|Commonwealth|Federal|People's|Russian Federation|Dominican|Gambia|Maldives|Seychelles|Isle of|Grand Duchy)`)
 
 func isCap(s string) bool {
 	for _, r := range s {

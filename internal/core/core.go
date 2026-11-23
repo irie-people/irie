@@ -590,6 +590,7 @@ func (c *Core) tick() {
 	c.followTitles()
 	c.followConversations()
 	c.keepRemote()
+	c.keepBrowser()
 	c.keepTunnels()
 	c.keepOwnHelpers(time.Now())
 	c.keepVPN()
