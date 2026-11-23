@@ -7,7 +7,7 @@
 # floors hold on the system the `on` line names; elsewhere they are shown.
 
 on darwin
-cmd/irie 27 0
+cmd/irie 28 0
 core 89 0
 internal/ab 87 0
 internal/anon 73 0
