@@ -127,6 +127,7 @@
     <li><a href="#handoff">Let an agent hand work to another</a></li>
     <li><a href="#privacy">The privacy plugin</a></li>
     <li><a href="#charters">The charters, as a map</a></li>
+    <li><a href="#markets">Your markets, as a map</a></li>
   </ul>
 
   <h2 id="parallel">Several agents on one feature</h2>
@@ -337,6 +338,21 @@ proxy = "socks5://nl-ams-wg-socks5-001.relays.mullvad.net:1080"</code></pre></li
   <ul class="rules">
     <li>The map in the Mac app and on this site: 1,577 articles, sections and chapters, 42 rights and ideas, and 76 links between the texts, most quoting both and each pinned to the passages it quotes; search in any spelling, so “chuse” finds “choose”.</li>
     <li><code>irie ctl charters graph</code>, which says where the page is on your computer, to open in a browser.</li>
+  </ul>
+
+  <h2 id="markets">Your markets, as a map</h2>
+  <p>The Markets plugin shows a market map of your own in a window beside your sessions: a page you keep in a folder, often beside the research and the scripts that build it, loaded again each time it is rebuilt and kept from the network. Irie People keeps one in the open: the markets the largest US companies hold and the boards behind them, with which boardrooms touch which markets and who sits on two boards in one. <a href="https://irie-people.github.io/markets/">Explore it here</a>, in your browser.</p>
+  <ol class="rules">
+    <li>Turn the plugin on in the Mac app’s Settings › Plugins, or with:
+<pre><code>irie plugins on markets</code></pre></li>
+    <li>Open Window › Markets (⇧⌘M) and choose the folder that holds your map’s <code>index.html</code>, or set <code>markets.folder</code> in config.toml. To show Irie People’s map there, clone it and choose its folder:
+<pre><code>git clone https://github.com/irie-people/markets</code></pre></li>
+    <li>Type <code>:markets</code> and a task, such as “map the US airline market”, to start a session that works in that folder; in an empty one it makes a map. The window shows each rebuild once it is written.</li>
+  </ol>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>Irie People’s map on the web: 80 markets in 12 verticals, every share dated and sourced, and the boards of 587 of the largest US companies, with 5,461 directors and their public roles and political donations, from LittleSis, Wikidata and the SEC’s filings.</li>
+    <li>The Markets window in the Mac app, which loads nothing from the network, and <code>:markets</code>, which shows it or starts a session in its folder.</li>
   </ul>
 
   <nav class="docs-nav" aria-label="Docs">
