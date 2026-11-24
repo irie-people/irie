@@ -110,3 +110,26 @@ func TestThePageRuns(t *testing.T) {
 		})
 	}
 }
+
+// TestTheSiteHasTheGraph: the site's copy of the page is this build's, so
+// a change to a text, a link, an idea or the page shows on the site with
+// it. go run ./tools/charters writes it.
+func TestTheSiteHasTheGraph(t *testing.T) {
+	path := filepath.Join("..", "..", "site", "charters", "index.html")
+	got, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join("..", "..", "site")); os.IsNotExist(err) {
+			t.Skip("no site in this checkout")
+		}
+	}
+	if err != nil {
+		t.Fatalf("%v: go run ./tools/charters writes it", err)
+	}
+	want, err := WebPage(SiteHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("%s is stale: go run ./tools/charters writes it again", path)
+	}
+}

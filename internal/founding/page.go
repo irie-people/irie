@@ -5,16 +5,19 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"strings"
 	"sync"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
 // The Charters Graph page: the explorer (graph/) and the graph it draws,
 // put together as one HTML file that loads nothing from elsewhere, so the
 // Mac app's window can show it with the network shut, and a browser can
-// open it from the disk.
+// open it from the disk. The web's copies, on the site and on the graph's
+// own site, add a link home in the bar (tools/charters writes them).
 
 //go:embed graph/index.html graph/graph.css graph/graph.js
 var graphFiles embed.FS
@@ -34,14 +37,34 @@ func Page() ([]byte, error) {
 			pageErr = err
 			return
 		}
-		page, pageErr = MakePage(docs)
+		page, pageErr = MakePage(docs, Home{})
 	})
 	return page, pageErr
 }
 
+// Home is a link home in the page's bar, for a copy on the web: where it
+// goes and what it says. The Mac app's window has none.
+type Home struct {
+	URL, Text string
+}
+
+// SiteHome is the link home of the site's copy, site/charters/index.html,
+// which sits a folder below the site's own pages.
+var SiteHome = Home{URL: "../", Text: "← " + brand.Name}
+
+// WebPage gives the page with a link home, for a copy on the web.
+func WebPage(home Home) ([]byte, error) {
+	docs, err := Load()
+	if err != nil {
+		return nil, err
+	}
+	return MakePage(docs, home)
+}
+
 // MakePage puts the page together from the texts: the graph, as JSON in a
-// script element, then the page's own style and script.
-func MakePage(docs []ipc.FoundingDoc) ([]byte, error) {
+// script element, then the page's own style and script, and the link home
+// when there is one.
+func MakePage(docs []ipc.FoundingDoc, home Home) ([]byte, error) {
 	g, err := BuildGraph(docs)
 	if err != nil {
 		return nil, err
@@ -56,7 +79,7 @@ func MakePage(docs []ipc.FoundingDoc) ([]byte, error) {
 		b, err := graphFiles.ReadFile("graph/" + name)
 		return string(b), err
 	}
-	html, err := read("index.html")
+	tmpl, err := read("index.html")
 	if err != nil {
 		return nil, err
 	}
@@ -73,20 +96,25 @@ func MakePage(docs []ipc.FoundingDoc) ([]byte, error) {
 			return nil, fmt.Errorf("%s would end its own element", name)
 		}
 	}
+	link := ""
+	if home.URL != "" {
+		link = `<a class="home" href="` + html.EscapeString(home.URL) + `">` + html.EscapeString(home.Text) + `</a>`
+	}
 	var b bytes.Buffer
 	for _, part := range []struct{ mark, with string }{
 		{"/*{{style}}*/", css},
+		{"<!--{{home}}-->", link},
 		{"{{data}}", string(data)},
 		{"/*{{script}}*/", js},
 	} {
-		i := strings.Index(html, part.mark)
+		i := strings.Index(tmpl, part.mark)
 		if i < 0 {
 			return nil, fmt.Errorf("index.html has no %s", part.mark)
 		}
-		b.WriteString(html[:i])
+		b.WriteString(tmpl[:i])
 		b.WriteString(part.with)
-		html = html[i+len(part.mark):]
+		tmpl = tmpl[i+len(part.mark):]
 	}
-	b.WriteString(html)
+	b.WriteString(tmpl)
 	return b.Bytes(), nil
 }

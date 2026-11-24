@@ -816,7 +816,8 @@
       <p class="lead">${texts.length} texts of rights, from ${esc(first.name)} in ${first.year} to the ${esc(last.name)} in ${last.year}, laid out by when and where they were made. Each line between two texts is a link: how the later one drew on the earlier, quoting both.</p>
       <p class="muted">Pick a text, a part of one or a right to see how it bears on the rest, or search for any word, in any spelling.</p>
       <h2>Rights and ideas, and how many texts name each</h2>${fams}
-      <h2>The texts, oldest first</h2><ul class="tree" role="tree" aria-label="The texts" data-tree="*"></ul>`;
+      <h2>The texts, oldest first</h2><ul class="tree" role="tree" aria-label="The texts" data-tree="*"></ul>
+      <p class="about" style="margin-top:18px">Each text’s card says where its words come from, word for word, and on what terms. The United Kingdom’s texts contain public sector information licensed under the Open Government Licence v3.0; Sweden’s Press Act is Ian Giles and Peter Graves’s translation, under CC BY 4.0. The links, the parts and the rights named are this map’s reading of the texts, each shown with the words it rests on.</p>`;
   }
 
   function textCard(t) {
