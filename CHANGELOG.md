@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.0](https://github.com/irie-people/irie/compare/v1.10.1...v1.11.0) (2026-11-24)
+
+
+### Features
+
+* **charters:** explore the charters as a graph, in a window of their own ([61f859c](https://github.com/irie-people/irie/commit/61f859c56d19648147d074c7863d23e41b15b5a5))
+* **charters:** name the Charters Graph in the plugin and the Plugins menu ([7e127e9](https://github.com/irie-people/irie/commit/7e127e95717786e30487f8ed103c34e036f62bbc))
+* **charters:** the map on the web, on the site and on a site of its own ([a0cf8ba](https://github.com/irie-people/irie/commit/a0cf8bac279e16aae59afe64f8c10f086435e4a3))
+
 ## [1.10.1](https://github.com/irie-people/irie/compare/v1.10.0...v1.10.1) (2026-11-23)
 
 
