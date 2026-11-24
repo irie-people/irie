@@ -11,6 +11,7 @@ import SwiftUI
 struct PluginCommands: Commands {
     let store: Store
     let menu: MenuState
+    @Environment(\.openWindow) private var openWindow
 
     /// An action on the main actor, where SwiftUI runs a menu's actions.
     private func run(_ work: @escaping @MainActor () -> Void) -> () -> Void {
@@ -63,6 +64,12 @@ struct PluginCommands: Commands {
                         if let pane = x.pane, x.isOn {
                             Button("Show in Right Sidebar", action: run { store.openPane(pane.id) })
                         }
+                        #if !NOFOUNDING
+                        // The charters also open as a map (ChartersGraph.swift).
+                        if p.name == "founding", x.name == "founding", x.isOn {
+                            Button("Open Charters Graph", action: run { openWindow(id: ChartersGraphWindow.id) })
+                        }
+                        #endif
                         if x.switch != nil {
                             Toggle("On", isOn: Binding(get: { x.on }, set: { on in
                                 MainActor.assumeIsolated { store.setPlugin(p.name, part: x.name, on: on) }

@@ -32,15 +32,15 @@ func foundingPlugin() Plugin {
 	return Plugin{
 		Name:    "founding",
 		Title:   "Charters",
-		Summary: "Thirty-eight texts of rights, word for word from the bodies that keep them and checked against other copies: from Magna Carta, the Petition of Right, the Body of Liberties, the English Bill of Rights and Sweden's Press Act of 1766, through the states' declarations of rights, the Declaration of Independence, the Constitution, the Bill of Rights, the Rights of Man, the Declaration of Sentiments and the Gettysburg Address, to the UN Charter, the Universal Declaration of Human Rights, the European Convention, the two Covenants, the Conventions against racial and sex discrimination and on the rights of the child, the Civil Rights, Voting Rights and Disabilities Acts and the freedom-of-information laws of the United States, the United Kingdom and India. To read and search in the Charters tab, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
+		Summary: "Thirty-eight texts of rights, word for word from the bodies that keep them and checked against other copies: from Magna Carta, the Petition of Right, the Body of Liberties, the English Bill of Rights and Sweden's Press Act of 1766, through the states' declarations of rights, the Declaration of Independence, the Constitution, the Bill of Rights, the Rights of Man, the Declaration of Sentiments and the Gettysburg Address, to the UN Charter, the Universal Declaration of Human Rights, the European Convention, the two Covenants, the Conventions against racial and sex discrimination and on the rights of the child, the Civil Rights, Voting Rights and Disabilities Acts and the freedom-of-information laws of the United States, the United Kingdom and India. To read and search in the Charters tab, to explore as a map in the Charters Graph, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
 		key:     "plugins.founding",
 		on:      func(c config.Config) bool { return c.Plugins.Founding },
 		Parts: []Part{
 			{
 				Name:    Founding,
 				Title:   "The charters",
-				Summary: "Read them in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it. Agents quote them from the founding-documents skill's files, never from memory. Each file's SHA-512 shows a copy is this one, and a chain on this computer keeps every version of the texts and their links.",
-				Brings:  []string{"the Charters tab in the right sidebar", "/" + brand.Slug + ":" + founding.Skill, brand.Slug + " ctl charters"},
+				Summary: "Read them in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it. Explore them as a map in the Charters Graph: the texts on a timeline, their articles and sections, the rights they name and the passages each link quotes. Agents quote them from the founding-documents skill's files, never from memory. Each file's SHA-512 shows a copy is this one, and a chain on this computer keeps every version of the texts and their links.",
+				Brings:  []string{"the Charters tab in the right sidebar", "Window › Charters Graph", "/" + brand.Slug + ":" + founding.Skill, brand.Slug + " ctl charters", brand.Slug + " ctl charters graph"},
 				Skills:  []string{founding.Skill},
 				Pane:    &ipc.PluginPane{Title: "Charters", Icon: "building.columns", Kind: PaneFounding},
 				own:     always,
@@ -54,11 +54,11 @@ func foundingPlugin() Plugin {
 // into this binary, so it reads no file.
 func checkFounding(e Env, on bool) (bool, string) {
 	if !on {
-		return true, "Off: the Charters tab and the " + founding.Skill + " skill go with it."
+		return true, "Off: the Charters tab, the Charters Graph and the " + founding.Skill + " skill go with it."
 	}
 	docs, err := founding.Load()
 	if err != nil {
 		return false, "The texts don't read: " + err.Error() + "."
 	}
-	return true, "Ready: " + strconv.Itoa(len(docs)) + " texts in the Charters tab, and the " + founding.Skill + " skill in every session."
+	return true, "Ready: " + strconv.Itoa(len(docs)) + " texts in the Charters tab and the Charters Graph, and the " + founding.Skill + " skill in every session."
 }

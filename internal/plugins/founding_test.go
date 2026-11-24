@@ -38,6 +38,10 @@ func TestFoundingIsOffByDefault(t *testing.T) {
 	if x.Pane == nil || x.Pane.ID != "founding.founding" || x.Pane.Kind != PaneFounding || x.Pane.Title != "Charters" {
 		t.Errorf("pane = %+v", x.Pane)
 	}
+	// The plugin's list names the graph's window and its command.
+	if brings := strings.Join(x.Brings, ", "); !strings.Contains(brings, "Window › Charters Graph") || !strings.Contains(brings, brand.Slug+" ctl charters graph") {
+		t.Errorf("brings %q", brings)
+	}
 	if why := Why(e.Config, Founding); !strings.Contains(why, brand.Slug+" plugins on founding") {
 		t.Errorf("Why = %q", why)
 	}
@@ -55,7 +59,7 @@ func TestFoundingOnIsReady(t *testing.T) {
 	e := env(t)
 	e.Config.Plugins.Founding = true
 	x := part(t, foundingStatus(t, e), Founding)
-	if x.State != ipc.PartReady || !strings.Contains(x.Detail, "38 texts") {
+	if x.State != ipc.PartReady || !strings.Contains(x.Detail, "38 texts") || !strings.Contains(x.Detail, "Charters Graph") {
 		t.Errorf("part = %+v", x)
 	}
 	if why := Why(e.Config, Founding); why != "" {

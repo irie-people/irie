@@ -1265,8 +1265,8 @@ enum Fixture {
      "summary": "Thirty-eight texts of rights, word for word from the bodies that keep them and checked against other copies, from Magna Carta to India's Right to Information Act.",
      "parts": [
       {"name": "founding", "title": "The charters", "on": true, "state": "ready",
-       "detail": "Ready: 38 texts in the Charters tab, and the founding-documents skill in every session.",
-       "summary": "Read them in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it.",
+       "detail": "Ready: 38 texts in the Charters tab and the Charters Graph, and the founding-documents skill in every session.",
+       "summary": "Read them in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it. Explore them as a map in the Charters Graph.",
        "pane": {"id": "founding.founding", "title": "Charters", "icon": "building.columns", "kind": "founding"}}
      ]}
     """#
