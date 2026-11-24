@@ -977,6 +977,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-23 | https://www.w3.org/WAI/ARIA/apg/patterns/treeview/ | The Charters Graph page's tree of parts (graph.js, buildTree and treeKey): WAI-ARIA's tree view pattern, its roles, states and keys (one Tab stop; arrows, Home, End, Enter, * and type-ahead) |
 | 2026-11-23 | https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaMode ; https://developer.apple.com/documentation/webkitjs/gestureevent | The Charters Graph page's hands: wheel deltas by their deltaMode, a pinch as a ctrl-wheel, and WebKit's gesturestart, gesturechange and gestureend, whose scale grows from the gesture's start |
 | 2026-11-23 | https://developer.chrome.com/docs/chromium/headless | TestThePageRuns (internal/founding/page_test.go): the page run in headless Chromium with --dump-dom and --virtual-time-budget, read back from its DOM, with no window |
+| 2026-11-24 | https://github.com/actions/starter-workflows/blob/main/pages/jekyll.yml (MIT) | The Pages workflow's two jobs, upload then deploy with needs: the shape of GitHub's own starter, after the one-job deploy found no artifact from 2026-11-22 on |
 
 ## Third-party code
 

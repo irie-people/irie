@@ -1,6 +1,12 @@
 # Publishes site/ to GitHub Pages with GitHub's own Pages actions. The site is
 # plain HTML and CSS, so there is no build step: site/ is uploaded as it is.
 # One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
+#
+# The upload and the deployment are two jobs, the second waiting for the
+# first, as GitHub's own Pages workflows have them. In one job, from
+# 2026-11-22 on, deploy-pages asked for the artifact a moment after it was
+# uploaded and found none ("No artifacts named github-pages"), every time,
+# so the site stopped publishing.
 name: pages
 on:
   push:
@@ -16,16 +22,20 @@ concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
-  deploy:
+  upload:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with: { path: site }
+  deploy:
+    needs: upload
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
