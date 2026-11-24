@@ -8,6 +8,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/skills"
 )
 
 func graph(t *testing.T) (Graph, map[string]GraphNode) {
@@ -369,4 +370,32 @@ func TestThePage(t *testing.T) {
 	if len(b) > 4<<20 {
 		t.Errorf("the page is %d bytes", len(b))
 	}
+}
+
+// TestMostLinksQuoteBoth: the page says most links quote both texts, so
+// more than half of them hold a quotation from each of their two texts.
+func TestMostLinksQuoteBoth(t *testing.T) {
+	var files map[string][]byte
+	for _, s := range skills.Bundled() {
+		if s.Name == Skill {
+			files = s.Files
+		}
+	}
+	both := 0
+	for _, l := range Links {
+		from, _ := ByID(l.From)
+		to, _ := ByID(l.To)
+		var inFrom, inTo bool
+		for _, q := range quoted(l.Why) {
+			inFrom = inFrom || strings.Contains(string(files[from.File]), q)
+			inTo = inTo || strings.Contains(string(files[to.File]), q)
+		}
+		if inFrom && inTo {
+			both++
+		}
+	}
+	if both*2 <= len(Links) {
+		t.Errorf("%d of %d links quote both texts: the page's \"most\" is untrue", both, len(Links))
+	}
+	t.Logf("%d of %d links quote both texts", both, len(Links))
 }
