@@ -13,6 +13,7 @@ import (
 	"github.com/irie-people/irie/internal/founding"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
+	"github.com/irie-people/irie/internal/schools"
 )
 
 // The charters (DESIGN §4.17): while the founding plugin is on, the
@@ -75,16 +76,31 @@ func (c *Core) recordFoundingAtStart() {
 }
 
 // writeChartersPage writes the Charters Graph page this build makes into
-// its folder, unless the file there holds it already, and says where it
-// is. The page is the same for every call while the build runs, so a
-// window that reloads it finds it unchanged; a file written by an older
-// build is replaced, by a rename, so a reader never sees half of one.
+// its folder, and says where it is.
 func (c *Core) writeChartersPage() (string, error) {
 	b, err := founding.Page()
 	if err != nil {
 		return "", err
 	}
-	path := c.paths.ChartersPage()
+	return c.writePage(b, c.paths.ChartersPage())
+}
+
+// writeSchoolsPage writes the Common Schools page this build makes into
+// its folder, and says where it is.
+func (c *Core) writeSchoolsPage() (string, error) {
+	b, err := schools.Page()
+	if err != nil {
+		return "", err
+	}
+	return c.writePage(b, c.paths.SchoolsPage())
+}
+
+// writePage writes a page this build makes to path, unless the file there
+// holds it already. The page is the same for every call while the build
+// runs, so a window that reloads it finds it unchanged; a file written by
+// an older build is replaced, by a rename, so a reader never sees half of
+// one.
+func (c *Core) writePage(b []byte, path string) (string, error) {
 	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, b) {
 		return path, nil
 	}
@@ -93,7 +109,7 @@ func (c *Core) writeChartersPage() (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".graph-*.html")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".page-*.html")
 	if err != nil {
 		return "", err
 	}
@@ -117,6 +133,16 @@ func (c *Core) writeChartersPage() (string, error) {
 // foundingOp answers anyone, an agent too: the texts are public, and the
 // op only reads them and keeps their chain.
 func (c *Core) foundingOp(_ int, a ipc.FoundingArgs) (ipc.FoundingResult, error) {
+	if a.Schools {
+		if why := plugins.Why(*c.cfg(), plugins.Schools); why != "" {
+			return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
+		}
+		page, err := c.writeSchoolsPage()
+		if err != nil {
+			return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeInternal, "the Common Schools page: %v", err)
+		}
+		return ipc.FoundingResult{Page: page}, nil
+	}
 	if why := plugins.Why(*c.cfg(), plugins.Founding); why != "" {
 		return ipc.FoundingResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
 	}

@@ -4,6 +4,7 @@ package core
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/founding"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/schools"
 )
 
 // TestFoundingOpWaitsForItsPlugin: while the founding plugin is off, the op
@@ -115,6 +117,40 @@ func TestTheChartersGraphPage(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(r.Page); string(got) != string(want) {
 		t.Error("an older page stayed")
+	}
+}
+
+// TestTheCommonSchoolsPage: the founding op, asked for schools, writes the
+// Common Schools page this build makes to its own folder and says where,
+// only while the plugin is on.
+func TestTheCommonSchoolsPage(t *testing.T) {
+	cfg := config.Default()
+	c := bareCore(t, cfg)
+	if _, err := c.foundingOp(0, ipc.FoundingArgs{Schools: true}); err == nil {
+		t.Fatal("the page came while the plugin was off")
+	}
+	cfg.Plugins.Founding = true
+	c = bareCore(t, cfg)
+	r, err := c.foundingOp(0, ipc.FoundingArgs{Schools: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Page != c.paths.SchoolsPage() || r.Docs != nil || r.Links != nil || r.Chain != nil {
+		t.Fatalf("page %q, %d docs, %d links, chain %v", r.Page, len(r.Docs), len(r.Links), r.Chain)
+	}
+	want, err := schools.Page()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(r.Page)
+	if err != nil || string(got) != string(want) {
+		t.Fatalf("the file holds %d bytes of the page's %d: %v", len(got), len(want), err)
+	}
+	if st, err := os.Stat(r.Page); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("the page's mode: %v", err)
+	}
+	if filepath.Dir(r.Page) == filepath.Dir(c.paths.ChartersPage()) {
+		t.Error("the two pages share a folder, so each window could read the other's")
 	}
 }
 

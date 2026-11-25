@@ -69,6 +69,10 @@ struct PluginCommands: Commands {
                         if p.name == "founding", x.name == "founding", x.isOn {
                             Button("Open Charters Graph", action: run { openWindow(id: ChartersGraphWindow.id) })
                         }
+                        // Common Schools opens as pies (CommonSchools.swift).
+                        if p.name == "founding", x.name == "schools", x.isOn {
+                            Button("Open Common Schools", action: run { openWindow(id: CommonSchoolsWindow.id) })
+                        }
                         #endif
                         if x.switch != nil {
                             Toggle("On", isOn: Binding(get: { x.on }, set: { on in

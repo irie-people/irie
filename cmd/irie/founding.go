@@ -27,6 +27,9 @@ const foundingUsage = `  ` + brand.Slug + ` ctl charters [--json]             th
   ` + brand.Slug + ` ctl charters graph                where the Charters Graph page is: the texts,
                                          their parts and the rights they name, as a map
                                          to explore, in one file that loads nothing
+  ` + brand.Slug + ` ctl schools [--json]              where the Common Schools page is: America's
+                                         public schools as pies that open into smaller
+                                         ones, in one file that loads nothing
 `
 
 // ctlFounding is `irie ctl charters` (and `irie ctl founding`, its first
@@ -194,4 +197,32 @@ func printFoundingLog(w io.Writer, vs []ipc.FoundingVersion) {
 			fmt.Fprintf(w, "  %-44s %s…\n", file, digest[:min(len(chain.Prefix)+16, len(digest))])
 		}
 	}
+}
+
+// ctlSchools is `irie ctl schools`: where the Common Schools page is
+// (docs/proposals/common-schools.md), which the core writes as it's asked.
+func ctlSchools(args []string) error {
+	fs := flag.NewFlagSet("ctl schools", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the answer as JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return errors.New("usage: " + brand.Slug + " ctl schools [--json]")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var r ipc.FoundingResult
+	if err := ipc.Call(sock, 30*time.Second, ipc.OpFounding, ipc.FoundingArgs{Schools: true}, &r); err != nil {
+		return err
+	}
+	if *asJSON {
+		return json.NewEncoder(os.Stdout).Encode(struct {
+			Page string `json:"page"`
+		}{r.Page})
+	}
+	fmt.Println(r.Page)
+	return nil
 }

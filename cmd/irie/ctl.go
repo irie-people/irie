@@ -238,6 +238,8 @@ func ctl(args []string) error {
 		return ctlZen(args[1:])
 	case "charters", "founding":
 		return ctlFounding(args[1:])
+	case "schools":
+		return ctlSchools(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])
 	case "gabriel":

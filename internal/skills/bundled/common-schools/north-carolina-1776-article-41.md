@@ -1,0 +1,5 @@
+# The Constitution of North Carolina, 1776: Article XLI
+
+_Article XLI of the Constitution, or Form of Government, that North Carolina's Congress at Halifax agreed to on December 18, 1776, that article alone, as Francis Newton Thorpe printed it in The Federal and State Constitutions, Colonial Charters, and Other Organic Laws (Government Printing Office, 1909), vol. 5, p. 2794, in the constitution he titles "Constitution of North Carolina—1776": read from the Avalon Project's transcription and settled against two scans of the print's page. The State's own edition, in The State Records of North Carolina, vol. 23 (1904), p. 984, labels it "Section XLI." and differs in capitals on its nouns, four commas fewer and the misprint "many" for "may". Spelling, capitals and punctuation are Thorpe's._
+
+**XLI.** That a school or schools shall be established by the Legislature, for the convenient instruction of youth, with such salaries to the masters, paid by the public, as may enable them to instruct at low prices; and all useful learning shall be duly encouraged, and promoted, in one or more universities.

@@ -30,7 +30,7 @@ func TestThePluginsOp(t *testing.T) {
 		r.Plugins[8].Name != "yoink" || r.Plugins[8].On || len(r.Plugins[8].Parts) != 1 || r.Plugins[8].Parts[0].Pane == nil ||
 		r.Plugins[9].Name != "chat" || !r.Plugins[9].On || len(r.Plugins[9].Parts) != 3 || r.Plugins[9].Parts[0].Pane == nil ||
 		r.Plugins[10].Name != "obsidian" || !r.Plugins[10].On || len(r.Plugins[10].Parts) != 2 ||
-		r.Plugins[11].Name != "founding" || r.Plugins[11].On || len(r.Plugins[11].Parts) != 1 || r.Plugins[11].Parts[0].Pane == nil ||
+		r.Plugins[11].Name != "founding" || r.Plugins[11].On || len(r.Plugins[11].Parts) != 2 || r.Plugins[11].Parts[0].Pane == nil ||
 		r.Plugins[12].Name != "jammin" || !r.Plugins[12].On || len(r.Plugins[12].Parts) != 3 || r.Plugins[12].Parts[0].Pane == nil {
 		t.Fatalf("plugins = %+v", r.Plugins)
 	}

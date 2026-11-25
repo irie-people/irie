@@ -1,0 +1,198 @@
+/* The Common Schools page (docs/proposals/common-schools.md): pies that
+   open into smaller pies. Its colours are the design library's, Roots, in
+   Evergreen (DESIGN §2.11): tools/design.sh keeps the blocks below the
+   library's, and the tests fail while one isn't. The slices' colours are
+   worked out from the library's agent hues (internal/schools, colour.go)
+   and set by the script. The page loads nothing from elsewhere. */
+:root {
+  /* design: evergreen light */
+  --sidebar: #F4F4EC; --ground: #E9EBDF; --card: #FBFBF6; --panel: #F1F2E8; --field: #FDFDF9;
+  --edge: #D8DCC9; --hover: #F6F7EF; --selection: #DDE5D3; --needs-tint: #FBE5DC;
+  --ink: #1E2B22; --muted: #56635A; --accent: #2F5D46; --accent-ink: #264D3A; --accent-fill: #9DB8A3; --on-accent: #1E2B22;
+  --needs: #892319; --done: #2C7043; --paused: #8C5500; --frozen: #00566B; --sun: #D9A93F; --waves: #5E8A6E;
+  /* design: end */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", system-ui, sans-serif;
+  --words: ui-serif, "New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --r: 12px;
+  --r-control: 8px;
+  --ease: cubic-bezier(.2, .85, .25, 1);
+  --bar: 52px;
+  --card-width: min(440px, 40vw);
+  /* The slice for the rest, and the light a passage about schools gets. */
+  --rest: color-mix(in oklab, var(--muted) 30%, var(--card));
+  --lit: color-mix(in oklab, var(--sun) 30%, var(--card));
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* design: evergreen dark */
+    --sidebar: #141C17; --ground: #0E1410; --card: #1C2620; --panel: #18221C; --field: #202B24;
+    --edge: #34443A; --hover: #25322A; --selection: #2A3D31; --needs-tint: #4A251C;
+    --ink: #ECF0E6; --muted: #B3BFB5; --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
+    --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD; --waves: #9CC5A1;
+    /* design: end */
+    --rest: color-mix(in oklab, var(--muted) 34%, var(--card));
+    --lit: color-mix(in oklab, var(--sun) 28%, var(--card));
+  }
+}
+@media (prefers-contrast: more) {
+  :root { --muted: color-mix(in oklab, var(--muted) 60%, var(--ink)); --edge: color-mix(in oklab, var(--edge) 60%, var(--ink)); }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); color: var(--ink);
+  font: 13px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: var(--accent-ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+
+/* ---- The bar: the name, where to start, the keys ---------------------- */
+
+.bar {
+  flex: none; min-height: var(--bar);
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: env(safe-area-inset-top, 0) max(14px, env(safe-area-inset-right, 0)) 0 max(14px, env(safe-area-inset-left, 0));
+  border-bottom: 1px solid var(--edge);
+  background: var(--sidebar);
+}
+.name { font: 600 15px/1 var(--round); white-space: nowrap; }
+.home { font-size: 12px; color: var(--muted); text-decoration: none; white-space: nowrap; border: 1px solid var(--edge); border-radius: 999px; padding: 3px 10px; }
+.home:hover { color: var(--ink); background: var(--hover); }
+.lenses { flex: 1; min-width: 0; }
+.lenses [role=tablist] { display: flex; gap: 4px; flex-wrap: wrap; padding: 8px 0; }
+.lens {
+  border: 1px solid transparent; border-radius: 999px; background: none;
+  padding: 5px 12px; color: var(--muted); font-weight: 500; white-space: nowrap;
+}
+.lens:hover { color: var(--ink); background: var(--hover); }
+.lens[aria-selected=true] { color: var(--ink); background: var(--selection); border-color: var(--edge); }
+.icon-btn {
+  flex: none; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--edge); background: var(--field); color: var(--muted); font-weight: 600;
+}
+.icon-btn:hover { color: var(--ink); background: var(--hover); }
+
+/* ---- The trail: where you are, each step a way back ------------------- */
+
+.trail { flex: none; padding: 8px max(16px, env(safe-area-inset-left, 0)); border-bottom: 1px solid var(--edge); background: var(--card); }
+.trail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; }
+.trail li { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.trail li + li::before { content: "›"; color: var(--muted); }
+.trail a { color: var(--muted); text-decoration: none; border-radius: 6px; padding: 2px 4px; }
+.trail a:hover { color: var(--ink); background: var(--hover); }
+.trail [aria-current] { color: var(--ink); font-weight: 600; padding: 2px 4px; }
+.trail .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+/* ---- The stage: the pie, or a text's words ---------------------------- */
+
+.main { flex: 1; min-height: 0; display: flex; }
+.stage { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: auto; padding: 18px 22px 22px; }
+.heading { flex: none; max-width: 72ch; }
+.heading h1 { font: 600 19px/1.25 var(--round); margin: 0 0 4px; text-wrap: balance; }
+.sub { margin: 0; color: var(--muted); }
+.chart { position: relative; flex: 1; min-height: 320px; }
+#pie { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.slice { stroke: var(--card); stroke-width: 2; stroke-linejoin: round; cursor: pointer; transition: opacity .18s var(--ease); }
+.slice.dim { opacity: .45; }
+.slice.lit { stroke: var(--ink); stroke-width: 2; }
+.slice.whole { cursor: default; }
+.lead { stroke: var(--muted); stroke-width: 1; fill: none; opacity: .7; }
+.label { font: 500 12.5px var(--font); fill: var(--ink); pointer-events: none; }
+.label .share { fill: var(--muted); font-weight: 400; }
+.label.dim { opacity: .45; }
+.tip {
+  position: absolute; z-index: 5; pointer-events: none; max-width: 260px;
+  background: var(--field); border: 1px solid var(--edge); border-radius: var(--r-control);
+  padding: 7px 10px; box-shadow: 0 6px 20px rgb(0 0 0 / .12);
+}
+.tip b { display: block; font-weight: 600; }
+.tip span { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* A text's words, in the reading face, the passages about schools lit. */
+.reader { max-width: 68ch; padding: 6px 0 40px; font: 16px/1.62 var(--words); }
+.reader h2, .reader h3, .reader h4 { font: 600 15px/1.3 var(--round); margin: 1.4em 0 .4em; }
+.reader p { margin: 0 0 .9em; white-space: pre-line; }
+.reader .note { font: italic 13.5px/1.5 var(--font); color: var(--muted); }
+.reader .about { font: italic 13px/1.5 var(--font); color: var(--muted); border-left: 3px solid var(--edge); padding-left: 10px; margin-bottom: 1.4em; }
+.reader ul { columns: 2 14em; padding-left: 1.2em; margin: 0 0 1em; }
+.reader mark { background: var(--lit); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* ---- The card: what the pick is, its parts, its texts, its source ------ */
+
+.card {
+  flex: none; width: var(--card-width); overflow: auto;
+  border-left: 1px solid var(--edge); background: var(--sidebar);
+  padding: 18px 18px 28px;
+}
+.card h2 { font: 600 17px/1.25 var(--round); margin: 0; }
+.figure { font: 600 22px/1.2 var(--round); margin: 6px 0 10px; }
+.card p { margin: 0 0 10px; }
+.card .about { color: var(--ink); }
+.card .note { color: var(--muted); font-size: 12px; }
+.card h3 { font: 600 12px/1.3 var(--font); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 6px; }
+.parts { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.parts caption { text-align: left; color: var(--muted); font-size: 12px; padding-bottom: 6px; }
+.parts th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; padding: 4px 6px; border-bottom: 1px solid var(--edge); }
+.parts th.num, .parts td.num { text-align: right; white-space: nowrap; }
+.parts td { padding: 0; border-bottom: 1px solid color-mix(in oklab, var(--edge) 60%, transparent); }
+.parts tr.on td { background: var(--hover); }
+.parts tr.picked td { background: var(--selection); }
+.row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; background: none; text-align: left; padding: 7px 6px; border-radius: 6px;
+}
+.row .swatch { flex: none; width: 12px; height: 12px; border-radius: 3px; }
+.row .label-text { flex: 1; min-width: 0; }
+.row .opens { color: var(--muted); }
+.parts td.num { padding: 7px 6px; color: var(--muted); }
+.parts td.num:first-of-type { color: var(--ink); }
+.list { margin: 0; padding-left: 1.1em; columns: 2 10em; }
+.texts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.texts button {
+  width: 100%; text-align: left; border: 1px solid var(--edge); background: var(--card);
+  border-radius: var(--r-control); padding: 8px 10px;
+}
+.texts button:hover { background: var(--hover); }
+.texts b { display: block; font-weight: 600; }
+.texts span { color: var(--muted); font-size: 12px; }
+.source { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.links { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.links li { border-left: 3px solid var(--edge); padding-left: 10px; }
+.links .how { color: var(--muted); font-size: 12px; }
+.links button { border: 0; background: none; padding: 0; font-weight: 600; color: var(--accent-ink); text-align: left; }
+.links button:hover { text-decoration: underline; }
+.links q { font-family: var(--words); }
+.fingerprint { font: 11px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); overflow-wrap: anywhere; }
+.back { border: 1px solid var(--edge); background: var(--field); border-radius: 999px; padding: 4px 12px; margin-bottom: 12px; }
+
+/* ---- Keys --------------------------------------------------------------- */
+
+.keys { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgb(0 0 0 / .25); padding: 16px; }
+.keys > div { width: min(520px, 100%); max-height: 90vh; overflow: auto; background: var(--card); border: 1px solid var(--edge); border-radius: var(--r); padding: 18px 20px; box-shadow: 0 18px 50px rgb(0 0 0 / .25); }
+.keys h2 { font: 600 16px var(--round); margin: 0 0 10px; }
+.keys dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; margin: 0; }
+.keys dt { color: var(--muted); }
+.keys dd { margin: 0; }
+kbd { font: 11px ui-monospace, "SF Mono", Menlo, monospace; border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--field); }
+
+/* ---- A phone, or a narrow window: the card under the pie -------------- */
+
+@media (max-width: 760px) {
+  body { overflow: auto; display: block; height: auto; }
+  .main { display: block; }
+  .stage { overflow: visible; padding: 14px 16px; }
+  .chart { height: min(96vw, 440px); flex: none; }
+  .card { width: auto; border-left: 0; border-top: 1px solid var(--edge); overflow: visible; padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

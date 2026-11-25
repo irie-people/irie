@@ -40,7 +40,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 		t.Fatalf("go list -deps %s: %v", tags, err)
 	}
 	deps := strings.Fields(string(out))
-	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink", "chat", "obsidian", "founding", "jammin"} {
+	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink", "chat", "obsidian", "founding", "schools", "jammin"} {
 		for _, d := range deps {
 			if d == "github.com/irie-people/irie/internal/"+pkg {
 				t.Errorf("a build without plugins links internal/%s", pkg)
@@ -91,7 +91,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if !links["obsidian"] {
 		t.Error("a company's copy lacks internal/obsidian, so it can't keep its notes in a vault")
 	}
-	for _, pkg := range []string{"anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink", "founding", "jammin"} {
+	for _, pkg := range []string{"anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink", "founding", "schools", "jammin"} {
 		if links[pkg] {
 			t.Errorf("a company's copy links internal/%s", pkg)
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/founding"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/schools"
 )
 
 func foundingStatus(t *testing.T, e Env) ipc.Plugin {
@@ -28,7 +29,7 @@ func foundingStatus(t *testing.T, e Env) ipc.Plugin {
 func TestFoundingIsOffByDefault(t *testing.T) {
 	e := env(t)
 	p := foundingStatus(t, e)
-	if p.On || p.Title != "Charters" || len(p.Parts) != 1 {
+	if p.On || p.Title != "Charters" || len(p.Parts) != 2 {
 		t.Fatalf("founding = %+v", p)
 	}
 	x := part(t, p, Founding)
@@ -51,6 +52,20 @@ func TestFoundingIsOffByDefault(t *testing.T) {
 	if ed, err := Edits("founding", "", true); err != nil || len(ed) != 1 || ed[0].Key != "plugins.founding" || ed[0].Value != true {
 		t.Errorf("Edits = %+v, %v", ed, err)
 	}
+	// Common Schools, the second part, goes with the plugin's switch.
+	s := part(t, p, Schools)
+	if s.State != ipc.PartPluginOff || s.Switch != "" || s.Title != "Common Schools" {
+		t.Errorf("schools = %+v", s)
+	}
+	if brings := strings.Join(s.Brings, ", "); !strings.Contains(brings, "Window › Common Schools") || !strings.Contains(brings, brand.Slug+" ctl schools") {
+		t.Errorf("brings %q", brings)
+	}
+	if why := Why(e.Config, Schools); !strings.Contains(why, brand.Slug+" plugins on founding") {
+		t.Errorf("Why = %q", why)
+	}
+	if left := SkillsLeft(e.Config)[schools.Skill]; !strings.Contains(left, "plugins.founding") {
+		t.Errorf("schools' skill left out because %q", left)
+	}
 }
 
 // TestFoundingOnIsReady: on, the texts read, and the skill goes to
@@ -67,5 +82,15 @@ func TestFoundingOnIsReady(t *testing.T) {
 	}
 	if left, out := SkillsLeft(e.Config)[founding.Skill]; out {
 		t.Errorf("skill left out: %s", left)
+	}
+	s := part(t, foundingStatus(t, e), Schools)
+	if s.State != ipc.PartReady || !strings.Contains(s.Detail, "Common Schools window") {
+		t.Errorf("schools = %+v", s)
+	}
+	if why := Why(e.Config, Schools); why != "" {
+		t.Errorf("Why = %q", why)
+	}
+	if left, out := SkillsLeft(e.Config)[schools.Skill]; out {
+		t.Errorf("schools' skill left out: %s", left)
 	}
 }

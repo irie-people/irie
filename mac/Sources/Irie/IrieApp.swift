@@ -74,6 +74,7 @@ struct IrieApp: App {
             #endif
             #if !NOFOUNDING
             ChartersGraphCommands(menu: store.menu)
+            CommonSchoolsCommands(menu: store.menu)
             #endif
         }
         // Help > Learning Resources and Glossary (Learn.swift).
@@ -121,6 +122,15 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(width: 1320, height: 840)
+        .commandsRemoved()
+        // Window › Common Schools: the charters' second part, how public
+        // schools began, as pies that open into smaller ones
+        // (CommonSchools.swift). Its item, too, shows only while it's on.
+        Window("Common Schools", id: CommonSchoolsWindow.id) {
+            CommonSchoolsWindow()
+                .environment(store)
+        }
+        .defaultSize(width: 1280, height: 820)
         .commandsRemoved()
         #endif
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).

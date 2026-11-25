@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<meta name="color-scheme" content="light dark">
+<title>Common Schools</title>
+<style>/*{{style}}*/</style>
+</head>
+<body>
+<header class="bar">
+  <div class="name">Common Schools</div>
+  <!--{{home}}-->
+  <nav class="lenses" aria-label="Where to start">
+    <div id="lenses" role="tablist" aria-label="Where to start"></div>
+  </nav>
+  <button id="keys-open" class="icon-btn" aria-label="Keys" title="Keys (?)">?</button>
+</header>
+<nav id="trail" class="trail" aria-label="Where you are"></nav>
+<div class="main">
+  <section id="stage" class="stage" aria-labelledby="title">
+    <div class="heading">
+      <h1 id="title"></h1>
+      <p id="sub" class="sub"></p>
+    </div>
+    <div id="chart" class="chart">
+      <svg id="pie" role="img" aria-labelledby="pie-label"><title id="pie-label"></title></svg>
+      <div id="tip" class="tip" role="presentation" hidden></div>
+    </div>
+    <article id="reader" class="reader" hidden></article>
+  </section>
+  <aside id="card" class="card" aria-label="Details"></aside>
+</div>
+<div id="keys" class="keys" role="dialog" aria-modal="true" aria-labelledby="keys-title" hidden>
+  <div>
+    <h2 id="keys-title">Keys</h2>
+    <dl>
+      <dt>Click a slice, or a row</dt><dd>Open it: a slice with parts becomes a pie of its own; one without says what it is</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move between the rows of the table</dd>
+      <dt><kbd>Return</kbd></dt><dd>Open the row</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Up a step</dd>
+      <dt><kbd>⌘←</kbd> <kbd>⌘→</kbd></dt><dd>Back and forward; in a browser, <kbd>⌘[</kbd> <kbd>⌘]</kbd> too</dd>
+      <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Start again from the first pie, the second, the third</dd>
+      <dt><kbd>?</kbd></dt><dd>This card</dd>
+    </dl>
+  </div>
+</div>
+<script type="application/json" id="schools-data">{{data}}</script>
+<script>/*{{script}}*/</script>
+</body>
+</html>

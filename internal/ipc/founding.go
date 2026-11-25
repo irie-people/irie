@@ -20,6 +20,9 @@ type FoundingArgs struct {
 	// Graph asks for the Charters Graph page, the explorer, which the core
 	// writes to a file of its own: Page says where, and nothing else comes.
 	Graph bool `json:"graph,omitempty"`
+	// Schools asks for the Common Schools page, the plugin's second part
+	// (docs/proposals/common-schools.md), likewise: only Page comes.
+	Schools bool `json:"schools,omitempty"`
 }
 
 // FoundingResult is the founding op's answer: the documents, and the
@@ -38,8 +41,9 @@ type FoundingResult struct {
 	// Export is every version's bytes, oldest first, when asked for: each
 	// canonical JSON with no line break in it.
 	Export []string `json:"export,omitempty"`
-	// Page is the Charters Graph page's file, when Graph asked for it: one
-	// HTML file that loads nothing from elsewhere.
+	// Page is the Charters Graph page's file, when Graph asked for it, or
+	// the Common Schools page's, when Schools did: one HTML file that loads
+	// nothing from elsewhere.
 	Page string `json:"page,omitempty"`
 }
 
