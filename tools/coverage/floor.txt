@@ -53,7 +53,7 @@ internal/loginenv 88 0
 internal/mail 77 0
 internal/materialize 88 0
 internal/mcp 91 0
-internal/mux 82 0
+internal/mux 83 0
 internal/obsidian 95 0
 internal/paths 34 0
 internal/peer 78 0
@@ -66,7 +66,8 @@ internal/rebuild 91 0
 internal/remote 73 0
 internal/repo 96 0
 internal/route 96 0
-internal/sdk 76 0
+internal/schools 91 0
+internal/sdk 77 0
 internal/search 97 0
 internal/skills 84 0
 internal/statusline 87 0
