@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.0](https://github.com/irie-people/irie/compare/v1.11.0...v1.12.0) (2026-11-25)
+
+
+### Features
+
+* **schools:** Common Schools, America's public schools as pies that open into smaller ones ([7dbc956](https://github.com/irie-people/irie/commit/7dbc9565e7d50f736881dcdc0b9c93c051461d6d))
+
+
+### Bug Fixes
+
+* **charters:** say most links quote both texts, as 69 of 76 do ([4d07d2b](https://github.com/irie-people/irie/commit/4d07d2b63c99d6e3b3a24f79c9c451812d925027))
+
 ## [1.11.0](https://github.com/irie-people/irie/compare/v1.10.1...v1.11.0) (2026-11-24)
 
 
